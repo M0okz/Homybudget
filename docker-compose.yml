@@ -34,8 +34,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - uploads-data:/app/server/uploads
     ports:
       - "8080:80"
 
 volumes:
   db-data:
+  uploads-data:

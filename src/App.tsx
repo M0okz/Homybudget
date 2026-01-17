@@ -70,6 +70,7 @@ type AuthUser = {
   id: string;
   username: string;
   displayName: string | null;
+  avatarUrl: string | null;
   role: 'admin' | 'user';
   isActive: boolean;
   createdAt: string;
@@ -645,6 +646,50 @@ const updateUserRequest = async (userId: string, payload: {
   }
   if (!response.ok) {
     const message = await parseApiErrorMessage(response, `Failed to update user (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  const data = await response.json() as UserResponse;
+  return data.user;
+};
+
+const updateProfileRequest = async (payload: {
+  displayName?: string | null;
+  avatarUrl?: string | null;
+}): Promise<AuthUser> => {
+  const response = await fetch(apiUrl('/api/users/me'), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(payload)
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to update profile (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  const data = await response.json() as UserResponse;
+  return data.user;
+};
+
+const uploadProfileImageRequest = async (file: File): Promise<AuthUser> => {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  const response = await fetch(apiUrl('/api/users/me/avatar'), {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders()
+    },
+    body: formData
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to upload avatar (${response.status})`);
     throw createApiError(message, response.status);
   }
   const data = await response.json() as UserResponse;
@@ -1414,6 +1459,7 @@ type SettingsViewProps = {
   darkMode: boolean;
   onLogout: () => void;
   onAuthFailure: (error: unknown) => boolean;
+  onProfileUpdated: (user: AuthUser) => void;
   sortByCost: boolean;
   onToggleSortByCost: (value: boolean) => void;
   themePreference: 'light' | 'dark';
@@ -1435,6 +1481,7 @@ const SettingsView = ({
   darkMode,
   onLogout,
   onAuthFailure,
+  onProfileUpdated,
   sortByCost,
   onToggleSortByCost,
   themePreference,
@@ -1454,10 +1501,17 @@ const SettingsView = ({
   const roleDisplay = user?.role === 'admin' ? t('roleAdminLabel') : t('roleUserLabel');
   const isAdmin = user?.role === 'admin';
   const currentUserId = user?.id;
+  const profileInitial = (displayName.trim()[0] || 'U').toUpperCase();
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [avatarInput, setAvatarInput] = useState(user?.avatarUrl ?? '');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarUploadLoading, setAvatarUploadLoading] = useState(false);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -1475,6 +1529,11 @@ const SettingsView = ({
   const [createLoading, setCreateLoading] = useState(false);
   const makeUserLabel = (item: AuthUser) => item.displayName || item.username;
 
+  useEffect(() => {
+    setAvatarInput(user?.avatarUrl ?? '');
+    setAvatarFile(null);
+  }, [user?.avatarUrl]);
+
   const formatTimestamp = (value: string | null) => {
     if (!value) {
       return '-';
@@ -1491,6 +1550,50 @@ const SettingsView = ({
       return error.message;
     }
     return fallback;
+  };
+
+  const handleAvatarUpdate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    setAvatarLoading(true);
+    try {
+      const trimmed = avatarInput.trim();
+      const updated = await updateProfileRequest({
+        avatarUrl: trimmed ? trimmed : null
+      });
+      onProfileUpdated(updated);
+      setAvatarSuccess(t('profileImageUpdated'));
+    } catch (error) {
+      if (!onAuthFailure(error)) {
+        setAvatarError(resolveErrorMessage(error, t('profileImageError')));
+      }
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) {
+      setAvatarError(t('profileImageUploadError'));
+      return;
+    }
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    setAvatarUploadLoading(true);
+    try {
+      const updated = await uploadProfileImageRequest(avatarFile);
+      onProfileUpdated(updated);
+      setAvatarInput(updated.avatarUrl ?? '');
+      setAvatarFile(null);
+      setAvatarSuccess(t('profileImageUploadSuccess'));
+    } catch (error) {
+      if (!onAuthFailure(error)) {
+        setAvatarError(resolveErrorMessage(error, t('profileImageUploadError')));
+      }
+    } finally {
+      setAvatarUploadLoading(false);
+    }
   };
 
   const loadUsers = async () => {
@@ -1643,6 +1746,78 @@ const SettingsView = ({
               <span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{t('roleLabel')}</span>
               <span className="font-semibold">{roleDisplay}</span>
             </div>
+            <form onSubmit={handleAvatarUpdate} className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                  {avatarInput.trim() ? (
+                    <img src={avatarInput.trim()} alt={displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-lg font-semibold">{profileInitial}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-[12rem] space-y-1">
+                  <label className={darkMode ? 'text-gray-300' : 'text-gray-600'}>{t('profileImageLabel')}</label>
+                  <input
+                    type="url"
+                    value={avatarInput}
+                    onChange={(event) => setAvatarInput(event.target.value)}
+                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    placeholder={t('profileImageUrlPlaceholder')}
+                  />
+                  <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                    {t('profileImageHint')}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setAvatarFile(event.target.files?.[0] ?? null)}
+                      className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAvatarUpload}
+                      disabled={avatarUploadLoading || !avatarFile}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                        darkMode
+                          ? 'bg-gray-200 text-gray-900 hover:bg-white'
+                          : 'bg-gray-900 text-white hover:bg-gray-800'
+                      } ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      {avatarUploadLoading ? t('profileImageUploadLoading') : t('profileImageUploadButton')}
+                    </button>
+                    {avatarFile && (
+                      <span className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                        {avatarFile.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={avatarLoading}
+                  className={`px-4 py-2 rounded-md font-semibold transition ${
+                    darkMode
+                      ? 'bg-slate-200 text-slate-900 hover:bg-white'
+                      : 'bg-slate-900 text-white hover:bg-slate-800'
+                  } ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
+                </button>
+                {avatarSuccess && (
+                  <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
+                    {avatarSuccess}
+                  </div>
+                )}
+                {avatarError && (
+                  <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                    {avatarError}
+                  </div>
+                )}
+              </div>
+            </form>
           </div>
       </section>
 
@@ -2077,6 +2252,7 @@ const App: React.FC = () => {
   const isSettingsView = activePage === 'settings';
   const userDisplayName = authProfile?.displayName || authProfile?.username || authUser || t('accountLabel');
   const userInitial = (userDisplayName.trim()[0] || 'U').toUpperCase();
+  const userAvatarUrl = authProfile?.avatarUrl || null;
   const currentMonthKey = getCurrentMonthKey(currentDate);
   const data = monthlyBudgets[currentMonthKey] || getDefaultBudgetData();
   const person1UserId = data.person1UserId ?? null;
@@ -3102,12 +3278,16 @@ const App: React.FC = () => {
             <div ref={menuRef} className="relative">
               <button
                 onClick={() => setMenuOpen(prev => !prev)}
-                className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold ${
+                className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
                   darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
                 }`}
                 aria-label={t('accountMenuLabel')}
               >
-                {userInitial}
+                {userAvatarUrl ? (
+                  <img src={userAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+                ) : (
+                  userInitial
+                )}
               </button>
               {menuOpen && (
                 <div
@@ -3171,6 +3351,10 @@ const App: React.FC = () => {
           darkMode={darkMode}
           onLogout={handleLogout}
           onAuthFailure={handleAuthFailure}
+          onProfileUpdated={(profile) => {
+            setAuthProfile(profile);
+            setAuthUser(profile.username);
+          }}
           sortByCost={sortByCost}
           onToggleSortByCost={setSortByCost}
           themePreference={themePreference}

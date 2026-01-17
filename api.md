@@ -26,6 +26,8 @@
 - `POST /api/auth/reset` - reset password with a token
 - `POST /api/auth/change-password` - change password for the current user
 - `GET /api/users/me` - current user profile
+- `PATCH /api/users/me` - update current user profile (display name / avatar URL)
+- `POST /api/users/me/avatar` - upload avatar image (multipart field: `avatar`)
 - `GET /api/users` - list users (admin only)
 - `POST /api/users` - create user (admin only)
 - `PATCH /api/users/:userId` - update user (admin only)
@@ -38,6 +40,7 @@
 
 ## Data formats
 - `monthKey`: `YYYY-MM`
+- `avatarUrl`: image URL string (or `null`)
 
 ## Notes
 - Vite dev server proxies `/api` to `http://localhost:3001`.

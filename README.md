@@ -1,8 +1,6 @@
 # Homybudget
 A budget app that is both smart and useful.
 
-=======
-
 Budget tracker with a React + Vite frontend and a Node/Express + PostgreSQL API.
 
 ## Features
@@ -12,6 +10,7 @@ Budget tracker with a React + Vite frontend and a Node/Express + PostgreSQL API.
 - 🗓️ Month navigation with manual create/delete.
 - 💾 Autosave to PostgreSQL (debounced).
 - 🔐 JWT login with user accounts and password resets.
+- 🖼️ Profile image for each user.
 
 ## Tech Stack
 - Frontend: React, Vite, TypeScript, Tailwind CSS
@@ -86,6 +85,7 @@ Notes:
 - The database is initialized from `server/schema.sql` on first start.
 - Update `ADMIN_PASSWORD` and `JWT_SECRET` in `docker-compose.yml` before sharing.
 - The Docker image bundles the API + frontend in one container.
+- Uploaded profile images are stored in the `uploads-data` Docker volume.
 
 ## Environment Variables
 - `DATABASE_URL`: full PostgreSQL connection string

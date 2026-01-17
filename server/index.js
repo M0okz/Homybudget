@@ -3,10 +3,19 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
 import { pool } from './db.js';
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.join(__dirname, 'uploads');
+const avatarDir = path.join(uploadsDir, 'avatars');
+fs.mkdirSync(avatarDir, { recursive: true });
 
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = corsOrigin.split(',').map(origin => origin.trim()).filter(Boolean);
@@ -17,6 +26,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json({ limit: '1mb' }));
+app.use('/uploads', express.static(uploadsDir));
 
 const adminUsername = process.env.ADMIN_USERNAME;
 const adminPassword = process.env.ADMIN_PASSWORD;
@@ -48,6 +58,30 @@ const normalizeDisplayName = (value) => {
   }
   return capitalizeFirst(trimmed);
 };
+const normalizeAvatarUrl = (value) => {
+  const trimmed = (value ?? '').trim();
+  return trimmed || null;
+};
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, avatarDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const allowedExt = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+      const resolvedExt = allowedExt.includes(ext) ? ext : '.png';
+      const safeId = req.user?.id ?? crypto.randomUUID();
+      cb(null, `${safeId}-${Date.now()}${resolvedExt}`);
+    }
+  }),
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  }
+});
 
 const validatePassword = (password) => {
   if (!password || password.length < passwordMinLength) {
@@ -60,6 +94,7 @@ const sanitizeUser = (user) => ({
   id: user.id,
   username: user.username,
   displayName: user.display_name,
+  avatarUrl: user.avatar_url,
   role: user.role,
   isActive: user.is_active,
   createdAt: user.created_at,
@@ -174,7 +209,7 @@ const authRequired = async (req, res, next) => {
 
   try {
     const result = await pool.query(
-      'select id, username, display_name, role, is_active, created_at, last_login_at from users where id = $1',
+      'select id, username, display_name, avatar_url, role, is_active, created_at, last_login_at from users where id = $1',
       [payload.sub]
     );
     if (result.rowCount === 0) {
@@ -358,10 +393,73 @@ app.get('/api/users/me', authRequired, (req, res) => {
   res.json({ user: sanitizeUser(req.user) });
 });
 
+app.patch('/api/users/me', authRequired, async (req, res) => {
+  const { displayName, avatarUrl } = req.body || {};
+  const updates = [];
+  const values = [];
+
+  if (displayName !== undefined) {
+    values.push(normalizeDisplayName(displayName));
+    updates.push(`display_name = $${values.length}`);
+  }
+  if (avatarUrl !== undefined) {
+    values.push(normalizeAvatarUrl(avatarUrl));
+    updates.push(`avatar_url = $${values.length}`);
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: 'No updates provided' });
+    return;
+  }
+
+  values.push(req.user.id);
+
+  try {
+    const result = await pool.query(
+      `update users set ${updates.join(', ')}, updated_at = now()
+       where id = $${values.length}
+       returning id, username, display_name, avatar_url, role, is_active, created_at, last_login_at`,
+      values
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (error) {
+    console.error('Failed to update profile', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+app.post('/api/users/me/avatar', authRequired, avatarUpload.single('avatar'), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: 'No file uploaded' });
+    return;
+  }
+  const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+  try {
+    const result = await pool.query(
+      `update users set avatar_url = $1, updated_at = now()
+       where id = $2
+       returning id, username, display_name, avatar_url, role, is_active, created_at, last_login_at`,
+      [avatarUrl, req.user.id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (error) {
+    console.error('Failed to upload avatar', error);
+    res.status(500).json({ error: 'Failed to upload avatar' });
+  }
+});
+
 app.get('/api/users', authRequired, requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(
-      'select id, username, display_name, role, is_active, created_at, last_login_at from users order by created_at'
+      'select id, username, display_name, avatar_url, role, is_active, created_at, last_login_at from users order by created_at'
     );
     res.json({ users: result.rows.map(sanitizeUser) });
   } catch (error) {
@@ -432,7 +530,7 @@ app.patch('/api/users/:userId', authRequired, requireAdmin, async (req, res) => 
     const result = await pool.query(
       `update users set ${updates.join(', ')}, updated_at = now()
        where id = $${values.length}
-       returning id, username, display_name, role, is_active, created_at, last_login_at`,
+       returning id, username, display_name, avatar_url, role, is_active, created_at, last_login_at`,
       values
     );
     if (result.rowCount === 0) {
@@ -556,6 +654,14 @@ app.delete('/api/months/:monthKey', authRequired, async (req, res) => {
     console.error('Failed to delete month', error);
     res.status(500).json({ error: 'Failed to delete month' });
   }
+});
+
+app.use((err, _req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    res.status(400).json({ error: 'Upload failed' });
+    return;
+  }
+  next(err);
 });
 
 app.listen(port, () => {

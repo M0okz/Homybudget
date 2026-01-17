@@ -9,6 +9,7 @@ create table if not exists users (
   id text primary key,
   username text not null unique,
   display_name text,
+  avatar_url text,
   password_hash text not null,
   role text not null default 'user',
   is_active boolean not null default true,
