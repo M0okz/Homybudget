@@ -309,6 +309,11 @@ const coerceNumber = (value: unknown) => {
   return 0;
 };
 
+const formatAmount = (value: number) => {
+  const numeric = Number.isFinite(value) ? value : 0;
+  return String(Math.round(numeric));
+};
+
 const useAnimatedNumber = (value: number, duration = 350) => {
   const [animated, setAnimated] = useState(value);
   const animatedRef = useRef(value);
@@ -909,15 +914,15 @@ const BudgetHeaderSection = ({
       <div className={`mt-auto space-y-1 text-sm border-t pt-2 ${darkMode ? 'border-gray-600' : ''}`}>
         <div className="flex justify-between">
           <span className={darkMode ? 'text-gray-300' : ''}>{t('totalIncomeLabel')}:</span>
-          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{animatedIncome.toFixed(2)} €</span>
+          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatAmount(animatedIncome)} €</span>
         </div>
         <div className="flex justify-between">
           <span className={darkMode ? 'text-gray-300' : ''}>{t('totalExpensesLabel')}:</span>
-          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{animatedExpenses.toFixed(2)} €</span>
+          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatAmount(animatedExpenses)} €</span>
         </div>
         <div className="flex justify-between font-bold" style={availableTextStyle}>
           <span>{t('availableLabel')}:</span>
-          <span className={available < 0 ? 'text-red-600' : ''}>{animatedAvailable.toFixed(2)} €</span>
+          <span className={available < 0 ? 'text-red-600' : ''}>{formatAmount(animatedAvailable)} €</span>
         </div>
       </div>
     </div>
@@ -936,6 +941,7 @@ const BudgetFixedSection = ({
   moveFixedExpense
 }: BudgetFixedSectionProps) => {
   const { t } = useTranslation();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const totalFixed = calculateTotalFixed(person.fixedExpenses);
   const animatedTotalFixed = useAnimatedNumber(totalFixed);
   const orderedExpenses = sortByCost
@@ -956,85 +962,105 @@ const BudgetFixedSection = ({
     <div className="min-w-0 rounded-lg p-4 mb-4 flex flex-col sm:h-full" style={fixedBgStyle}>
       <div className="flex justify-between items-center mb-2">
         <h3 className="font-bold" style={fixedTextStyle}>{t('fixedMoneyLabel')}</h3>
+        <button
+          type="button"
+          onClick={() => addFixedExpense(personKey)}
+          className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition hover:scale-105 ${
+            darkMode ? 'border-green-300/70 text-green-200/90 bg-transparent' : 'border-green-600/70 text-green-600 bg-transparent'
+          }`}
+          aria-label={t('addRowLabel')}
+        >
+          <Plus size={16} />
+        </button>
       </div>
-      <div className="space-y-2">
+      <div className={`rounded-lg border ${darkMode ? 'border-gray-700/70 bg-gray-900/40 text-gray-100' : 'border-gray-200 bg-white/70 text-gray-800'}`}>
         {orderedExpenses.length === 0 ? (
-          <div className={`flex items-center justify-end ${darkMode ? 'bg-gray-800' : 'bg-white'} p-2 rounded`}>
-            <button
-              type="button"
-              onClick={() => addFixedExpense(personKey)}
-              className={`inline-flex items-center gap-1 text-sm font-semibold ${darkMode ? 'text-green-300' : 'text-green-600'}`}
-            >
-              <Plus size={16} />
-              {t('addLabel')}
-            </button>
-          </div>
+          <div className="py-6" />
         ) : (
-          orderedExpenses.map((expense, index) => {
-            const isFirst = index === 0;
-            const isLast = index === orderedExpenses.length - 1;
-            return (
-              <div key={expense.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-gray-800' : 'bg-white'} p-2 rounded`}>
-                <input
-                  type="checkbox"
-                  checked={expense.isChecked || false}
-                  onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
-                  className="h-4 w-4"
-                  aria-label={t('validateExpenseLabel')}
-                />
-                <input
-                  type="text"
-                  value={expense.name}
-                  onChange={(e) => updateFixedExpense(personKey, expense.id, 'name', e.target.value)}
-                  className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
-                />
-                <input
-                  type="number"
-                  value={coerceNumber(expense.amount)}
-                  onChange={(e) => updateFixedExpense(personKey, expense.id, 'amount', parseNumberInput(e.target.value))}
-                  className={`w-20 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
-                />
-                <div className="flex items-center gap-1 ml-auto">
-                  <button
-                    type="button"
-                    onClick={() => moveFixedExpense(personKey, expense.id, 'up')}
-                    disabled={sortByCost || isFirst}
-                    className={`p-1 rounded ${sortByCost || isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
-                    aria-label={t('moveUpLabel')}
-                  >
-                    <ChevronUp size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveFixedExpense(personKey, expense.id, 'down')}
-                    disabled={sortByCost || isLast}
-                    className={`p-1 rounded ${sortByCost || isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
-                    aria-label={t('moveDownLabel')}
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                  <button onClick={() => deleteFixedExpense(personKey, expense.id)} className="text-red-500">
-                    <Trash2 size={14} />
-                  </button>
-                  {isLast && (
+          <div className={`divide-y ${darkMode ? 'divide-gray-700/70' : 'divide-gray-200'}`}>
+            {orderedExpenses.map((expense, index) => {
+              const isFirst = index === 0;
+              const isLast = index === orderedExpenses.length - 1;
+              const isEditing = editingId === expense.id;
+              const amountValue = coerceNumber(expense.amount);
+              return (
+                <div key={expense.id} className="px-2 py-2">
+                  <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${darkMode ? 'hover:bg-gray-800/70' : 'hover:bg-gray-100'}`}>
+                    <input
+                      type="checkbox"
+                      checked={expense.isChecked || false}
+                      onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
+                      className="h-4 w-4"
+                      aria-label={t('validateExpenseLabel')}
+                    />
+                    <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
+                      {expense.name || t('newFixedExpenseLabel')}
+                    </span>
+                    <span className={`text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                      {formatAmount(amountValue)} €
+                    </span>
                     <button
                       type="button"
-                      onClick={() => addFixedExpense(personKey)}
-                      className={`${darkMode ? 'text-green-300' : 'text-green-600'}`}
-                      aria-label={t('addRowLabel')}
+                      onClick={() => setEditingId(prev => (prev === expense.id ? null : expense.id))}
+                      className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
+                      aria-label={isEditing ? t('closeEditLabel') : t('editLabel')}
                     >
-                      <Plus size={16} />
+                      {isEditing ? <X size={14} /> : <Edit2 size={14} />}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteFixedExpense(personKey, expense.id)}
+                      className="text-red-500 hover:opacity-80"
+                      aria-label={t('deleteLabel')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  {isEditing && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 px-2 pb-1">
+                      <input
+                        type="text"
+                        value={expense.name}
+                        onChange={(e) => updateFixedExpense(personKey, expense.id, 'name', e.target.value)}
+                        className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                      />
+                      <input
+                        type="number"
+                        value={amountValue}
+                        onChange={(e) => updateFixedExpense(personKey, expense.id, 'amount', parseNumberInput(e.target.value))}
+                        className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                      />
+                      <div className="flex items-center gap-1 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => moveFixedExpense(personKey, expense.id, 'up')}
+                          disabled={sortByCost || isFirst}
+                          className={`p-1 rounded ${sortByCost || isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          aria-label={t('moveUpLabel')}
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveFixedExpense(personKey, expense.id, 'down')}
+                          disabled={sortByCost || isLast}
+                          className={`p-1 rounded ${sortByCost || isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          aria-label={t('moveDownLabel')}
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
       <div className={`mt-3 pt-3 flex justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
-        <span>{animatedTotalFixed.toFixed(2)} €</span>
+        <span>{formatAmount(animatedTotalFixed)} €</span>
       </div>
     </div>
   );
@@ -1053,6 +1079,7 @@ const BudgetFreeSection = ({
   moveCategory
 }: BudgetFreeSectionProps) => {
   const { t } = useTranslation();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const totalCategories = calculateTotalCategories(person.categories);
   const animatedTotalCategories = useAnimatedNumber(totalCategories);
   const orderedCategories = sortByCost
@@ -1073,127 +1100,153 @@ const BudgetFreeSection = ({
     <div className="min-w-0 rounded-lg p-4 mb-4 flex flex-col sm:h-full" style={freeBgStyle}>
       <div className="flex justify-between items-center mb-2">
         <h3 className="font-bold" style={freeTextStyle}>{t('freeMoneyLabel')}</h3>
+        <button
+          type="button"
+          onClick={() => addCategory(personKey)}
+          className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition hover:scale-105 ${
+            darkMode ? 'border-green-300/70 text-green-200/90 bg-transparent' : 'border-green-600/70 text-green-600 bg-transparent'
+          }`}
+          aria-label={t('addRowLabel')}
+        >
+          <Plus size={16} />
+        </button>
       </div>
-      <div className="space-y-2">
+      <div className={`rounded-lg border ${darkMode ? 'border-gray-700/70 bg-gray-900/40 text-gray-100' : 'border-gray-200 bg-white/70 text-gray-800'}`}>
         {orderedCategories.length === 0 ? (
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-2 rounded`}>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => addCategory(personKey)}
-                className={`inline-flex items-center gap-1 text-sm font-semibold ${darkMode ? 'text-green-300' : 'text-green-600'}`}
-              >
-                <Plus size={16} />
-                {t('addLabel')}
-              </button>
-            </div>
-          </div>
+          <div className="py-6" />
         ) : (
-          orderedCategories.map((category, index) => {
-            const isFirst = index === 0;
-            const isLast = index === orderedCategories.length - 1;
-            return (
-              <div key={category.id} className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-2 rounded`}>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <input
-                    type="checkbox"
-                    checked={category.isChecked || false}
-                    onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
-                    className="h-4 w-4"
-                    aria-label={t('validateExpenseLabel')}
-                  />
-                  <input
-                    type="text"
-                    value={category.icon}
-                    onChange={(e) => updateCategory(personKey, category.id, 'icon', e.target.value)}
-                    className={`w-10 px-2 py-1 border rounded text-center text-sm ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}
-                  />
-                  <input
-                    type="text"
-                    value={category.name}
-                    onChange={(e) => updateCategory(personKey, category.id, 'name', e.target.value)}
-                    className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
-                  />
-                  <input
-                    type="number"
-                    value={coerceNumber(category.amount)}
-                    onChange={(e) => updateCategory(personKey, category.id, 'amount', parseNumberInput(e.target.value))}
-                    className={`w-20 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
-                  />
-                  <div className="flex items-center gap-1 ml-auto">
-                    <button
-                      type="button"
-                      onClick={() => moveCategory(personKey, category.id, 'up')}
-                      disabled={sortByCost || isFirst}
-                      className={`p-1 rounded ${sortByCost || isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
-                      aria-label={t('moveUpLabel')}
-                    >
-                      <ChevronUp size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveCategory(personKey, category.id, 'down')}
-                      disabled={sortByCost || isLast}
-                      className={`p-1 rounded ${sortByCost || isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
-                      aria-label={t('moveDownLabel')}
-                    >
-                      <ChevronDown size={14} />
-                    </button>
-                    <button onClick={() => deleteCategory(personKey, category.id)} className="text-red-500">
-                      <Trash2 size={14} />
-                    </button>
-                    {isLast && (
-                      <button
-                        type="button"
-                        onClick={() => addCategory(personKey)}
-                        className={`${darkMode ? 'text-green-300' : 'text-green-600'}`}
-                        aria-label={t('addRowLabel')}
-                      >
-                        <Plus size={16} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-0 sm:ml-12">
-                  <label className="flex items-center gap-2 cursor-pointer">
+          <div className={`divide-y ${darkMode ? 'divide-gray-700/70' : 'divide-gray-200'}`}>
+            {orderedCategories.map((category, index) => {
+              const isFirst = index === 0;
+              const isLast = index === orderedCategories.length - 1;
+              const isEditing = editingId === category.id;
+              const amountValue = coerceNumber(category.amount);
+              const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
+              return (
+                <div key={category.id} className="px-2 py-2">
+                  <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${darkMode ? 'hover:bg-gray-800/70' : 'hover:bg-gray-100'}`}>
                     <input
                       type="checkbox"
-                      checked={category.isRecurring || false}
-                      onChange={(e) => updateCategory(personKey, category.id, 'isRecurring', e.target.checked)}
-                      className="cursor-pointer"
+                      checked={category.isChecked || false}
+                      onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
+                      className="h-4 w-4"
+                      aria-label={t('validateExpenseLabel')}
                     />
-                    <span className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('installmentLabel')}</span>
-                  </label>
-
-                  {category.isRecurring && (
-                    <>
-                      <select
-                        value={category.recurringMonths || 3}
-                        onChange={(e) => updateCategory(personKey, category.id, 'recurringMonths', parseInt(e.target.value, 10))}
-                        className={`px-2 py-1 border rounded text-xs ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
-                      >
-                        <option value={2}>2x</option>
-                        <option value={3}>3x</option>
-                        <option value={4}>4x</option>
-                        <option value={5}>5x</option>
-                        <option value={6}>6x</option>
-                        <option value={12}>12x</option>
-                      </select>
-                      <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {t('startLabel')}: {category.startMonth || currentMonthKey}
+                    <span className={`h-7 w-7 rounded-full flex items-center justify-center text-sm ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                      {category.icon || '•'}
+                    </span>
+                    <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
+                      {category.name || t('newCategoryLabel')}
+                    </span>
+                    {recurringLabel && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                        {recurringLabel}
                       </span>
-                    </>
+                    )}
+                    <span className={`text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                      {formatAmount(amountValue)} €
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(prev => (prev === category.id ? null : category.id))}
+                      className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
+                      aria-label={isEditing ? t('closeEditLabel') : t('editLabel')}
+                    >
+                      {isEditing ? <X size={14} /> : <Edit2 size={14} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteCategory(personKey, category.id)}
+                      className="text-red-500 hover:opacity-80"
+                      aria-label={t('deleteLabel')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  {isEditing && (
+                    <div className="mt-2 space-y-2 px-2 pb-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={category.icon}
+                          onChange={(e) => updateCategory(personKey, category.id, 'icon', e.target.value)}
+                          className={`w-10 px-2 py-1 border rounded text-center text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
+                        />
+                        <input
+                          type="text"
+                          value={category.name}
+                          onChange={(e) => updateCategory(personKey, category.id, 'name', e.target.value)}
+                          className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                        />
+                        <input
+                          type="number"
+                          value={amountValue}
+                          onChange={(e) => updateCategory(personKey, category.id, 'amount', parseNumberInput(e.target.value))}
+                          className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                        />
+                        <div className="flex items-center gap-1 ml-auto">
+                          <button
+                            type="button"
+                            onClick={() => moveCategory(personKey, category.id, 'up')}
+                            disabled={sortByCost || isFirst}
+                            className={`p-1 rounded ${sortByCost || isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                            aria-label={t('moveUpLabel')}
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveCategory(personKey, category.id, 'down')}
+                            disabled={sortByCost || isLast}
+                            className={`p-1 rounded ${sortByCost || isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                            aria-label={t('moveDownLabel')}
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={category.isRecurring || false}
+                            onChange={(e) => updateCategory(personKey, category.id, 'isRecurring', e.target.checked)}
+                            className="cursor-pointer"
+                          />
+                          <span className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('installmentLabel')}</span>
+                        </label>
+
+                        {category.isRecurring && (
+                          <>
+                            <select
+                              value={category.recurringMonths || 3}
+                              onChange={(e) => updateCategory(personKey, category.id, 'recurringMonths', parseInt(e.target.value, 10))}
+                              className={`px-2 py-1 border rounded text-xs ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                            >
+                              <option value={2}>2x</option>
+                              <option value={3}>3x</option>
+                              <option value={4}>4x</option>
+                              <option value={5}>5x</option>
+                              <option value={6}>6x</option>
+                              <option value={12}>12x</option>
+                            </select>
+                            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {t('startLabel')}: {category.startMonth || currentMonthKey}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
       <div className={`mt-3 pt-3 flex justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
-        <span>{animatedTotalCategories.toFixed(2)} €</span>
+        <span>{formatAmount(animatedTotalCategories)} €</span>
       </div>
     </div>
   );
@@ -3607,7 +3660,7 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className={`font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{t('currentBalanceLabel')}:</span>
                     <span className={`text-xl sm:text-2xl font-bold ${calculateJointBalance() < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {calculateJointBalance().toFixed(2)} €
+                      {formatAmount(calculateJointBalance())} €
                     </span>
                   </div>
                 </div>
