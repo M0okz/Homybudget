@@ -99,27 +99,8 @@ Notes:
 - `PASSWORD_RESET_TOKEN_TTL_MINUTES`: reset token expiry (default 60)
 - `VITE_API_URL`: frontend API base URL (optional)
 
-## API Endpoints
-- `POST /api/auth/bootstrap` - create the first admin user (only when DB is empty)
-- `POST /api/auth/login` - login and return JWT
-- `POST /api/auth/request-reset` - request a password reset token
-- `POST /api/auth/reset` - reset password with a token
-- `POST /api/auth/change-password` - change password for the current user
-- `GET /api/users/me` - current user profile
-- `GET /api/users` - list users (admin only)
-- `POST /api/users` - create user (admin only)
-- `PATCH /api/users/:userId` - update user (admin only)
-- `POST /api/users/:userId/reset-password` - create reset token for a user (admin only)
-- `GET /api/health` - DB connectivity
-- `GET /api/months` - list all months
-- `GET /api/months/:monthKey` - get a month
-- `PUT /api/months/:monthKey` - create/update a month
-- `DELETE /api/months/:monthKey` - delete a month
-
-`monthKey` format: `YYYY-MM`
+## API
+See `api.md` for endpoints, auth, and server configuration.
 
 ## Notes
-- Vite dev server proxies `/api` to `http://localhost:3001`.
 - Frontend auto-saves the current month (debounced).
-- Password reset tokens are returned in API responses.
->>>>>>> e5af143 (Initial commit)
