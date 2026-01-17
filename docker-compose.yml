@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appbudget
+      POSTGRES_PASSWORD: appbudget
+      POSTGRES_DB: appbudget
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appbudget -d appbudget"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3001
+      CORS_ORIGIN: http://localhost:8080
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change_me
+      JWT_SECRET: change_me_very_secret
+      PASSWORD_MIN_LENGTH: 8
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: 60
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: appbudget
+      PGPASSWORD: appbudget
+      PGDATABASE: appbudget
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  db-data:
