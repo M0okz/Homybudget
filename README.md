@@ -1,17 +1,17 @@
 # Homybudget
-<<<<<<< HEAD
 A budget app that is both smart and useful.
+
 =======
 
 Budget tracker with a React + Vite frontend and a Node/Express + PostgreSQL API.
 
 ## Features
-- Two-person monthly budgets with income, fixed expenses, and free categories.
-- Recurring categories (installments) with month-based carryover.
-- Joint account (deposits/expenses) with balance calculation.
-- Month navigation and explicit month creation/deletion.
-- Autosave to PostgreSQL with debounced writes.
-- JWT authentication with user accounts and password resets.
+- 👥 Two-person budgets with income, fixed expenses, and free categories.
+- 🔁 Installments that carry over month to month.
+- 🧾 Joint account with deposits, expenses, and live balance.
+- 🗓️ Month navigation with manual create/delete.
+- 💾 Autosave to PostgreSQL (debounced).
+- 🔐 JWT login with user accounts and password resets.
 
 ## Tech Stack
 - Frontend: React, Vite, TypeScript, Tailwind CSS
