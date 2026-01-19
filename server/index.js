@@ -63,6 +63,56 @@ const normalizeAvatarUrl = (value) => {
   return trimmed || null;
 };
 
+const defaultSettings = {
+  languagePreference: 'fr',
+  themePreference: 'light',
+  soloModeEnabled: false,
+  jointAccountEnabled: true,
+  sortByCost: false
+};
+
+const normalizeSettings = (input) => {
+  const next = {};
+  if (input.languagePreference === 'fr' || input.languagePreference === 'en') {
+    next.languagePreference = input.languagePreference;
+  }
+  if (input.themePreference === 'light' || input.themePreference === 'dark') {
+    next.themePreference = input.themePreference;
+  }
+  if (input.soloModeEnabled !== undefined) {
+    next.soloModeEnabled = Boolean(input.soloModeEnabled);
+  }
+  if (input.jointAccountEnabled !== undefined) {
+    next.jointAccountEnabled = Boolean(input.jointAccountEnabled);
+  }
+  if (input.sortByCost !== undefined) {
+    next.sortByCost = Boolean(input.sortByCost);
+  }
+  return next;
+};
+
+const getAppSettings = async () => {
+  const result = await pool.query('select data from app_settings where id = 1');
+  if (result.rowCount > 0) {
+    return result.rows[0].data;
+  }
+  const insert = await pool.query(
+    'insert into app_settings (id, data, updated_at) values (1, $1, now()) returning data',
+    [defaultSettings]
+  );
+  return insert.rows[0].data;
+};
+
+const updateAppSettings = async (updates) => {
+  const current = await getAppSettings();
+  const merged = { ...current, ...updates };
+  const result = await pool.query(
+    'update app_settings set data = $1, updated_at = now() where id = 1 returning data',
+    [merged]
+  );
+  return result.rows[0].data;
+};
+
 const avatarUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, avatarDir),
@@ -320,6 +370,31 @@ app.get('/api/auth/bootstrap-status', async (_req, res) => {
 
 app.post('/api/login', loginHandler);
 app.post('/api/auth/login', loginHandler);
+
+app.get('/api/settings', authRequired, async (_req, res) => {
+  try {
+    const settings = await getAppSettings();
+    res.json({ settings });
+  } catch (error) {
+    console.error('Failed to load settings', error);
+    res.status(500).json({ error: 'Failed to load settings' });
+  }
+});
+
+app.patch('/api/settings', authRequired, async (req, res) => {
+  const updates = normalizeSettings(req.body || {});
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: 'No updates provided' });
+    return;
+  }
+  try {
+    const settings = await updateAppSettings(updates);
+    res.json({ settings });
+  } catch (error) {
+    console.error('Failed to update settings', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
 
 app.post('/api/auth/request-reset', async (req, res) => {
   const { login } = req.body || {};

@@ -26,6 +26,8 @@
 - `POST /api/auth/request-reset` - request a password reset token
 - `POST /api/auth/reset` - reset password with a token
 - `POST /api/auth/change-password` - change password for the current user
+- `GET /api/settings` - fetch global app settings
+- `PATCH /api/settings` - update global app settings
 - `GET /api/users/me` - current user profile
 - `PATCH /api/users/me` - update current user profile (display name / avatar URL)
 - `POST /api/users/me/avatar` - upload avatar image (multipart field: `avatar`)

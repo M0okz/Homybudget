@@ -62,6 +62,14 @@ type ApiMonth = {
   data: BudgetData;
 };
 
+type AppSettings = {
+  languagePreference: LanguageCode;
+  themePreference: 'light' | 'dark';
+  soloModeEnabled: boolean;
+  jointAccountEnabled: boolean;
+  sortByCost: boolean;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
 
 const apiUrl = (path: string) => `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
@@ -97,6 +105,10 @@ type BootstrapStatusResponse = {
 type ResetTokenResponse = {
   resetToken: string;
   expiresAt: string;
+};
+
+type SettingsResponse = {
+  settings: AppSettings;
 };
 
 type ApiError = Error & { status?: number };
@@ -622,6 +634,43 @@ const fetchCurrentUser = async (): Promise<AuthUser> => {
   }
   const payload = await response.json() as UserResponse;
   return payload.user;
+};
+
+const fetchAppSettings = async (): Promise<AppSettings> => {
+  const response = await fetch(apiUrl('/api/settings'), {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to load settings (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  const payload = await response.json() as SettingsResponse;
+  return payload.settings;
+};
+
+const updateAppSettingsRequest = async (payload: Partial<AppSettings>): Promise<AppSettings> => {
+  const response = await fetch(apiUrl('/api/settings'), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(payload)
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to update settings (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  const payloadResponse = await response.json() as SettingsResponse;
+  return payloadResponse.settings;
 };
 
 const fetchUsers = async (): Promise<AuthUser[]> => {
@@ -2652,6 +2701,7 @@ const App: React.FC = () => {
   const [selectorError, setSelectorError] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pendingOnboarding, setPendingOnboarding] = useState<{ person1Name: string; person2Name: string; mode: 'solo' | 'duo' } | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [sortByCost, setSortByCost] = useState<boolean>(() => getInitialSortByCost());
   const [languagePreference, setLanguagePreference] = useState<LanguageCode>(() => getInitialLanguagePreference());
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
@@ -2667,6 +2717,7 @@ const App: React.FC = () => {
   const [isHydrated, setIsHydrated] = useState(false);
   const saveTimeoutRef = useRef<number | null>(null);
   const lastSavedPayloadRef = useRef<Record<string, string>>({});
+  const lastSavedSettingsRef = useRef<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const palette = getPaletteById(paletteId);
@@ -2692,6 +2743,15 @@ const App: React.FC = () => {
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
       : 'radial-gradient(1200px circle at 85% -10%, rgba(59,130,246,0.10), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(16,185,129,0.10), transparent 50%)'
   } as React.CSSProperties;
+
+  const buildSettingsPayload = (overrides: Partial<AppSettings> = {}): AppSettings => ({
+    languagePreference,
+    themePreference,
+    soloModeEnabled,
+    jointAccountEnabled,
+    sortByCost,
+    ...overrides
+  });
 
   const applyLoginResult = (result: LoginResponse) => {
     if (typeof window !== 'undefined') {
@@ -2801,6 +2861,36 @@ const App: React.FC = () => {
   }, [languagePreference]);
 
   useEffect(() => {
+    if (!authToken || !settingsLoaded || showOnboarding) {
+      return;
+    }
+    const payload = buildSettingsPayload();
+    const serialized = JSON.stringify(payload);
+    if (lastSavedSettingsRef.current === serialized) {
+      return;
+    }
+    const previous = lastSavedSettingsRef.current;
+    lastSavedSettingsRef.current = serialized;
+    void updateAppSettingsRequest(payload)
+      .then((settings) => {
+        lastSavedSettingsRef.current = JSON.stringify(settings);
+      })
+      .catch((error) => {
+        lastSavedSettingsRef.current = previous;
+        console.error('Failed to update settings', error);
+      });
+  }, [
+    authToken,
+    settingsLoaded,
+    showOnboarding,
+    languagePreference,
+    themePreference,
+    soloModeEnabled,
+    jointAccountEnabled,
+    sortByCost
+  ]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -2866,6 +2956,44 @@ const App: React.FC = () => {
       isActive = false;
     };
   }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) {
+      setSettingsLoaded(false);
+      lastSavedSettingsRef.current = null;
+      return;
+    }
+    if (showOnboarding || settingsLoaded) {
+      return;
+    }
+    let isActive = true;
+    const loadSettings = async () => {
+      try {
+        const settings = await fetchAppSettings();
+        if (!isActive) {
+          return;
+        }
+        setSortByCost(settings.sortByCost);
+        setJointAccountEnabled(settings.jointAccountEnabled);
+        setSoloModeEnabled(settings.soloModeEnabled);
+        setLanguagePreference(settings.languagePreference);
+        setThemePreference(settings.themePreference);
+        setDarkMode(settings.themePreference === 'dark');
+        lastSavedSettingsRef.current = JSON.stringify(settings);
+        setSettingsLoaded(true);
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+        console.error('Failed to load settings', error);
+        setSettingsLoaded(true);
+      }
+    };
+    void loadSettings();
+    return () => {
+      isActive = false;
+    };
+  }, [authToken, showOnboarding, settingsLoaded]);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -3656,6 +3784,22 @@ const App: React.FC = () => {
           onModeChange={(value) => setSoloModeEnabled(value === 'solo')}
           onComplete={({ person1Name, person2Name, mode }) => {
             setSoloModeEnabled(mode === 'solo');
+            const settingsPayload = buildSettingsPayload({ soloModeEnabled: mode === 'solo' });
+            lastSavedSettingsRef.current = JSON.stringify(settingsPayload);
+            setSettingsLoaded(true);
+            void updateAppSettingsRequest(settingsPayload)
+              .then((settings) => {
+                lastSavedSettingsRef.current = JSON.stringify(settings);
+                setSortByCost(settings.sortByCost);
+                setJointAccountEnabled(settings.jointAccountEnabled);
+                setSoloModeEnabled(settings.soloModeEnabled);
+                setLanguagePreference(settings.languagePreference);
+                setThemePreference(settings.themePreference);
+                setDarkMode(settings.themePreference === 'dark');
+              })
+              .catch((error) => {
+                console.error('Failed to save onboarding settings', error);
+              });
             if (mode === 'duo') {
               setPendingOnboarding({ person1Name, person2Name, mode });
             } else if (person1Name.trim()) {

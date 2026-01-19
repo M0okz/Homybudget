@@ -30,3 +30,9 @@ create table if not exists password_reset_tokens (
 
 create index if not exists idx_password_reset_tokens_user_id on password_reset_tokens(user_id);
 create index if not exists idx_password_reset_tokens_token_hash on password_reset_tokens(token_hash);
+
+create table if not exists app_settings (
+  id int primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
