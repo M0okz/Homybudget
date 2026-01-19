@@ -90,6 +90,10 @@ type UserResponse = {
   user: AuthUser;
 };
 
+type BootstrapStatusResponse = {
+  hasUsers: boolean;
+};
+
 type ResetTokenResponse = {
   resetToken: string;
   expiresAt: string;
@@ -572,6 +576,35 @@ const loginRequest = async (username: string, password: string): Promise<LoginRe
     throw createApiError(message, response.status);
   }
   return response.json() as Promise<LoginResponse>;
+};
+
+const bootstrapAdminRequest = async (payload: {
+  username: string;
+  password: string;
+  displayName?: string | null;
+}): Promise<AuthUser> => {
+  const response = await fetch(apiUrl('/api/auth/bootstrap'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to bootstrap (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  const data = await response.json() as UserResponse;
+  return data.user;
+};
+
+const fetchBootstrapStatus = async (): Promise<BootstrapStatusResponse> => {
+  const response = await fetch(apiUrl('/api/auth/bootstrap-status'));
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to check bootstrap (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  return response.json() as Promise<BootstrapStatusResponse>;
 };
 
 const fetchCurrentUser = async (): Promise<AuthUser> => {
@@ -1506,6 +1539,340 @@ const LoginScreen = ({ onLogin, error, loading, darkMode, pageStyle }: LoginScre
   );
 };
 
+type OnboardingWizardProps = {
+  darkMode: boolean;
+  pageStyle: React.CSSProperties;
+  languagePreference: LanguageCode;
+  themePreference: 'light' | 'dark';
+  soloModeEnabled: boolean;
+  onLanguageChange: (value: LanguageCode) => void;
+  onThemeChange: (value: 'light' | 'dark') => void;
+  onModeChange: (value: 'solo' | 'duo') => void;
+  onComplete: (options: { person1Name: string; person2Name: string; mode: 'solo' | 'duo' }) => void;
+  onCreateAdmin: (username: string, password: string) => Promise<void>;
+};
+
+const OnboardingWizard = ({
+  darkMode,
+  pageStyle,
+  languagePreference,
+  themePreference,
+  soloModeEnabled,
+  onLanguageChange,
+  onThemeChange,
+  onModeChange,
+  onComplete,
+  onCreateAdmin
+}: OnboardingWizardProps) => {
+  const { t } = useTranslation();
+  const [step, setStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [adminForm, setAdminForm] = useState({ username: 'admin', password: '', confirm: '' });
+  const [modeChoice, setModeChoice] = useState<'solo' | 'duo'>(soloModeEnabled ? 'solo' : 'duo');
+  const [person1Name, setPerson1Name] = useState('');
+  const [person2Name, setPerson2Name] = useState('');
+  const totalSteps = modeChoice === 'duo' ? 5 : 4;
+
+  const handleAdminSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    const username = adminForm.username.trim();
+    if (!username || !adminForm.password) {
+      setError(t('userCreateRequiredError'));
+      return;
+    }
+    if (adminForm.password !== adminForm.confirm) {
+      setError(t('userCreateMismatchError'));
+      return;
+    }
+    setLoading(true);
+    try {
+      await onCreateAdmin(username, adminForm.password);
+      setStep(1);
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setError(err.message);
+      } else {
+        setError(t('onboardingBootstrapError'));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNext = () => {
+    setError(null);
+    setStep(prev => Math.min(prev + 1, totalSteps - 1));
+  };
+
+  const handleBack = () => {
+    setError(null);
+    setStep(prev => Math.max(prev - 1, 0));
+  };
+
+  const handleFinish = () => {
+    onComplete({ person1Name, person2Name, mode: modeChoice });
+  };
+
+  return (
+    <div
+      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
+      style={pageStyle}
+    >
+      <div
+        className={`w-full max-w-sm rounded-2xl border shadow-lg p-6 space-y-4 ${
+          darkMode ? 'bg-gray-900/90 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+        }`}
+      >
+        <div className="space-y-1">
+          <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+          <h1 className="text-2xl font-semibold">{t('onboardingTitle')}</h1>
+          <div className="text-xs text-gray-500">{t('onboardingStepLabel')} {step + 1}/{totalSteps}</div>
+        </div>
+
+        {step === 0 && (
+          <form onSubmit={handleAdminSubmit} className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="onboard-username">{t('onboardingAdminUsernameLabel')}</label>
+              <input
+                id="onboard-username"
+                type="text"
+                autoComplete="username"
+                value={adminForm.username}
+                onChange={(event) => setAdminForm(prev => ({ ...prev, username: event.target.value }))}
+                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="onboard-password">{t('onboardingAdminPasswordLabel')}</label>
+              <input
+                id="onboard-password"
+                type="password"
+                autoComplete="new-password"
+                value={adminForm.password}
+                onChange={(event) => setAdminForm(prev => ({ ...prev, password: event.target.value }))}
+                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="onboard-confirm">{t('onboardingAdminConfirmLabel')}</label>
+              <input
+                id="onboard-confirm"
+                type="password"
+                autoComplete="new-password"
+                value={adminForm.confirm}
+                onChange={(event) => setAdminForm(prev => ({ ...prev, confirm: event.target.value }))}
+                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+            {error && (
+              <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>{error}</div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-2 rounded-md font-semibold transition ${
+                darkMode
+                  ? 'bg-slate-200 text-slate-900 hover:bg-white'
+                  : 'bg-slate-900 text-white hover:bg-slate-800'
+              } ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              {loading ? t('onboardingCreatingAdmin') : t('onboardingCreateAdmin')}
+            </button>
+          </form>
+        )}
+
+        {step === 1 && (
+          <div className="space-y-3">
+            <div className="text-sm font-semibold">{t('onboardingLanguageTitle')}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onLanguageChange('fr')}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${
+                  languagePreference === 'fr'
+                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
+                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                }`}
+              >
+                {t('frenchLabel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onLanguageChange('en')}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${
+                  languagePreference === 'en'
+                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
+                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                }`}
+              >
+                {t('englishLabel')}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+                {t('onboardingBack')}
+              </button>
+              <button
+                type="button"
+                onClick={handleNext}
+                className={`px-4 py-2 rounded-md font-semibold transition ${
+                  darkMode
+                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {t('onboardingNext')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-3">
+            <div className="text-sm font-semibold">{t('onboardingThemeTitle')}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onThemeChange('light')}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${
+                  themePreference === 'light'
+                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
+                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                }`}
+              >
+                {t('lightLabel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onThemeChange('dark')}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${
+                  themePreference === 'dark'
+                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
+                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                }`}
+              >
+                {t('darkLabel')}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+                {t('onboardingBack')}
+              </button>
+              <button
+                type="button"
+                onClick={handleNext}
+                className={`px-4 py-2 rounded-md font-semibold transition ${
+                  darkMode
+                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {t('onboardingNext')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-3">
+            <div className="text-sm font-semibold">{t('onboardingModeTitle')}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setModeChoice('solo');
+                  onModeChange('solo');
+                }}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${
+                  modeChoice === 'solo'
+                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
+                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                }`}
+              >
+                {t('onboardingSoloLabel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModeChoice('duo');
+                  onModeChange('duo');
+                }}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${
+                  modeChoice === 'duo'
+                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
+                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                }`}
+              >
+                {t('onboardingDuoLabel')}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+                {t('onboardingBack')}
+              </button>
+              <button
+                type="button"
+                onClick={modeChoice === 'duo' ? handleNext : handleFinish}
+                className={`px-4 py-2 rounded-md font-semibold transition ${
+                  darkMode
+                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {modeChoice === 'duo' ? t('onboardingNext') : t('onboardingFinish')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && modeChoice === 'duo' && (
+          <div className="space-y-3">
+            <div className="text-sm font-semibold">{t('onboardingNamesTitle')}</div>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={person1Name}
+                onChange={(event) => setPerson1Name(event.target.value)}
+                placeholder={t('onboardingPerson1Placeholder')}
+                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              />
+              <input
+                type="text"
+                value={person2Name}
+                onChange={(event) => setPerson2Name(event.target.value)}
+                placeholder={t('onboardingPerson2Placeholder')}
+                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+                {t('onboardingBack')}
+              </button>
+              <button
+                type="button"
+                onClick={handleFinish}
+                className={`px-4 py-2 rounded-md font-semibold transition ${
+                  darkMode
+                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {t('onboardingFinish')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && step !== 0 && (
+          <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>{error}</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 type SettingsViewProps = {
   user: AuthUser | null;
   fallbackUsername: string;
@@ -2283,6 +2650,8 @@ const App: React.FC = () => {
   const [activePage, setActivePage] = useState<'budget' | 'settings'>('budget');
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectorError, setSelectorError] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [pendingOnboarding, setPendingOnboarding] = useState<{ person1Name: string; person2Name: string; mode: 'solo' | 'duo' } | null>(null);
   const [sortByCost, setSortByCost] = useState<boolean>(() => getInitialSortByCost());
   const [languagePreference, setLanguagePreference] = useState<LanguageCode>(() => getInitialLanguagePreference());
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
@@ -2323,6 +2692,17 @@ const App: React.FC = () => {
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
       : 'radial-gradient(1200px circle at 85% -10%, rgba(59,130,246,0.10), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(16,185,129,0.10), transparent 50%)'
   } as React.CSSProperties;
+
+  const applyLoginResult = (result: LoginResponse) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('authToken', result.token);
+      localStorage.setItem('authUser', result.user.username);
+    }
+    setAuthToken(result.token);
+    setAuthUser(result.user.username);
+    setAuthProfile(result.user);
+    setActivePage('budget');
+  };
 
   const setData = (updater: (prev: BudgetData) => BudgetData) => {
     setMonthlyBudgets(prev => {
@@ -2366,14 +2746,7 @@ const App: React.FC = () => {
     setAuthError(null);
     try {
       const result = await loginRequest(username, password);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('authToken', result.token);
-        localStorage.setItem('authUser', result.user.username);
-      }
-      setAuthToken(result.token);
-      setAuthUser(result.user.username);
-      setAuthProfile(result.user);
-      setActivePage('budget');
+      applyLoginResult(result);
     } catch (error) {
       if (isAuthError(error)) {
         setAuthError(t('authInvalidError'));
@@ -2514,6 +2887,31 @@ const App: React.FC = () => {
   }, [menuOpen]);
 
   useEffect(() => {
+    if (authToken) {
+      return;
+    }
+    let isActive = true;
+    const checkBootstrap = async () => {
+      try {
+        const status = await fetchBootstrapStatus();
+        if (!isActive) {
+          return;
+        }
+        setShowOnboarding(!status.hasUsers);
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+        setShowOnboarding(false);
+      }
+    };
+    void checkBootstrap();
+    return () => {
+      isActive = false;
+    };
+  }, [authToken]);
+
+  useEffect(() => {
     setSelectorError(null);
   }, [currentMonthKey]);
 
@@ -2630,6 +3028,39 @@ const App: React.FC = () => {
       }
     };
   }, [authToken, isHydrated, monthlyBudgets]);
+
+  useEffect(() => {
+    if (!pendingOnboarding || !isHydrated) {
+      return;
+    }
+    const { person1Name, person2Name, mode } = pendingOnboarding;
+    const nextPerson1 = person1Name.trim();
+    const nextPerson2 = person2Name.trim();
+    setMonthlyBudgets(prev => {
+      const updated: MonthlyBudget = {};
+      Object.keys(prev).forEach(monthKey => {
+        const month = prev[monthKey];
+        if (!month) {
+          return;
+        }
+        updated[monthKey] = {
+          ...month,
+          person1: {
+            ...month.person1,
+            name: nextPerson1 || month.person1.name
+          },
+          person2: mode === 'duo'
+            ? {
+                ...month.person2,
+                name: nextPerson2 || month.person2.name
+              }
+            : month.person2
+        };
+      });
+      return updated;
+    });
+    setPendingOnboarding(null);
+  }, [pendingOnboarding, isHydrated]);
 
   const flushSave = () => {
     if (!isHydrated || !authToken) {
@@ -3210,6 +3641,39 @@ const App: React.FC = () => {
     setEditingName(null);
     setTempName('');
   };
+
+  if (showOnboarding) {
+    return (
+      <TranslationContext.Provider value={{ t, language: languagePreference }}>
+        <OnboardingWizard
+          darkMode={darkMode}
+          pageStyle={pageStyle}
+          languagePreference={languagePreference}
+          themePreference={themePreference}
+          soloModeEnabled={soloModeEnabled}
+          onLanguageChange={(value) => setLanguagePreference(value)}
+          onThemeChange={handleThemePreferenceChange}
+          onModeChange={(value) => setSoloModeEnabled(value === 'solo')}
+          onComplete={({ person1Name, person2Name, mode }) => {
+            setSoloModeEnabled(mode === 'solo');
+            if (mode === 'duo') {
+              setPendingOnboarding({ person1Name, person2Name, mode });
+            } else if (person1Name.trim()) {
+              setPendingOnboarding({ person1Name, person2Name: '', mode });
+            } else {
+              setPendingOnboarding(null);
+            }
+            setShowOnboarding(false);
+          }}
+          onCreateAdmin={async (username, password) => {
+            await bootstrapAdminRequest({ username, password });
+            const result = await loginRequest(username, password);
+            applyLoginResult(result);
+          }}
+        />
+      </TranslationContext.Provider>
+    );
+  }
 
   if (!authToken) {
     return (

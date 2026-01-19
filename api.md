@@ -7,6 +7,7 @@
 ## Auth
 - `POST /api/auth/login` (or `POST /api/login`) returns a JWT token.
 - Use `Authorization: Bearer <token>` on protected routes.
+- `GET /api/auth/bootstrap-status` returns whether a user exists.
 
 ## Environment Variables
 - `PORT`: API port (default 3001)

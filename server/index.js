@@ -308,6 +308,16 @@ app.post('/api/auth/bootstrap', async (req, res) => {
   }
 });
 
+app.get('/api/auth/bootstrap-status', async (_req, res) => {
+  try {
+    const result = await pool.query('select 1 from users limit 1');
+    res.json({ hasUsers: result.rowCount > 0 });
+  } catch (error) {
+    console.error('Bootstrap status failed', error);
+    res.status(500).json({ error: 'Bootstrap status failed' });
+  }
+});
+
 app.post('/api/login', loginHandler);
 app.post('/api/auth/login', loginHandler);
 
