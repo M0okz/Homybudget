@@ -6,7 +6,8 @@ interface Category {
   id: string;
   name: string;
   amount: number;
-  icon: string;
+  icon?: string;
+  categoryOverrideId?: string;
   isChecked?: boolean;
   isRecurring?: boolean;
   recurringMonths?: number;
@@ -17,6 +18,7 @@ interface FixedExpense {
   id: string;
   name: string;
   amount: number;
+  categoryOverrideId?: string;
   isChecked?: boolean;
 }
 
@@ -68,6 +70,18 @@ type AppSettings = {
   soloModeEnabled: boolean;
   jointAccountEnabled: boolean;
   sortByCost: boolean;
+};
+
+type ExpenseWizardState = {
+  step: 1 | 2;
+  type: 'fixed' | 'free';
+  personKey: 'person1' | 'person2';
+  name: string;
+  amount: string;
+  categoryOverrideId: string;
+  isRecurring: boolean;
+  recurringMonths: number;
+  startMonth: string;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
@@ -323,6 +337,215 @@ const coerceNumber = (value: unknown) => {
     return parseNumberInput(value);
   }
   return 0;
+};
+
+const normalizeIconLabel = (value: string) => (
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+);
+
+type AutoCategory = {
+  id: string;
+  emoji: string;
+  labels: { fr: string; en: string };
+  keywords: string[];
+};
+
+const AUTO_CATEGORIES: AutoCategory[] = [
+  {
+    id: 'groceries',
+    emoji: '🛒',
+    labels: { fr: 'Courses', en: 'Groceries' },
+    keywords: [
+      'course', 'courses', 'supermarche', 'supermarché', 'hypermarché', 'hypermarche',
+      'alimentation', 'epicerie', 'épicerie', 'primeur', 'boucherie', 'boulangerie',
+      'drive', 'livraison courses',
+      'grocery', 'groceries', 'supermarket', 'food',
+      'carrefour', 'leclerc', 'e.leclerc', 'intermarche', 'intermarché', 'auchan',
+      'lidl', 'aldi', 'monoprix', 'casino', 'picard', 'franprix', 'u express', 'super u'
+    ]
+  },
+  {
+    id: 'health',
+    emoji: '❤️',
+    labels: { fr: 'Santé', en: 'Health' },
+    keywords: [
+      'sante', 'santé', 'medecin', 'médecin', 'docteur', 'consultation', 'hopital', 'hôpital',
+      'pharmacie', 'mutuelle', 'prevoyance', 'prévoyance', 'kine', 'kiné', 'dent', 'dentaire',
+      'dentiste', 'optique', 'ophtalmo', 'lunettes', 'radiologie', 'analyse', 'laboratoire',
+      'health', 'doctor', 'clinic', 'hospital', 'pharmacy', 'insurance', 'dental', 'dentist', 'optical',
+      'doctolib', 'cpam', 'ameli'
+    ]
+  },
+  {
+    id: 'transport',
+    emoji: '🚗',
+    labels: { fr: 'Transport', en: 'Transport' },
+    keywords: [
+      'transport', 'voiture', 'auto', 'vehicule', 'véhicule', 'essence', 'carburant', 'diesel',
+      'peage', 'péage', 'parking', 'stationnement', 'taxis', 'uber', 'bolt', 'vtc',
+      'metro', 'métro', 'bus', 'tram', 'train', 'sncf', 'rer',
+      'entretien', 'revision', 'révision', 'garage', 'pneu', 'peinture', 'carte grise',
+      'fuel', 'gas', 'petrol', 'toll', 'parking', 'subway', 'bus', 'tram', 'train',
+      'total', 'totalenergies', 'total energies', 'shell', 'esso', 'bp'
+    ]
+  },
+  {
+    id: 'housing',
+    emoji: '🏠',
+    labels: { fr: 'Logement', en: 'Housing' },
+    keywords: [
+      'loyer', 'logement', 'habitation', 'immobilier', 'credit immo', 'crédit immo',
+      'credit immobilier', 'crédit immobilier', 'copropriete', 'copropriété',
+      'charges', 'syndic', 'agence', 'caution',
+      'eau', 'plombier', 'electricien', 'électricien', 'serrurier',
+      'rent', 'housing', 'mortgage', 'property', 'hoa', 'condo fee'
+    ]
+  },
+  {
+    id: 'bills',
+    emoji: '💡',
+    labels: { fr: 'Factures', en: 'Bills' },
+    keywords: [
+      'facture', 'factures', 'electricite', 'électricité', 'edf', 'enedis',
+      'gaz', 'grdf', 'eau', 'assainissement',
+      'internet', 'fibre', 'box', 'wifi', 'téléphone', 'telephone', 'mobile', 'forfait',
+      'bill', 'bills', 'electricity', 'gas', 'water', 'internet', 'phone', 'mobile plan',
+      'sfr', 'orange', 'bouygues', 'free', 'free mobile', 'red', 'sosh', 'prixtel',
+      'veolia', 'suez'
+    ]
+  },
+  {
+    id: 'subscriptions',
+    emoji: '📺',
+    labels: { fr: 'Abonnements', en: 'Subscriptions' },
+    keywords: [
+      'abonnement', 'abonnements', 'streaming', 'musique', 'cloud', 'stockage', 'logiciel', 'saas',
+      'subscription', 'subscriptions', 'streaming', 'music', 'cloud', 'software', 'saas',
+      'netflix', 'spotify', 'deezer', 'apple music', 'youtube premium', 'prime video', 'amazon prime',
+      'disney', 'disney+', 'canal', 'canal+', 'mycanal',
+      'icloud', 'i cloud', 'google one', 'dropbox', 'onedrive', 'one drive',
+      'chatgpt', 'openai', 'github', 'gitlab'
+    ]
+  },
+  {
+    id: 'everyday',
+    emoji: '👕',
+    labels: { fr: 'Quotidien', en: 'Everyday' },
+    keywords: [
+      'quotidien', 'shopping', 'vetement', 'vêtement', 'vetements', 'vêtements', 'chaussure', 'chaussures',
+      'coiffeur', 'beaute', 'beauté', 'esthetique', 'esthétique', 'ongle', 'ongles', 'manucure',
+      'pressing', 'lingerie', 'parfum', 'cosmetique', 'cosmétique',
+      'clothes', 'shoes', 'hairdresser', 'beauty', 'nails', 'dry cleaning'
+    ]
+  },
+  {
+    id: 'fitness',
+    emoji: '🏋️',
+    labels: { fr: 'Sport', en: 'Fitness' },
+    keywords: [
+      'sport', 'salle', 'gym', 'fitness', 'abonnement salle', 'coach', 'crossfit', 'yoga',
+      'workout', 'training', 'membership',
+      'basic fit', 'basic-fit', 'basicfit'
+    ]
+  },
+  {
+    id: 'leisure',
+    emoji: '🎮',
+    labels: { fr: 'Loisirs', en: 'Leisure' },
+    keywords: [
+      'loisir', 'loisirs', 'cinema', 'cinéma', 'jeux', 'jeu', 'gaming',
+      'concert', 'evenement', 'évènement', 'sortie', 'bar', 'cafe', 'café',
+      'voyage', 'vacances', 'hotel', 'hôtel', 'airbnb', 'restaurant',
+      'leisure', 'cinema', 'movie', 'games', 'concert', 'event', 'trip', 'travel', 'hotel'
+    ]
+  },
+  {
+    id: 'family',
+    emoji: '👶',
+    labels: { fr: 'Famille', en: 'Family' },
+    keywords: [
+      'famille', 'enfant', 'enfants', 'bebe', 'bébé', 'garde', 'nounou', 'creche', 'crèche',
+      'ecole', 'école', 'cantine', 'activite', 'activité',
+      'family', 'kid', 'kids', 'baby', 'school', 'daycare'
+    ]
+  },
+  {
+    id: 'pets',
+    emoji: '🐾',
+    labels: { fr: 'Animaux', en: 'Pets' },
+    keywords: [
+      'animal', 'animaux', 'chien', 'chat', 'croquettes', 'litiere', 'litière', 'veterinaire', 'vétérinaire',
+      'pet', 'pets', 'dog', 'cat', 'vet', 'veterinary'
+    ]
+  },
+  {
+    id: 'finance',
+    emoji: '💳',
+    labels: { fr: 'Finances', en: 'Finance' },
+    keywords: [
+      'finance', 'banque', 'frais bancaire', 'frais bancaires', 'commission', 'agios',
+      'impot', 'impôts', 'taxe', 'amende', 'remboursement', 'credit', 'crédit',
+      'compte joint',
+      'bank', 'bank fee', 'fees', 'tax', 'fine', 'loan', 'repayment', 'joint account',
+      'revolut', 'visa', 'mastercard'
+    ]
+  },
+  {
+    id: 'savings',
+    emoji: '💰',
+    labels: { fr: 'Épargne', en: 'Savings' },
+    keywords: [
+      'epargne', 'épargne', 'livret', 'livret a', 'livret A', 'ldds', 'pea', 'assurance vie',
+      'placement', 'investissement',
+      'savings', 'deposit', 'investment'
+    ]
+  },
+  {
+    id: 'gifts',
+    emoji: '🎁',
+    labels: { fr: 'Cadeaux', en: 'Gifts' },
+    keywords: [
+      'cadeau', 'cadeaux', 'don', 'dons', 'anniversaire', 'noel', 'noël',
+      'gift', 'gifts', 'donation', 'donations'
+    ]
+  },
+  {
+    id: 'other',
+    emoji: '📦',
+    labels: { fr: 'Autres', en: 'Other' },
+    keywords: [
+      'autre', 'autres', 'divers', 'imprevu', 'imprévu', 'exceptionnel', 'inconnu',
+      'other', 'misc', 'miscellaneous', 'unexpected'
+    ]
+  }
+];
+
+const getAutoCategory = (label: string) => {
+  const normalized = normalizeIconLabel(label);
+  if (!normalized || normalized === 'nouvelle categorie' || normalized === 'new category' || normalized === 'nouvelle depense') {
+    return null;
+  }
+  for (const entry of AUTO_CATEGORIES) {
+    for (const keyword of entry.keywords) {
+      if (normalized.includes(keyword)) {
+        return entry;
+      }
+    }
+  }
+  return AUTO_CATEGORIES[AUTO_CATEGORIES.length - 1];
+};
+
+const getCategoryById = (id?: string | null) => {
+  if (!id) {
+    return null;
+  }
+  return AUTO_CATEGORIES.find(category => category.id === id) ?? null;
 };
 
 const formatAmount = (value: number) => {
@@ -834,11 +1057,10 @@ type BudgetColumnProps = {
   addIncomeSource: (personKey: 'person1' | 'person2') => void;
   deleteIncomeSource: (personKey: 'person1' | 'person2', id: string) => void;
   updateIncomeSource: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount', value: string | number) => void;
-  addFixedExpense: (personKey: 'person1' | 'person2') => void;
+  openExpenseWizard: (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => void;
   deleteFixedExpense: (personKey: 'person1' | 'person2', id: string) => void;
-  updateFixedExpense: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked', value: string | number | boolean) => void;
+  updateFixedExpense: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked' | 'categoryOverrideId', value: string | number | boolean) => void;
   moveFixedExpense: (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => void;
-  addCategory: (personKey: 'person1' | 'person2') => void;
   deleteCategory: (personKey: 'person1' | 'person2', id: string) => void;
   updateCategory: (personKey: 'person1' | 'person2', id: string, field: keyof Category, value: string | number | boolean) => void;
   moveCategory: (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => void;
@@ -862,7 +1084,7 @@ type BudgetFixedSectionProps = Pick<
   | 'darkMode'
   | 'sortByCost'
   | 'palette'
-  | 'addFixedExpense'
+  | 'openExpenseWizard'
   | 'deleteFixedExpense'
   | 'updateFixedExpense'
   | 'moveFixedExpense'
@@ -876,7 +1098,7 @@ type BudgetFreeSectionProps = Pick<
   | 'sortByCost'
   | 'palette'
   | 'currentMonthKey'
-  | 'addCategory'
+  | 'openExpenseWizard'
   | 'deleteCategory'
   | 'updateCategory'
   | 'moveCategory'
@@ -947,7 +1169,7 @@ const BudgetHeaderSection = ({
   deleteIncomeSource,
   updateIncomeSource
 }: BudgetHeaderSectionProps) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const available = calculateAvailable(person);
   const totalFixed = calculateTotalFixed(person.fixedExpenses);
   const totalCategories = calculateTotalCategories(person.categories);
@@ -1017,12 +1239,12 @@ const BudgetFixedSection = ({
   darkMode,
   sortByCost,
   palette,
-  addFixedExpense,
+  openExpenseWizard,
   deleteFixedExpense,
   updateFixedExpense,
   moveFixedExpense
 }: BudgetFixedSectionProps) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const totalFixed = calculateTotalFixed(person.fixedExpenses);
   const animatedTotalFixed = useAnimatedNumber(totalFixed);
@@ -1046,7 +1268,7 @@ const BudgetFixedSection = ({
         <h3 className="font-bold" style={fixedTextStyle}>{t('fixedMoneyLabel')}</h3>
         <button
           type="button"
-          onClick={() => addFixedExpense(personKey)}
+          onClick={() => openExpenseWizard(personKey, 'fixed')}
           className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition hover:scale-105 ${
             darkMode ? 'border-green-300/70 text-green-200/90 bg-transparent' : 'border-green-600/70 text-green-600 bg-transparent'
           }`}
@@ -1065,6 +1287,10 @@ const BudgetFixedSection = ({
               const isLast = index === orderedExpenses.length - 1;
               const isEditing = editingId === expense.id;
               const amountValue = coerceNumber(expense.amount);
+              const resolvedCategory = expense.categoryOverrideId
+                ? getCategoryById(expense.categoryOverrideId)
+                : getAutoCategory(expense.name);
+              const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
               return (
                 <div key={expense.id} className="px-2 py-2">
                   <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${darkMode ? 'hover:bg-gray-800/70' : 'hover:bg-gray-100'}`}>
@@ -1078,6 +1304,16 @@ const BudgetFixedSection = ({
                     <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                       {expense.name || t('newFixedExpenseLabel')}
                     </span>
+                    {resolvedCategory && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                          darkMode ? 'bg-white/10 text-gray-100' : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        <span>{resolvedCategory.emoji}</span>
+                        <span>{categoryLabel}</span>
+                      </span>
+                    )}
                     <span className={`text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                       {formatAmount(amountValue)} €
                     </span>
@@ -1112,6 +1348,19 @@ const BudgetFixedSection = ({
                         onChange={(e) => updateFixedExpense(personKey, expense.id, 'amount', parseNumberInput(e.target.value))}
                         className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
                       />
+                      <select
+                        value={expense.categoryOverrideId ?? ''}
+                        onChange={(e) => updateFixedExpense(personKey, expense.id, 'categoryOverrideId', e.target.value)}
+                        className={`min-w-[9rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                        aria-label={t('categoryLabel')}
+                      >
+                        <option value="">{t('categoryAutoLabel')}</option>
+                        {AUTO_CATEGORIES.map(category => (
+                          <option key={category.id} value={category.id}>
+                            {category.emoji} {language === 'fr' ? category.labels.fr : category.labels.en}
+                          </option>
+                        ))}
+                      </select>
                       <div className="flex items-center gap-1 ml-auto">
                         <button
                           type="button"
@@ -1155,12 +1404,12 @@ const BudgetFreeSection = ({
   sortByCost,
   palette,
   currentMonthKey,
-  addCategory,
+  openExpenseWizard,
   deleteCategory,
   updateCategory,
   moveCategory
 }: BudgetFreeSectionProps) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const totalCategories = calculateTotalCategories(person.categories);
   const animatedTotalCategories = useAnimatedNumber(totalCategories);
@@ -1184,7 +1433,7 @@ const BudgetFreeSection = ({
         <h3 className="font-bold" style={freeTextStyle}>{t('freeMoneyLabel')}</h3>
         <button
           type="button"
-          onClick={() => addCategory(personKey)}
+          onClick={() => openExpenseWizard(personKey, 'free')}
           className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition hover:scale-105 ${
             darkMode ? 'border-green-300/70 text-green-200/90 bg-transparent' : 'border-green-600/70 text-green-600 bg-transparent'
           }`}
@@ -1203,6 +1452,10 @@ const BudgetFreeSection = ({
               const isLast = index === orderedCategories.length - 1;
               const isEditing = editingId === category.id;
               const amountValue = coerceNumber(category.amount);
+              const resolvedCategory = category.categoryOverrideId
+                ? getCategoryById(category.categoryOverrideId)
+                : getAutoCategory(category.name);
+              const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
               const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
               return (
                 <div key={category.id} className="px-2 py-2">
@@ -1214,12 +1467,19 @@ const BudgetFreeSection = ({
                       className="h-4 w-4"
                       aria-label={t('validateExpenseLabel')}
                     />
-                    <span className={`h-7 w-7 rounded-full flex items-center justify-center text-sm ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                      {category.icon || '•'}
-                    </span>
                     <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                       {category.name || t('newCategoryLabel')}
                     </span>
+                    {resolvedCategory && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                          darkMode ? 'bg-white/10 text-gray-100' : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        <span>{resolvedCategory.emoji}</span>
+                        <span>{categoryLabel}</span>
+                      </span>
+                    )}
                     {recurringLabel && (
                       <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                         {recurringLabel}
@@ -1250,12 +1510,6 @@ const BudgetFreeSection = ({
                       <div className="flex flex-wrap items-center gap-2">
                         <input
                           type="text"
-                          value={category.icon}
-                          onChange={(e) => updateCategory(personKey, category.id, 'icon', e.target.value)}
-                          className={`w-10 px-2 py-1 border rounded text-center text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
-                        />
-                        <input
-                          type="text"
                           value={category.name}
                           onChange={(e) => updateCategory(personKey, category.id, 'name', e.target.value)}
                           className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
@@ -1266,6 +1520,19 @@ const BudgetFreeSection = ({
                           onChange={(e) => updateCategory(personKey, category.id, 'amount', parseNumberInput(e.target.value))}
                           className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
                         />
+                        <select
+                          value={category.categoryOverrideId ?? ''}
+                          onChange={(e) => updateCategory(personKey, category.id, 'categoryOverrideId', e.target.value)}
+                          className={`min-w-[9rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                          aria-label={t('categoryLabel')}
+                        >
+                          <option value="">{t('categoryAutoLabel')}</option>
+                          {AUTO_CATEGORIES.map(categoryOption => (
+                            <option key={categoryOption.id} value={categoryOption.id}>
+                              {categoryOption.emoji} {language === 'fr' ? categoryOption.labels.fr : categoryOption.labels.en}
+                            </option>
+                          ))}
+                        </select>
                         <div className="flex items-center gap-1 ml-auto">
                           <button
                             type="button"
@@ -1350,11 +1617,10 @@ const BudgetColumn = ({
   addIncomeSource,
   deleteIncomeSource,
   updateIncomeSource,
-  addFixedExpense,
+  openExpenseWizard,
   deleteFixedExpense,
   updateFixedExpense,
   moveFixedExpense,
-  addCategory,
   deleteCategory,
   updateCategory,
   moveCategory
@@ -1375,7 +1641,7 @@ const BudgetColumn = ({
       darkMode={darkMode}
       sortByCost={sortByCost}
       palette={palette}
-      addFixedExpense={addFixedExpense}
+      openExpenseWizard={openExpenseWizard}
       deleteFixedExpense={deleteFixedExpense}
       updateFixedExpense={updateFixedExpense}
       moveFixedExpense={moveFixedExpense}
@@ -1387,7 +1653,7 @@ const BudgetColumn = ({
       sortByCost={sortByCost}
       palette={palette}
       currentMonthKey={currentMonthKey}
-      addCategory={addCategory}
+      openExpenseWizard={openExpenseWizard}
       deleteCategory={deleteCategory}
       updateCategory={updateCategory}
       moveCategory={moveCategory}
@@ -1575,11 +1841,7 @@ const LoginScreen = ({ onLogin, error, loading, darkMode, pageStyle }: LoginScre
         <button
           type="submit"
           disabled={loading}
-          className={`w-full py-2 rounded-md font-semibold transition ${
-            darkMode
-              ? 'bg-slate-200 text-slate-900 hover:bg-white'
-              : 'bg-slate-900 text-white hover:bg-slate-800'
-          } ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
+          className={`w-full py-2 rounded-md font-semibold btn-gradient ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
         >
           {loading ? t('loginLoading') : t('loginButton')}
         </button>
@@ -1721,11 +1983,7 @@ const OnboardingWizard = ({
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-2 rounded-md font-semibold transition ${
-                darkMode
-                  ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                  : 'bg-slate-900 text-white hover:bg-slate-800'
-              } ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
+              className={`w-full py-2 rounded-md font-semibold btn-gradient ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               {loading ? t('onboardingCreatingAdmin') : t('onboardingCreateAdmin')}
             </button>
@@ -1766,11 +2024,7 @@ const OnboardingWizard = ({
               <button
                 type="button"
                 onClick={handleNext}
-                className={`px-4 py-2 rounded-md font-semibold transition ${
-                  darkMode
-                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                }`}
+                className="px-4 py-2 rounded-md font-semibold btn-gradient"
               >
                 {t('onboardingNext')}
               </button>
@@ -1812,11 +2066,7 @@ const OnboardingWizard = ({
               <button
                 type="button"
                 onClick={handleNext}
-                className={`px-4 py-2 rounded-md font-semibold transition ${
-                  darkMode
-                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                }`}
+                className="px-4 py-2 rounded-md font-semibold btn-gradient"
               >
                 {t('onboardingNext')}
               </button>
@@ -1864,11 +2114,7 @@ const OnboardingWizard = ({
               <button
                 type="button"
                 onClick={modeChoice === 'duo' ? handleNext : handleFinish}
-                className={`px-4 py-2 rounded-md font-semibold transition ${
-                  darkMode
-                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                }`}
+                className="px-4 py-2 rounded-md font-semibold btn-gradient"
               >
                 {modeChoice === 'duo' ? t('onboardingNext') : t('onboardingFinish')}
               </button>
@@ -1902,11 +2148,7 @@ const OnboardingWizard = ({
               <button
                 type="button"
                 onClick={handleFinish}
-                className={`px-4 py-2 rounded-md font-semibold transition ${
-                  darkMode
-                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                }`}
+                className="px-4 py-2 rounded-md font-semibold btn-gradient"
               >
                 {t('onboardingFinish')}
               </button>
@@ -2247,11 +2489,7 @@ const SettingsView = ({
                       type="button"
                       onClick={handleAvatarUpload}
                       disabled={avatarUploadLoading || !avatarFile}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                        darkMode
-                          ? 'bg-gray-200 text-gray-900 hover:bg-white'
-                          : 'bg-gray-900 text-white hover:bg-gray-800'
-                      } ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold btn-gradient ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       {avatarUploadLoading ? t('profileImageUploadLoading') : t('profileImageUploadButton')}
                     </button>
@@ -2264,17 +2502,13 @@ const SettingsView = ({
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={avatarLoading}
-                  className={`px-4 py-2 rounded-md font-semibold transition ${
-                    darkMode
-                      ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                      : 'bg-slate-900 text-white hover:bg-slate-800'
-                  } ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
-                </button>
+            <button
+              type="submit"
+              disabled={avatarLoading}
+              className={`px-4 py-2 rounded-md font-semibold btn-gradient ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
+            </button>
                 {avatarSuccess && (
                   <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
                     {avatarSuccess}
@@ -2468,11 +2702,7 @@ const SettingsView = ({
             <button
               type="submit"
               disabled={passwordLoading}
-              className={`px-4 py-2 rounded-md font-semibold transition ${
-                darkMode
-                  ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                  : 'bg-slate-900 text-white hover:bg-slate-800'
-              } ${passwordLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+              className={`px-4 py-2 rounded-md font-semibold btn-gradient ${passwordLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               {passwordLoading ? t('updatingButton') : t('updateButton')}
             </button>
@@ -2549,11 +2779,7 @@ const SettingsView = ({
               <button
                 type="submit"
                 disabled={createLoading}
-                className={`px-4 py-2 rounded-md font-semibold transition ${
-                  darkMode
-                    ? 'bg-slate-200 text-slate-900 hover:bg-white'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                } ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`px-4 py-2 rounded-md font-semibold btn-gradient ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 {createLoading ? t('creatingUserButton') : t('createUserButton')}
               </button>
@@ -2654,7 +2880,7 @@ const SettingsView = ({
           <button
             type="button"
             onClick={onLogout}
-            className="px-4 py-2 rounded-md bg-red-600 text-white font-semibold hover:bg-red-700"
+            className="px-4 py-2 rounded-md font-semibold btn-gradient"
           >
             {t('logoutLabel')}
           </button>
@@ -2712,6 +2938,7 @@ const App: React.FC = () => {
     }
     return localStorage.getItem('paletteId') ?? PALETTES[0].id;
   });
+  const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
 
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget>({});
   const [isHydrated, setIsHydrated] = useState(false);
@@ -3570,12 +3797,13 @@ const App: React.FC = () => {
     }));
   };
 
-  const addFixedExpense = (personKey: 'person1' | 'person2') => {
+  const addFixedExpense = (personKey: 'person1' | 'person2', overrides: Partial<FixedExpense> = {}) => {
     const newExpense: FixedExpense = {
       id: Date.now().toString(),
-      name: t('newFixedExpenseLabel'),
-      amount: 0,
-      isChecked: false
+      name: overrides.name ?? t('newFixedExpenseLabel'),
+      amount: overrides.amount ?? 0,
+      categoryOverrideId: overrides.categoryOverrideId ?? '',
+      isChecked: overrides.isChecked ?? false
     };
     setData(prev => ({
       ...prev,
@@ -3596,7 +3824,7 @@ const App: React.FC = () => {
     }));
   };
 
-  const updateFixedExpense = (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked', value: string | number | boolean) => {
+  const updateFixedExpense = (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked' | 'categoryOverrideId', value: string | number | boolean) => {
     setData(prev => ({
       ...prev,
       [personKey]: {
@@ -3628,13 +3856,16 @@ const App: React.FC = () => {
     });
   };
 
-  const addCategory = (personKey: 'person1' | 'person2') => {
+  const addCategory = (personKey: 'person1' | 'person2', overrides: Partial<Category> = {}) => {
     const newCategory: Category = {
       id: Date.now().toString(),
-      name: t('newCategoryLabel'),
-      amount: 0,
-      icon: '📌',
-      isChecked: false
+      name: overrides.name ?? t('newCategoryLabel'),
+      amount: overrides.amount ?? 0,
+      categoryOverrideId: overrides.categoryOverrideId ?? '',
+      isChecked: overrides.isChecked ?? false,
+      isRecurring: overrides.isRecurring ?? false,
+      recurringMonths: overrides.recurringMonths,
+      startMonth: overrides.startMonth
     };
     setData(prev => ({
       ...prev,
@@ -3693,6 +3924,62 @@ const App: React.FC = () => {
         }
       };
     });
+  };
+
+  const openExpenseWizard = (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => {
+    setExpenseWizard({
+      step: 1,
+      type,
+      personKey,
+      name: '',
+      amount: '',
+      categoryOverrideId: '',
+      isRecurring: false,
+      recurringMonths: 3,
+      startMonth: currentMonthKey
+    });
+  };
+
+  const closeExpenseWizard = () => {
+    setExpenseWizard(null);
+  };
+
+  const updateExpenseWizard = (updates: Partial<ExpenseWizardState>) => {
+    setExpenseWizard(prev => (prev ? { ...prev, ...updates } : prev));
+  };
+
+  const handleExpenseWizardNext = () => {
+    updateExpenseWizard({ step: 2 });
+  };
+
+  const handleExpenseWizardBack = () => {
+    updateExpenseWizard({ step: 1 });
+  };
+
+  const handleExpenseWizardSubmit = () => {
+    if (!expenseWizard) {
+      return;
+    }
+    const name = expenseWizard.name.trim()
+      || (expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel'));
+    const amount = parseNumberInput(expenseWizard.amount);
+    if (expenseWizard.type === 'fixed') {
+      addFixedExpense(expenseWizard.personKey, {
+        name,
+        amount,
+        categoryOverrideId: expenseWizard.categoryOverrideId
+      });
+    } else {
+      addCategory(expenseWizard.personKey, {
+        name,
+        amount,
+        categoryOverrideId: expenseWizard.categoryOverrideId,
+        isRecurring: expenseWizard.isRecurring,
+        recurringMonths: expenseWizard.isRecurring ? expenseWizard.recurringMonths : undefined,
+        startMonth: expenseWizard.isRecurring ? expenseWizard.startMonth : undefined
+      });
+    }
+    setExpenseWizard(null);
   };
 
   const calculateJointBalance = () => {
@@ -3908,13 +4195,13 @@ const App: React.FC = () => {
                 </button>
                 <button
                   onClick={addNextMonth}
-                  className={`hidden sm:inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold ${darkMode ? 'bg-green-700 text-white hover:bg-green-600' : 'bg-green-600 text-white hover:bg-green-700'} transition-all`}
+                  className="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold btn-gradient transition-all"
                 >
                   {t('addNextMonth')}
                 </button>
                 <button
                   onClick={deleteCurrentMonth}
-                  className={`hidden sm:inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold ${darkMode ? 'bg-red-700 text-white hover:bg-red-600' : 'bg-red-600 text-white hover:bg-red-700'} transition-all`}
+                  className="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold btn-gradient transition-all"
                 >
                   {t('deleteMonth')}
                 </button>
@@ -3985,13 +4272,13 @@ const App: React.FC = () => {
           <div className="flex flex-row items-center gap-2 sm:hidden">
             <button
               onClick={addNextMonth}
-              className={`flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap ${darkMode ? 'bg-green-700 text-white hover:bg-green-600' : 'bg-green-600 text-white hover:bg-green-700'} transition-all`}
+              className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
             >
               {t('addNextMonth')}
             </button>
             <button
               onClick={deleteCurrentMonth}
-              className={`flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap ${darkMode ? 'bg-red-700 text-white hover:bg-red-600' : 'bg-red-600 text-white hover:bg-red-700'} transition-all`}
+              className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
             >
               {t('deleteMonth')}
             </button>
@@ -4080,11 +4367,10 @@ const App: React.FC = () => {
               addIncomeSource={addIncomeSource}
               deleteIncomeSource={deleteIncomeSource}
               updateIncomeSource={updateIncomeSource}
-              addFixedExpense={addFixedExpense}
+              openExpenseWizard={openExpenseWizard}
               deleteFixedExpense={deleteFixedExpense}
               updateFixedExpense={updateFixedExpense}
               moveFixedExpense={moveFixedExpense}
-              addCategory={addCategory}
               deleteCategory={deleteCategory}
               updateCategory={updateCategory}
               moveCategory={moveCategory}
@@ -4121,7 +4407,7 @@ const App: React.FC = () => {
                   darkMode={darkMode}
                   sortByCost={sortByCost}
                   palette={palette}
-                  addFixedExpense={addFixedExpense}
+                  openExpenseWizard={openExpenseWizard}
                   deleteFixedExpense={deleteFixedExpense}
                   updateFixedExpense={updateFixedExpense}
                   moveFixedExpense={moveFixedExpense}
@@ -4133,7 +4419,7 @@ const App: React.FC = () => {
                   sortByCost={sortByCost}
                   palette={palette}
                   currentMonthKey={currentMonthKey}
-                  addCategory={addCategory}
+                  openExpenseWizard={openExpenseWizard}
                   deleteCategory={deleteCategory}
                   updateCategory={updateCategory}
                   moveCategory={moveCategory}
@@ -4190,7 +4476,7 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
-                addFixedExpense={addFixedExpense}
+                openExpenseWizard={openExpenseWizard}
                 deleteFixedExpense={deleteFixedExpense}
                 updateFixedExpense={updateFixedExpense}
                 moveFixedExpense={moveFixedExpense}
@@ -4201,7 +4487,7 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
-                addFixedExpense={addFixedExpense}
+                openExpenseWizard={openExpenseWizard}
                 deleteFixedExpense={deleteFixedExpense}
                 updateFixedExpense={updateFixedExpense}
                 moveFixedExpense={moveFixedExpense}
@@ -4213,7 +4499,7 @@ const App: React.FC = () => {
                 sortByCost={sortByCost}
                 palette={palette}
                 currentMonthKey={currentMonthKey}
-                addCategory={addCategory}
+                openExpenseWizard={openExpenseWizard}
                 deleteCategory={deleteCategory}
                 updateCategory={updateCategory}
                 moveCategory={moveCategory}
@@ -4225,7 +4511,7 @@ const App: React.FC = () => {
                 sortByCost={sortByCost}
                 palette={palette}
                 currentMonthKey={currentMonthKey}
-                addCategory={addCategory}
+                openExpenseWizard={openExpenseWizard}
                 deleteCategory={deleteCategory}
                 updateCategory={updateCategory}
                 moveCategory={moveCategory}
@@ -4243,11 +4529,11 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className={`font-bold ${darkMode ? 'text-red-400' : 'text-red-800'}`}>{t('jointAccountTitle')}</h3>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => addJointTransaction('deposit')} className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 flex items-center gap-1 text-xs sm:text-sm">
+                    <button onClick={() => addJointTransaction('deposit')} className="btn-gradient px-3 py-1 rounded flex items-center gap-1 text-xs sm:text-sm">
                       <Plus size={16} />
                       <span>{t('depositLabel')}</span>
                     </button>
-                    <button onClick={() => addJointTransaction('expense')} className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 flex items-center gap-1 text-xs sm:text-sm">
+                    <button onClick={() => addJointTransaction('expense')} className="btn-gradient px-3 py-1 rounded flex items-center gap-1 text-xs sm:text-sm">
                       <Plus size={16} />
                       <span>{t('expenseLabel')}</span>
                     </button>
@@ -4360,6 +4646,136 @@ const App: React.FC = () => {
           </div>
         </>
       )}
+        {expenseWizard && (
+          <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
+            <div
+              className={`w-full max-w-md rounded-2xl border shadow-lg p-6 space-y-4 ${
+                darkMode ? 'bg-gray-900/95 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+              }`}
+            >
+              <div className="space-y-1">
+                <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+                <h2 className="text-xl font-semibold">{t('expenseWizardTitle')}</h2>
+                <div className="text-xs text-gray-500">{t('onboardingStepLabel')} {expenseWizard.step}/2</div>
+                <div className="text-xs font-semibold text-gray-500">
+                  {expenseWizard.type === 'fixed' ? t('fixedMoneyLabel') : t('freeMoneyLabel')}
+                </div>
+              </div>
+
+              {expenseWizard.step === 1 && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium" htmlFor="expense-name">{t('expenseNameLabel')}</label>
+                    <input
+                      id="expense-name"
+                      type="text"
+                      value={expenseWizard.name}
+                      onChange={(e) => updateExpenseWizard({ name: e.target.value })}
+                      placeholder={expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel')}
+                      className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium" htmlFor="expense-amount">{t('amountLabel')}</label>
+                    <input
+                      id="expense-amount"
+                      type="number"
+                      value={expenseWizard.amount}
+                      onChange={(e) => updateExpenseWizard({ amount: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {expenseWizard.step === 2 && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium" htmlFor="expense-category">{t('categoryLabel')}</label>
+                    <select
+                      id="expense-category"
+                      value={expenseWizard.categoryOverrideId}
+                      onChange={(e) => updateExpenseWizard({ categoryOverrideId: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                    >
+                      <option value="">{t('categoryAutoLabel')}</option>
+                      {AUTO_CATEGORIES.map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.emoji} {languagePreference === 'fr' ? category.labels.fr : category.labels.en}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {expenseWizard.type === 'free' && (
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={expenseWizard.isRecurring}
+                          onChange={(e) => updateExpenseWizard({ isRecurring: e.target.checked })}
+                          className="h-4 w-4"
+                        />
+                        {t('installmentLabel')}
+                      </label>
+                      {expenseWizard.isRecurring && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            value={expenseWizard.recurringMonths}
+                            onChange={(e) => {
+                              const nextValue = parseInt(e.target.value, 10);
+                              updateExpenseWizard({
+                                recurringMonths: Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1
+                              });
+                            }}
+                            className={`w-20 px-2 py-1 border rounded text-right ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                          />
+                          <span className="text-xs text-gray-500">
+                            {t('startLabel')}: {expenseWizard.startMonth}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeExpenseWizard}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                    darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {t('cancelLabel')}
+                </button>
+                <div className="flex items-center gap-2">
+                  {expenseWizard.step === 2 && (
+                    <button
+                      type="button"
+                      onClick={handleExpenseWizardBack}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                        darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {t('onboardingBack')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={expenseWizard.step === 1 ? handleExpenseWizardNext : handleExpenseWizardSubmit}
+                    className="px-3 py-2 rounded-lg text-sm font-semibold btn-gradient"
+                  >
+                    {expenseWizard.step === 1 ? t('onboardingNext') : t('addLabel')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </TranslationContext.Provider>
   );

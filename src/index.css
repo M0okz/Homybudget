@@ -1,16 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: light;
+  --homy-violet: #5B4B8A;
+  --homy-rose: #D14B7E;
+  --homy-red: #E85D5D;
+  --homy-orange: #F5915D;
+  --homy-yellow: #F9B55E;
 }
 
 body {
   margin: 0;
-  font-family: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Noyh', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 body.theme-transition,
@@ -26,6 +29,30 @@ body.theme-transition * {
 
 .app-fade {
   animation: app-fade 480ms ease-out;
+}
+
+.btn-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--homy-violet) 0%,
+    var(--homy-rose) 32%,
+    var(--homy-red) 58%,
+    var(--homy-orange) 80%,
+    var(--homy-yellow) 100%
+  );
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  transition: transform 150ms ease, filter 150ms ease, box-shadow 150ms ease;
+}
+
+.btn-gradient:hover {
+  filter: brightness(1.05) saturate(1.04);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.btn-gradient:active {
+  transform: translateY(1px);
 }
 
 @keyframes app-fade {
