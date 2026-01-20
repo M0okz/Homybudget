@@ -73,9 +73,11 @@ type AppSettings = {
 };
 
 type ExpenseWizardState = {
+  mode: 'create' | 'edit';
   step: 1 | 2;
   type: 'fixed' | 'free';
   personKey: 'person1' | 'person2';
+  targetId?: string;
   name: string;
   amount: string;
   categoryOverrideId: string;
@@ -533,7 +535,8 @@ const getAutoCategory = (label: string) => {
   }
   for (const entry of AUTO_CATEGORIES) {
     for (const keyword of entry.keywords) {
-      if (normalized.includes(keyword)) {
+      const normalizedKeyword = normalizeIconLabel(keyword);
+      if (normalizedKeyword && normalized.includes(normalizedKeyword)) {
         return entry;
       }
     }
@@ -1049,7 +1052,6 @@ type BudgetColumnProps = {
   palette: Palette;
   editingName: string | null;
   tempName: string;
-  currentMonthKey: string;
   setTempName: (value: string) => void;
   startEditingName: (personKey: 'person1' | 'person2') => void;
   saveName: (personKey: 'person1' | 'person2') => void;
@@ -1058,10 +1060,9 @@ type BudgetColumnProps = {
   deleteIncomeSource: (personKey: 'person1' | 'person2', id: string) => void;
   updateIncomeSource: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount', value: string | number) => void;
   openExpenseWizard: (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => void;
-  deleteFixedExpense: (personKey: 'person1' | 'person2', id: string) => void;
+  openExpenseWizardForEdit: (personKey: 'person1' | 'person2', type: 'fixed' | 'free', payload: FixedExpense | Category) => void;
   updateFixedExpense: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked' | 'categoryOverrideId', value: string | number | boolean) => void;
   moveFixedExpense: (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => void;
-  deleteCategory: (personKey: 'person1' | 'person2', id: string) => void;
   updateCategory: (personKey: 'person1' | 'person2', id: string, field: keyof Category, value: string | number | boolean) => void;
   moveCategory: (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => void;
 };
@@ -1085,7 +1086,7 @@ type BudgetFixedSectionProps = Pick<
   | 'sortByCost'
   | 'palette'
   | 'openExpenseWizard'
-  | 'deleteFixedExpense'
+  | 'openExpenseWizardForEdit'
   | 'updateFixedExpense'
   | 'moveFixedExpense'
 >;
@@ -1097,9 +1098,8 @@ type BudgetFreeSectionProps = Pick<
   | 'darkMode'
   | 'sortByCost'
   | 'palette'
-  | 'currentMonthKey'
   | 'openExpenseWizard'
-  | 'deleteCategory'
+  | 'openExpenseWizardForEdit'
   | 'updateCategory'
   | 'moveCategory'
 >;
@@ -1240,12 +1240,11 @@ const BudgetFixedSection = ({
   sortByCost,
   palette,
   openExpenseWizard,
-  deleteFixedExpense,
+  openExpenseWizardForEdit,
   updateFixedExpense,
   moveFixedExpense
 }: BudgetFixedSectionProps) => {
   const { t, language } = useTranslation();
-  const [editingId, setEditingId] = useState<string | null>(null);
   const totalFixed = calculateTotalFixed(person.fixedExpenses);
   const animatedTotalFixed = useAnimatedNumber(totalFixed);
   const orderedExpenses = sortByCost
@@ -1285,7 +1284,6 @@ const BudgetFixedSection = ({
             {orderedExpenses.map((expense, index) => {
               const isFirst = index === 0;
               const isLast = index === orderedExpenses.length - 1;
-              const isEditing = editingId === expense.id;
               const amountValue = coerceNumber(expense.amount);
               const resolvedCategory = expense.categoryOverrideId
                 ? getCategoryById(expense.categoryOverrideId)
@@ -1314,59 +1312,16 @@ const BudgetFixedSection = ({
                         <span>{categoryLabel}</span>
                       </span>
                     )}
-                    <span className={`text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                       {formatAmount(amountValue)} €
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(prev => (prev === expense.id ? null : expense.id))}
-                      className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
-                      aria-label={isEditing ? t('closeEditLabel') : t('editLabel')}
-                    >
-                      {isEditing ? <X size={14} /> : <Edit2 size={14} />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteFixedExpense(personKey, expense.id)}
-                      className="text-red-500 hover:opacity-80"
-                      aria-label={t('deleteLabel')}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                  {isEditing && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2 px-2 pb-1">
-                      <input
-                        type="text"
-                        value={expense.name}
-                        onChange={(e) => updateFixedExpense(personKey, expense.id, 'name', e.target.value)}
-                        className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                      />
-                      <input
-                        type="number"
-                        value={amountValue}
-                        onChange={(e) => updateFixedExpense(personKey, expense.id, 'amount', parseNumberInput(e.target.value))}
-                        className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                      />
-                      <select
-                        value={expense.categoryOverrideId ?? ''}
-                        onChange={(e) => updateFixedExpense(personKey, expense.id, 'categoryOverrideId', e.target.value)}
-                        className={`min-w-[9rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                        aria-label={t('categoryLabel')}
-                      >
-                        <option value="">{t('categoryAutoLabel')}</option>
-                        {AUTO_CATEGORIES.map(category => (
-                          <option key={category.id} value={category.id}>
-                            {category.emoji} {language === 'fr' ? category.labels.fr : category.labels.en}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="flex items-center gap-1 ml-auto">
+                    {!sortByCost && (
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => moveFixedExpense(personKey, expense.id, 'up')}
-                          disabled={sortByCost || isFirst}
-                          className={`p-1 rounded ${sortByCost || isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          disabled={isFirst}
+                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
                           aria-label={t('moveUpLabel')}
                         >
                           <ChevronUp size={14} />
@@ -1374,15 +1329,23 @@ const BudgetFixedSection = ({
                         <button
                           type="button"
                           onClick={() => moveFixedExpense(personKey, expense.id, 'down')}
-                          disabled={sortByCost || isLast}
-                          className={`p-1 rounded ${sortByCost || isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          disabled={isLast}
+                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
                           aria-label={t('moveDownLabel')}
                         >
                           <ChevronDown size={14} />
                         </button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
+                      className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
+                      aria-label={t('editLabel')}
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1403,14 +1366,12 @@ const BudgetFreeSection = ({
   darkMode,
   sortByCost,
   palette,
-  currentMonthKey,
   openExpenseWizard,
-  deleteCategory,
+  openExpenseWizardForEdit,
   updateCategory,
   moveCategory
 }: BudgetFreeSectionProps) => {
   const { t, language } = useTranslation();
-  const [editingId, setEditingId] = useState<string | null>(null);
   const totalCategories = calculateTotalCategories(person.categories);
   const animatedTotalCategories = useAnimatedNumber(totalCategories);
   const orderedCategories = sortByCost
@@ -1450,7 +1411,6 @@ const BudgetFreeSection = ({
             {orderedCategories.map((category, index) => {
               const isFirst = index === 0;
               const isLast = index === orderedCategories.length - 1;
-              const isEditing = editingId === category.id;
               const amountValue = coerceNumber(category.amount);
               const resolvedCategory = category.categoryOverrideId
                 ? getCategoryById(category.categoryOverrideId)
@@ -1485,108 +1445,40 @@ const BudgetFreeSection = ({
                         {recurringLabel}
                       </span>
                     )}
-                    <span className={`text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                       {formatAmount(amountValue)} €
                     </span>
+                    {!sortByCost && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveCategory(personKey, category.id, 'up')}
+                          disabled={isFirst}
+                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          aria-label={t('moveUpLabel')}
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveCategory(personKey, category.id, 'down')}
+                          disabled={isLast}
+                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          aria-label={t('moveDownLabel')}
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setEditingId(prev => (prev === category.id ? null : category.id))}
+                      onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
                       className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
-                      aria-label={isEditing ? t('closeEditLabel') : t('editLabel')}
+                      aria-label={t('editLabel')}
                     >
-                      {isEditing ? <X size={14} /> : <Edit2 size={14} />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteCategory(personKey, category.id)}
-                      className="text-red-500 hover:opacity-80"
-                      aria-label={t('deleteLabel')}
-                    >
-                      <Trash2 size={14} />
+                      <Edit2 size={14} />
                     </button>
                   </div>
-                  {isEditing && (
-                    <div className="mt-2 space-y-2 px-2 pb-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          type="text"
-                          value={category.name}
-                          onChange={(e) => updateCategory(personKey, category.id, 'name', e.target.value)}
-                          className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                        />
-                        <input
-                          type="number"
-                          value={amountValue}
-                          onChange={(e) => updateCategory(personKey, category.id, 'amount', parseNumberInput(e.target.value))}
-                          className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                        />
-                        <select
-                          value={category.categoryOverrideId ?? ''}
-                          onChange={(e) => updateCategory(personKey, category.id, 'categoryOverrideId', e.target.value)}
-                          className={`min-w-[9rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                          aria-label={t('categoryLabel')}
-                        >
-                          <option value="">{t('categoryAutoLabel')}</option>
-                          {AUTO_CATEGORIES.map(categoryOption => (
-                            <option key={categoryOption.id} value={categoryOption.id}>
-                              {categoryOption.emoji} {language === 'fr' ? categoryOption.labels.fr : categoryOption.labels.en}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex items-center gap-1 ml-auto">
-                          <button
-                            type="button"
-                            onClick={() => moveCategory(personKey, category.id, 'up')}
-                            disabled={sortByCost || isFirst}
-                            className={`p-1 rounded ${sortByCost || isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
-                            aria-label={t('moveUpLabel')}
-                          >
-                            <ChevronUp size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveCategory(personKey, category.id, 'down')}
-                            disabled={sortByCost || isLast}
-                            className={`p-1 rounded ${sortByCost || isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
-                            aria-label={t('moveDownLabel')}
-                          >
-                            <ChevronDown size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={category.isRecurring || false}
-                            onChange={(e) => updateCategory(personKey, category.id, 'isRecurring', e.target.checked)}
-                            className="cursor-pointer"
-                          />
-                          <span className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('installmentLabel')}</span>
-                        </label>
-
-                        {category.isRecurring && (
-                          <>
-                            <select
-                              value={category.recurringMonths || 3}
-                              onChange={(e) => updateCategory(personKey, category.id, 'recurringMonths', parseInt(e.target.value, 10))}
-                              className={`px-2 py-1 border rounded text-xs ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
-                            >
-                              <option value={2}>2x</option>
-                              <option value={3}>3x</option>
-                              <option value={4}>4x</option>
-                              <option value={5}>5x</option>
-                              <option value={6}>6x</option>
-                              <option value={12}>12x</option>
-                            </select>
-                            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {t('startLabel')}: {category.startMonth || currentMonthKey}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -1609,7 +1501,6 @@ const BudgetColumn = ({
   palette,
   editingName,
   tempName,
-  currentMonthKey,
   setTempName,
   startEditingName,
   saveName,
@@ -1618,10 +1509,9 @@ const BudgetColumn = ({
   deleteIncomeSource,
   updateIncomeSource,
   openExpenseWizard,
-  deleteFixedExpense,
+  openExpenseWizardForEdit,
   updateFixedExpense,
   moveFixedExpense,
-  deleteCategory,
   updateCategory,
   moveCategory
 }: BudgetColumnProps) => (
@@ -1642,7 +1532,7 @@ const BudgetColumn = ({
       sortByCost={sortByCost}
       palette={palette}
       openExpenseWizard={openExpenseWizard}
-      deleteFixedExpense={deleteFixedExpense}
+      openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateFixedExpense={updateFixedExpense}
       moveFixedExpense={moveFixedExpense}
     />
@@ -1652,9 +1542,8 @@ const BudgetColumn = ({
       darkMode={darkMode}
       sortByCost={sortByCost}
       palette={palette}
-      currentMonthKey={currentMonthKey}
       openExpenseWizard={openExpenseWizard}
-      deleteCategory={deleteCategory}
+      openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateCategory={updateCategory}
       moveCategory={moveCategory}
     />
@@ -2440,12 +2329,11 @@ const SettingsView = ({
 
   return (
     <div
-      className={`w-full max-w-5xl rounded-2xl border shadow-sm p-6 ${
+      className={`w-full max-w-5xl mx-auto rounded-2xl border shadow-sm p-6 ${
         darkMode ? 'bg-gray-900/80 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
       }`}
     >
-      <h2 className="text-xl font-semibold mb-4">{t('settingsLabel')}</h2>
-    <div className="space-y-6">
+      <div className="space-y-6">
       <section className="space-y-3">
         <h3 className="text-lg font-semibold">{t('profileTitle')}</h3>
           <div className="space-y-3">
@@ -3928,6 +3816,7 @@ const App: React.FC = () => {
 
   const openExpenseWizard = (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => {
     setExpenseWizard({
+      mode: 'create',
       step: 1,
       type,
       personKey,
@@ -3937,6 +3826,30 @@ const App: React.FC = () => {
       isRecurring: false,
       recurringMonths: 3,
       startMonth: currentMonthKey
+    });
+  };
+
+  const openExpenseWizardForEdit = (personKey: 'person1' | 'person2', type: 'fixed' | 'free', payload: FixedExpense | Category) => {
+    const amountValue = coerceNumber(payload.amount);
+    const isRecurring = type === 'free' && 'isRecurring' in payload ? Boolean(payload.isRecurring) : false;
+    const recurringMonths = type === 'free' && 'recurringMonths' in payload && payload.recurringMonths
+      ? payload.recurringMonths
+      : 3;
+    const startMonth = type === 'free' && 'startMonth' in payload && payload.startMonth
+      ? payload.startMonth
+      : currentMonthKey;
+    setExpenseWizard({
+      mode: 'edit',
+      step: 1,
+      type,
+      personKey,
+      targetId: payload.id,
+      name: payload.name ?? '',
+      amount: String(amountValue),
+      categoryOverrideId: payload.categoryOverrideId ?? '',
+      isRecurring,
+      recurringMonths,
+      startMonth
     });
   };
 
@@ -3956,6 +3869,18 @@ const App: React.FC = () => {
     updateExpenseWizard({ step: 1 });
   };
 
+  const handleExpenseWizardDelete = () => {
+    if (!expenseWizard || expenseWizard.mode !== 'edit' || !expenseWizard.targetId) {
+      return;
+    }
+    if (expenseWizard.type === 'fixed') {
+      deleteFixedExpense(expenseWizard.personKey, expenseWizard.targetId);
+    } else {
+      deleteCategory(expenseWizard.personKey, expenseWizard.targetId);
+    }
+    setExpenseWizard(null);
+  };
+
   const handleExpenseWizardSubmit = () => {
     if (!expenseWizard) {
       return;
@@ -3963,7 +3888,22 @@ const App: React.FC = () => {
     const name = expenseWizard.name.trim()
       || (expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel'));
     const amount = parseNumberInput(expenseWizard.amount);
-    if (expenseWizard.type === 'fixed') {
+    if (expenseWizard.mode === 'edit' && expenseWizard.targetId) {
+      if (expenseWizard.type === 'fixed') {
+        updateFixedExpense(expenseWizard.personKey, expenseWizard.targetId, 'name', name);
+        updateFixedExpense(expenseWizard.personKey, expenseWizard.targetId, 'amount', amount);
+        updateFixedExpense(expenseWizard.personKey, expenseWizard.targetId, 'categoryOverrideId', expenseWizard.categoryOverrideId);
+      } else {
+        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'name', name);
+        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'amount', amount);
+        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'categoryOverrideId', expenseWizard.categoryOverrideId);
+        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'isRecurring', expenseWizard.isRecurring);
+        if (expenseWizard.isRecurring) {
+          updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'recurringMonths', expenseWizard.recurringMonths);
+          updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'startMonth', expenseWizard.startMonth);
+        }
+      }
+    } else if (expenseWizard.type === 'fixed') {
       addFixedExpense(expenseWizard.personKey, {
         name,
         amount,
@@ -4130,7 +4070,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="flex flex-wrap items-center gap-3">
             {isSettingsView ? (
-              <>
+              <div className="flex flex-col items-start gap-2">
                 <button
                   onClick={() => setActivePage('budget')}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold ${
@@ -4142,7 +4082,7 @@ const App: React.FC = () => {
                 <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                   {t('settingsLabel')}
                 </h1>
-              </>
+              </div>
             ) : (
               <>
                 <button
@@ -4359,7 +4299,6 @@ const App: React.FC = () => {
               palette={palette}
               editingName={editingName}
               tempName={tempName}
-              currentMonthKey={currentMonthKey}
               setTempName={setTempName}
               startEditingName={startEditingName}
               saveName={saveName}
@@ -4368,10 +4307,9 @@ const App: React.FC = () => {
               deleteIncomeSource={deleteIncomeSource}
               updateIncomeSource={updateIncomeSource}
               openExpenseWizard={openExpenseWizard}
-              deleteFixedExpense={deleteFixedExpense}
+              openExpenseWizardForEdit={openExpenseWizardForEdit}
               updateFixedExpense={updateFixedExpense}
               moveFixedExpense={moveFixedExpense}
-              deleteCategory={deleteCategory}
               updateCategory={updateCategory}
               moveCategory={moveCategory}
             />
@@ -4408,7 +4346,7 @@ const App: React.FC = () => {
                   sortByCost={sortByCost}
                   palette={palette}
                   openExpenseWizard={openExpenseWizard}
-                  deleteFixedExpense={deleteFixedExpense}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
                   updateFixedExpense={updateFixedExpense}
                   moveFixedExpense={moveFixedExpense}
                 />
@@ -4418,9 +4356,8 @@ const App: React.FC = () => {
                   darkMode={darkMode}
                   sortByCost={sortByCost}
                   palette={palette}
-                  currentMonthKey={currentMonthKey}
                   openExpenseWizard={openExpenseWizard}
-                  deleteCategory={deleteCategory}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
                   updateCategory={updateCategory}
                   moveCategory={moveCategory}
                 />
@@ -4477,7 +4414,7 @@ const App: React.FC = () => {
                 sortByCost={sortByCost}
                 palette={palette}
                 openExpenseWizard={openExpenseWizard}
-                deleteFixedExpense={deleteFixedExpense}
+                openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateFixedExpense={updateFixedExpense}
                 moveFixedExpense={moveFixedExpense}
               />
@@ -4488,7 +4425,7 @@ const App: React.FC = () => {
                 sortByCost={sortByCost}
                 palette={palette}
                 openExpenseWizard={openExpenseWizard}
-                deleteFixedExpense={deleteFixedExpense}
+                openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateFixedExpense={updateFixedExpense}
                 moveFixedExpense={moveFixedExpense}
               />
@@ -4498,9 +4435,8 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
-                currentMonthKey={currentMonthKey}
                 openExpenseWizard={openExpenseWizard}
-                deleteCategory={deleteCategory}
+                openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateCategory={updateCategory}
                 moveCategory={moveCategory}
               />
@@ -4510,9 +4446,8 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
-                currentMonthKey={currentMonthKey}
                 openExpenseWizard={openExpenseWizard}
-                deleteCategory={deleteCategory}
+                openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateCategory={updateCategory}
                 moveCategory={moveCategory}
               />
@@ -4743,15 +4678,28 @@ const App: React.FC = () => {
               )}
 
               <div className="flex items-center justify-between gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={closeExpenseWizard}
-                  className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                    darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {t('cancelLabel')}
-                </button>
+                <div className="flex items-center gap-2">
+                  {expenseWizard.mode === 'edit' && (
+                    <button
+                      type="button"
+                      onClick={handleExpenseWizardDelete}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                        darkMode ? 'bg-red-900/70 text-red-100 hover:bg-red-900' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}
+                    >
+                      {t('deleteLabel')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={closeExpenseWizard}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {t('cancelLabel')}
+                  </button>
+                </div>
                 <div className="flex items-center gap-2">
                   {expenseWizard.step === 2 && (
                     <button
@@ -4769,7 +4717,9 @@ const App: React.FC = () => {
                     onClick={expenseWizard.step === 1 ? handleExpenseWizardNext : handleExpenseWizardSubmit}
                     className="px-3 py-2 rounded-lg text-sm font-semibold btn-gradient"
                   >
-                    {expenseWizard.step === 1 ? t('onboardingNext') : t('addLabel')}
+                    {expenseWizard.step === 1
+                      ? t('onboardingNext')
+                      : (expenseWizard.mode === 'edit' ? t('updateButton') : t('addLabel'))}
                   </button>
                 </div>
               </div>
