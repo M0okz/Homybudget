@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
-import { LanguageCode, MONTH_LABELS, TranslationContext, createTranslator, useTranslation } from './i18n';
+import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut } from 'lucide-react';
+import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
 
 interface Category {
   id: string;
@@ -18,6 +18,7 @@ interface FixedExpense {
   id: string;
   name: string;
   amount: number;
+  templateId?: string;
   categoryOverrideId?: string;
   isChecked?: boolean;
 }
@@ -172,7 +173,7 @@ const getAuthToken = () => {
   return localStorage.getItem('authToken');
 };
 
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
   const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
@@ -350,6 +351,36 @@ const normalizeIconLabel = (value: string) => (
     .replace(/\s+/g, ' ')
     .trim()
 );
+
+const titleizeLabel = (value: string) => (
+  value
+    .trim()
+    .split(/\s+/)
+    .map(word => (
+      word
+        .split('-')
+        .map(part => (part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : ''))
+        .join('-')
+    ))
+    .join(' ')
+);
+
+const DEFAULT_FIXED_EXPENSE_LABELS = [
+  normalizeIconLabel(TRANSLATIONS.fr.newFixedExpenseLabel),
+  normalizeIconLabel(TRANSLATIONS.en.newFixedExpenseLabel)
+];
+
+const shouldPropagateFixedExpense = (name: string) => {
+  const normalized = normalizeIconLabel(name);
+  return Boolean(normalized) && !DEFAULT_FIXED_EXPENSE_LABELS.includes(normalized);
+};
+
+const createTemplateId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
 
 type AutoCategory = {
   id: string;
@@ -2810,7 +2841,8 @@ const App: React.FC = () => {
   });
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [activePage, setActivePage] = useState<'budget' | 'settings'>('budget');
+  const [activePage, setActivePage] = useState<'dashboard' | 'budget' | 'reports' | 'settings'>('budget');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectorError, setSelectorError] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -2837,7 +2869,13 @@ const App: React.FC = () => {
 
   const palette = getPaletteById(paletteId);
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
+  const isBudgetView = activePage === 'budget';
   const isSettingsView = activePage === 'settings';
+  const pageLabel = activePage === 'dashboard'
+    ? t('dashboardLabel')
+    : activePage === 'reports'
+      ? t('reportsLabel')
+      : t('settingsLabel');
   const userDisplayName = authProfile?.displayName || authProfile?.username || authUser || t('accountLabel');
   const userInitial = (userDisplayName.trim()[0] || 'U').toUpperCase();
   const userAvatarUrl = authProfile?.avatarUrl || null;
@@ -2853,6 +2891,17 @@ const App: React.FC = () => {
   const canGoToNextMonth = Boolean(monthlyBudgets[nextMonthKey]);
   const availableMonthKeys = Object.keys(monthlyBudgets).sort();
   const monthOptions = MONTH_LABELS[languagePreference];
+  const formatMonthKey = (monthKey: string) => {
+    const [year, month] = monthKey.split('-');
+    const monthIndex = Number(month) - 1;
+    const monthLabel = monthOptions[monthIndex] ?? monthKey;
+    return `${monthLabel} ${year}`;
+  };
+  const breadcrumbItems = isBudgetView
+    ? [t('appName'), t('budgetLabel'), formatMonthKey(currentMonthKey)]
+    : isSettingsView
+      ? [t('appName'), t('settingsLabel'), t('profileTitle')]
+      : [t('appName'), pageLabel];
   const pageStyle = {
     backgroundImage: darkMode
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
@@ -3193,9 +3242,12 @@ const App: React.FC = () => {
           nextBudgets[initialKey] = getDefaultBudgetData();
         }
 
-        const sortedKeys = Object.keys(nextBudgets).sort();
+        const currentYear = new Date().getFullYear();
+        const seedData = nextBudgets[initialKey] ?? getDefaultBudgetData();
+        const yearlyBudgets = ensureYearMonths(nextBudgets, currentYear, seedData);
+        const sortedKeys = Object.keys(yearlyBudgets).sort();
         const anchorKey = sortedKeys[0];
-        const carriedBudgets = anchorKey ? applyJointBalanceCarryover(nextBudgets, anchorKey) : nextBudgets;
+        const carriedBudgets = anchorKey ? applyJointBalanceCarryover(yearlyBudgets, anchorKey) : yearlyBudgets;
         setMonthlyBudgets(carriedBudgets);
         setAuthError(null);
       } catch (error) {
@@ -3395,6 +3447,70 @@ const App: React.FC = () => {
     return [...nonRecurringCategories, ...recurringCategories];
   };
 
+  const buildMonthDataFromPrevious = (previousData: BudgetData | null | undefined, monthKey: string, includeTemplate: boolean) => {
+    const newData = getDefaultBudgetData();
+    if (!previousData) {
+      return newData;
+    }
+
+    newData.person1.name = previousData.person1.name;
+    newData.person2.name = previousData.person2.name;
+    newData.person1UserId = previousData.person1UserId ?? null;
+    newData.person2UserId = previousData.person2UserId ?? null;
+
+    if (!includeTemplate) {
+      return newData;
+    }
+
+    newData.person1.fixedExpenses = previousData.person1.fixedExpenses.map(exp => ({
+      ...exp,
+      id: Date.now().toString() + Math.random(),
+      templateId: exp.templateId ?? createTemplateId()
+    }));
+    newData.person2.fixedExpenses = previousData.person2.fixedExpenses.map(exp => ({
+      ...exp,
+      id: Date.now().toString() + Math.random(),
+      templateId: exp.templateId ?? createTemplateId()
+    }));
+
+    newData.person1.categories = copyRecurringCategories(previousData.person1.categories, monthKey);
+    newData.person2.categories = copyRecurringCategories(previousData.person2.categories, monthKey);
+
+    newData.person1.incomeSources = previousData.person1.incomeSources.map(src => ({
+      ...src,
+      id: Date.now().toString() + Math.random()
+    }));
+    newData.person2.incomeSources = previousData.person2.incomeSources.map(src => ({
+      ...src,
+      id: Date.now().toString() + Math.random()
+    }));
+
+    return newData;
+  };
+
+  const ensureYearMonths = (budgets: MonthlyBudget, year: number, seedData: BudgetData) => {
+    const monthKeys = Array.from({ length: 12 }, (_, index) => (
+      `${year}-${String(index + 1).padStart(2, '0')}`
+    ));
+    const updated: MonthlyBudget = { ...budgets };
+    let changed = false;
+    let previousData: BudgetData | null = null;
+
+    monthKeys.forEach(monthKey => {
+      if (updated[monthKey]) {
+        previousData = updated[monthKey];
+        return;
+      }
+      const source = previousData ?? seedData;
+      const includeTemplate = Boolean(previousData);
+      updated[monthKey] = buildMonthDataFromPrevious(source, monthKey, includeTemplate);
+      previousData = updated[monthKey];
+      changed = true;
+    });
+
+    return changed ? updated : budgets;
+  };
+
   const goToPreviousMonth = () => {
     flushSave();
     const newDate = new Date(currentDate);
@@ -3413,58 +3529,6 @@ const App: React.FC = () => {
     if (monthlyBudgets[monthKey]) {
       setCurrentDate(newDate);
     }
-  };
-
-  const addNextMonth = () => {
-    flushSave();
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() + 1);
-    const monthKey = getCurrentMonthKey(newDate);
-    if (monthlyBudgets[monthKey]) {
-      setCurrentDate(newDate);
-      return;
-    }
-
-    const previousMonthKey = getCurrentMonthKey(currentDate);
-    const previousData = monthlyBudgets[previousMonthKey];
-    const newData = getDefaultBudgetData();
-
-    if (previousData) {
-      newData.person1.fixedExpenses = previousData.person1.fixedExpenses.map(exp => ({
-        ...exp,
-        id: Date.now().toString() + Math.random()
-      }));
-      newData.person2.fixedExpenses = previousData.person2.fixedExpenses.map(exp => ({
-        ...exp,
-        id: Date.now().toString() + Math.random()
-      }));
-
-      newData.person1.categories = copyRecurringCategories(previousData.person1.categories, monthKey);
-      newData.person2.categories = copyRecurringCategories(previousData.person2.categories, monthKey);
-
-      newData.person1.incomeSources = previousData.person1.incomeSources.map(src => ({
-        ...src,
-        id: Date.now().toString() + Math.random()
-      }));
-      newData.person2.incomeSources = previousData.person2.incomeSources.map(src => ({
-        ...src,
-        id: Date.now().toString() + Math.random()
-      }));
-
-      newData.person1.name = previousData.person1.name;
-      newData.person2.name = previousData.person2.name;
-      newData.person1UserId = previousData.person1UserId ?? null;
-      newData.person2UserId = previousData.person2UserId ?? null;
-    }
-
-    setMonthlyBudgets(prev => {
-      const updated = {
-        ...prev,
-        [monthKey]: newData
-      };
-      return applyJointBalanceCarryover(updated, currentMonthKey);
-    });
-    setCurrentDate(newDate);
   };
 
   const deleteCurrentMonth = async () => {
@@ -3505,13 +3569,6 @@ const App: React.FC = () => {
       return applyJointBalanceCarryover(next, targetKey);
     });
     setCurrentDate(new Date(`${targetKey}-01`));
-  };
-
-  const formatMonthKey = (monthKey: string) => {
-    const [year, month] = monthKey.split('-');
-    const monthIndex = Number(month) - 1;
-    const monthLabel = monthOptions[monthIndex] ?? monthKey;
-    return `${monthLabel} ${year}`;
   };
 
   const trySelectMonthKey = (monthKey: string) => {
@@ -3690,38 +3747,177 @@ const App: React.FC = () => {
       id: Date.now().toString(),
       name: overrides.name ?? t('newFixedExpenseLabel'),
       amount: overrides.amount ?? 0,
+      templateId: overrides.templateId ?? createTemplateId(),
       categoryOverrideId: overrides.categoryOverrideId ?? '',
       isChecked: overrides.isChecked ?? false
     };
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        fixedExpenses: [...prev[personKey].fixedExpenses, newExpense]
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const normalizedName = normalizeIconLabel(newExpense.name);
+      const templateId = newExpense.templateId ?? createTemplateId();
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: [...currentData[personKey].fixedExpenses, { ...newExpense, templateId }]
+          }
+        }
+      };
+
+      if (normalizedName && shouldPropagateFixedExpense(newExpense.name)) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            const alreadyExists = monthData[personKey].fixedExpenses.some(expense => (
+              expense.templateId === templateId
+              || (!expense.templateId && normalizeIconLabel(expense.name) === normalizedName)
+            ));
+            if (alreadyExists) {
+              return;
+            }
+            const propagatedExpense: FixedExpense = {
+              ...newExpense,
+              id: `${Date.now()}-${Math.random()}`,
+              templateId,
+              isChecked: false
+            };
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                fixedExpenses: [...monthData[personKey].fixedExpenses, propagatedExpense]
+              }
+            };
+          });
       }
-    }));
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const deleteFixedExpense = (personKey: 'person1' | 'person2', id: string) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        fixedExpenses: prev[personKey].fixedExpenses.filter(exp => exp.id !== id)
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const targetExpense = currentData[personKey].fixedExpenses.find(exp => exp.id === id);
+      if (!targetExpense) {
+        return prev;
       }
-    }));
+      const normalizedName = normalizeIconLabel(targetExpense.name);
+      const templateId = targetExpense.templateId;
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: currentData[personKey].fixedExpenses.filter(exp => exp.id !== id)
+          }
+        }
+      };
+
+      if (normalizedName && shouldPropagateFixedExpense(targetExpense.name)) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            const nextExpenses = monthData[personKey].fixedExpenses.filter(exp => (
+              templateId ? exp.templateId !== templateId : normalizeIconLabel(exp.name) !== normalizedName
+            ));
+            if (nextExpenses.length === monthData[personKey].fixedExpenses.length) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                fixedExpenses: nextExpenses
+              }
+            };
+          });
+      }
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
-  const updateFixedExpense = (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked' | 'categoryOverrideId', value: string | number | boolean) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        fixedExpenses: prev[personKey].fixedExpenses.map(exp =>
-          exp.id === id ? { ...exp, [field]: value } : exp
-        )
+  const updateFixedExpense = (
+    personKey: 'person1' | 'person2',
+    id: string,
+    field: 'name' | 'amount' | 'isChecked' | 'categoryOverrideId',
+    value: string | number | boolean
+  ) => {
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const currentExpenses = currentData[personKey].fixedExpenses;
+      const targetExpense = currentExpenses.find(exp => exp.id === id);
+      if (!targetExpense) {
+        return prev;
       }
-    }));
+      const nextName = field === 'name' ? String(value) : targetExpense.name;
+      const shouldPropagate = field !== 'isChecked' && shouldPropagateFixedExpense(nextName);
+      const templateId = targetExpense.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+      const updatedExpenses = currentExpenses.map(exp =>
+        exp.id === id ? { ...exp, [field]: value, ...(templateId ? { templateId } : {}) } : exp
+      );
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: updatedExpenses
+          }
+        }
+      };
+
+      if (shouldPropagate) {
+        const normalizedName = normalizeIconLabel(targetExpense.name);
+        if (normalizedName) {
+          Object.keys(updated)
+            .filter(monthKey => monthKey > currentMonthKey)
+            .forEach(monthKey => {
+              const monthData = updated[monthKey];
+              if (!monthData) {
+                return;
+              }
+              let changed = false;
+              const nextExpenses = monthData[personKey].fixedExpenses.map(exp => {
+                const matchesTemplate = templateId && exp.templateId === templateId;
+                const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
+                if (!matchesTemplate && !matchesName) {
+                  return exp;
+                }
+                changed = true;
+                const base = templateId ? { ...exp, templateId } : { ...exp };
+                return field === 'name'
+                  ? { ...base, name: nextName }
+                  : { ...base, [field]: value };
+              });
+              if (!changed) {
+                return;
+              }
+              updated[monthKey] = {
+                ...monthData,
+                [personKey]: {
+                  ...monthData[personKey],
+                  fixedExpenses: nextExpenses
+                }
+              };
+            });
+        }
+      }
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const moveFixedExpense = (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => {
@@ -3885,8 +4081,10 @@ const App: React.FC = () => {
     if (!expenseWizard) {
       return;
     }
-    const name = expenseWizard.name.trim()
-      || (expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel'));
+    const name = titleizeLabel(
+      expenseWizard.name.trim()
+        || (expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel'))
+    );
     const amount = parseNumberInput(expenseWizard.amount);
     if (expenseWizard.mode === 'edit' && expenseWizard.targetId) {
       if (expenseWizard.type === 'fixed') {
@@ -4060,173 +4258,314 @@ const App: React.FC = () => {
     );
   }
 
+  const navItems = [
+    { key: 'dashboard' as const, label: t('dashboardLabel'), icon: LayoutDashboard },
+    { key: 'budget' as const, label: t('budgetLabel'), icon: Wallet },
+    { key: 'reports' as const, label: t('reportsLabel'), icon: BarChart3 },
+    { key: 'settings' as const, label: t('settingsLabel'), icon: Settings }
+  ];
+
+  const handleNavigate = (page: typeof activePage) => {
+    setActivePage(page);
+    setSidebarOpen(false);
+  };
+
+  const sidebarNav = (
+    <nav className="flex flex-col gap-1">
+      {navItems.map(item => {
+        const Icon = item.icon;
+        const isActive = activePage === item.key;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => handleNavigate(item.key)}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+              isActive
+                ? (darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-900')
+                : (darkMode ? 'text-slate-300 hover:bg-slate-800/60' : 'text-slate-600 hover:bg-slate-100/70')
+            }`}
+          >
+            <Icon size={18} />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+
+  const sidebarFooter = (
+    <div className={`mt-auto pt-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => handleNavigate('settings')}
+          className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+            darkMode ? 'hover:bg-slate-800/70 text-slate-200' : 'hover:bg-slate-100/70 text-slate-700'
+          }`}
+        >
+          <div className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
+            darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {userAvatarUrl ? (
+              <img src={userAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+            ) : (
+              userInitial
+            )}
+          </div>
+          <div className="text-left">
+            <div className="text-sm font-semibold">{t('profileMenuLabel')}</div>
+            <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{userDisplayName}</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all ${
+            darkMode ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+          aria-label={t('logoutLabel')}
+          title={t('logoutLabel')}
+        >
+          <LogOut size={16} />
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={toggleDarkMode}
+        className={`mt-3 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+          darkMode ? 'hover:bg-slate-800/70 text-slate-200' : 'hover:bg-slate-100/70 text-slate-700'
+        }`}
+        aria-label={t('themeToggleLabel')}
+      >
+        {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} />}
+        <span>{t('themeToggleLabel')}</span>
+        <span className={`ml-auto text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+          {darkMode ? t('darkLabel') : t('lightLabel')}
+        </span>
+      </button>
+    </div>
+  );
+
   return (
     <TranslationContext.Provider value={{ t, language: languagePreference }}>
       <div
-        className={`min-h-screen p-4 sm:p-6 app-fade ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
+        className={`min-h-screen app-fade ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
         style={pageStyle}
       >
-        <div className="flex flex-col gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            {isSettingsView ? (
-              <div className="flex flex-col items-start gap-2">
-                <button
-                  onClick={() => setActivePage('budget')}
-                  className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                    darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100'
-                  } transition-all`}
-                >
-                  {t('backLabel')}
-                </button>
-                <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                  {t('settingsLabel')}
-                </h1>
+        <div className="flex min-h-screen">
+          <aside
+            className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:py-6 sm:px-4 sm:border-r transition-colors ${
+              darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3 px-2 mb-6">
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
+                darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-800'
+              }`}>
+                HB
               </div>
-            ) : (
-              <>
-                <button
-                  onClick={goToPreviousMonth}
-                  disabled={!canGoToPreviousMonth}
-                  className={`p-2 rounded-lg transition-all ${
-                    canGoToPreviousMonth
-                      ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
-                      : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
-                  }`}
-                >
-                  <ChevronLeft size={24} />
-                </button>
-                <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                  <span>{t('budgetLabel')} -</span>
-                <div
-                  className={`relative inline-flex items-center rounded-md pl-1.5 pr-1.5 py-0.5 text-2xl sm:text-3xl font-bold leading-none transition-colors focus-within:outline-none focus-within:border ${
-                    darkMode
-                      ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
-                      : 'text-gray-800 hover:bg-gray-900/5 border-gray-300/30 focus-within:border-gray-400/50'
-                  }`}
-                >
-                  <span className="whitespace-nowrap">{formatMonthKey(currentMonthKey)}</span>
-                  <select
-                    id="month-year-select"
-                    value={currentMonthKey}
-                    disabled={!isHydrated}
-                    onChange={(e) => trySelectMonthKey(e.target.value)}
-                    aria-label={t('monthSelectLabel')}
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  >
-                    {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
-                      <option key={monthKey} value={monthKey}>
-                        {formatMonthKey(monthKey)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                </h1>
-                <button
-                  onClick={goToNextMonth}
-                  disabled={!canGoToNextMonth}
-                  className={`p-2 rounded-lg transition-all ${
-                    canGoToNextMonth
-                      ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
-                      : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
-                  }`}
-                >
-                  <ChevronRight size={24} />
-                </button>
-                <button
-                  onClick={addNextMonth}
-                  className="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold btn-gradient transition-all"
-                >
-                  {t('addNextMonth')}
-                </button>
-                <button
-                  onClick={deleteCurrentMonth}
-                  className="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold btn-gradient transition-all"
-                >
-                  {t('deleteMonth')}
-                </button>
-              </>
-            )}
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="hidden sm:flex">
-              <PaletteSelector
-                palettes={PALETTES}
-                value={palette.id}
-                onChange={setPaletteId}
-                darkMode={darkMode}
-              />
+              <div className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
+                {t('appName')}
+              </div>
             </div>
-            <button
-              onClick={toggleDarkMode}
-              className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-gray-700'} hover:opacity-80 transition-all`}
+            {sidebarNav}
+            {sidebarFooter}
+          </aside>
+
+          <div className={`fixed inset-0 z-40 sm:hidden transition-opacity ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <aside
+              className={`absolute left-0 top-0 h-full w-64 p-4 transition-transform duration-300 ${
+                sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+              } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white text-slate-800'}`}
             >
-              {darkMode ? <Sun size={24} /> : <Moon size={24} />}
-            </button>
-            <div ref={menuRef} className="relative">
-              <button
-                onClick={() => setMenuOpen(prev => !prev)}
-                className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
-                  darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
-                }`}
-                aria-label={t('accountMenuLabel')}
-              >
-                {userAvatarUrl ? (
-                  <img src={userAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
-                ) : (
-                  userInitial
-                )}
-              </button>
-              {menuOpen && (
-                <div
-                  className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
-                    darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-800'
-                  }`}
-                >
-                  <div className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500">
-                    {userDisplayName}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
+                    darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-800'
+                  }`}>
+                    HB
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivePage('settings');
-                      setMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-800' : ''}`}
+                  <div className="text-lg font-semibold">{t('appName')}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className={`p-2 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-100'}`}
+                  aria-label="Close menu"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              {sidebarNav}
+              {sidebarFooter}
+            </aside>
+          </div>
+
+          <main className="flex-1 p-4 sm:p-6">
+            <div className="flex flex-col gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className={`sm:hidden p-2 rounded-lg ${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-700'}`}
+                  aria-label="Open menu"
+                >
+                  <Menu size={20} />
+                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  {isSettingsView ? (
+                    <div className="flex flex-col items-start gap-2">
+                      <button
+                        onClick={() => setActivePage('budget')}
+                        className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                          darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        } transition-all`}
+                      >
+                        {t('backLabel')}
+                      </button>
+                      <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                        {t('settingsLabel')}
+                      </h1>
+                    </div>
+                  ) : isBudgetView ? (
+                    <>
+                      <button
+                        onClick={goToPreviousMonth}
+                        disabled={!canGoToPreviousMonth}
+                        className={`p-2 rounded-lg transition-all ${
+                          canGoToPreviousMonth
+                            ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
+                            : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                        }`}
+                      >
+                        <ChevronLeft size={24} />
+                      </button>
+                      <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                        <span>{t('budgetLabel')} -</span>
+                        <div
+                          className={`relative inline-flex items-center rounded-md pl-1.5 pr-1.5 py-0.5 text-2xl sm:text-3xl font-bold leading-none transition-colors focus-within:outline-none focus-within:border ${
+                            darkMode
+                              ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
+                              : 'text-gray-800 hover:bg-gray-900/5 border-gray-300/30 focus-within:border-gray-400/50'
+                          }`}
+                        >
+                          <span className="whitespace-nowrap">{formatMonthKey(currentMonthKey)}</span>
+                          <select
+                            id="month-year-select"
+                            value={currentMonthKey}
+                            disabled={!isHydrated}
+                            onChange={(e) => trySelectMonthKey(e.target.value)}
+                            aria-label={t('monthSelectLabel')}
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                          >
+                            {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
+                              <option key={monthKey} value={monthKey}>
+                                {formatMonthKey(monthKey)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </h1>
+                      <button
+                        onClick={goToNextMonth}
+                        disabled={!canGoToNextMonth}
+                        className={`p-2 rounded-lg transition-all ${
+                          canGoToNextMonth
+                            ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
+                            : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                        }`}
+                      >
+                        <ChevronRight size={24} />
+                      </button>
+                    </>
+                  ) : (
+                    <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                      {pageLabel}
+                    </h1>
+                  )}
+                </div>
+                <div className="ml-auto flex items-center gap-3">
+                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
+                    darkMode ? 'bg-gray-900/50 border border-gray-800' : 'bg-white/80 border border-gray-200'
+                  }`}
                   >
-                    {t('settingsLabel')}
-                  </button>
+                    {isBudgetView && (
+                      <button
+                        onClick={deleteCurrentMonth}
+                        className="hidden sm:inline-flex px-3 py-1.5 rounded-md text-sm font-semibold btn-gradient transition-all"
+                      >
+                        {t('deleteMonth')}
+                      </button>
+                    )}
+                    <div className="hidden sm:flex">
+                      <PaletteSelector
+                        palettes={PALETTES}
+                        value={palette.id}
+                        onChange={setPaletteId}
+                        darkMode={darkMode}
+                      />
+                    </div>
+                    <div ref={menuRef} className="relative sm:hidden">
+                      <button
+                        onClick={() => setMenuOpen(prev => !prev)}
+                        className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
+                          darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
+                        aria-label={t('accountMenuLabel')}
+                      >
+                        {userAvatarUrl ? (
+                          <img src={userAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+                        ) : (
+                          userInitial
+                        )}
+                      </button>
+                      {menuOpen && (
+                        <div
+                          className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
+                            darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-800'
+                          }`}
+                        >
+                          <div className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500">
+                            {userDisplayName}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <nav
+                aria-label="breadcrumb"
+                className={`flex items-center gap-2 text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}
+              >
+                <Home size={14} className={darkMode ? 'text-gray-300' : 'text-gray-400'} />
+                {breadcrumbItems.map((item, index) => (
+                  <span key={`${item}-${index}`} className="flex items-center gap-2">
+                    <ChevronRight size={12} className={darkMode ? 'text-gray-500' : 'text-gray-400'} />
+                    <span className={index === breadcrumbItems.length - 1 ? (darkMode ? 'text-gray-200' : 'text-gray-700') : ''}>
+                      {item}
+                    </span>
+                  </span>
+                ))}
+              </nav>
+              {isBudgetView && (
+                <div className="flex items-center gap-2 sm:hidden">
                   <button
-                    type="button"
-                    onClick={handleLogout}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-800' : ''}`}
+                    onClick={deleteCurrentMonth}
+                    className="w-full px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
                   >
-                    {t('logoutLabel')}
+                    {t('deleteMonth')}
                   </button>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-        {!isSettingsView && (
-          <div className="flex flex-row items-center gap-2 sm:hidden">
-            <button
-              onClick={addNextMonth}
-              className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
-            >
-              {t('addNextMonth')}
-            </button>
-            <button
-              onClick={deleteCurrentMonth}
-              className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
-            >
-              {t('deleteMonth')}
-            </button>
-          </div>
-        )}
-      </div>
 
-      {!isSettingsView && selectorError && (
+      {isBudgetView && selectorError && (
         <div className={`mb-4 text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
           {selectorError}
         </div>
@@ -4257,7 +4596,7 @@ const App: React.FC = () => {
           person2UserId={person2UserId}
           onPersonLinkChange={updatePersonMapping}
         />
-      ) : (
+      ) : isBudgetView ? (
         <>
           {!soloModeEnabled && (
             <div className="mb-4 flex flex-wrap items-center gap-2 sm:hidden">
@@ -4580,6 +4919,14 @@ const App: React.FC = () => {
             />
           </div>
         </>
+      ) : (
+        <div className={`rounded-2xl border p-6 ${darkMode ? 'bg-slate-900/40 border-slate-800 text-slate-200' : 'bg-white border-slate-200 text-slate-700'}`}>
+          <div className="text-sm uppercase tracking-wide text-slate-400">{t('appName')}</div>
+          <div className={`mt-2 text-xl font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{pageLabel}</div>
+          <div className="mt-2 text-sm text-slate-500">
+            {t('comingSoonLabel')}
+          </div>
+        </div>
       )}
         {expenseWizard && (
           <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
@@ -4726,6 +5073,8 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+          </main>
+        </div>
       </div>
     </TranslationContext.Provider>
   );
