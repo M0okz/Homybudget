@@ -23,7 +23,7 @@ RUN npm ci --omit=dev
 
 COPY server ./server
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY docker/nginx.single.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx.single.conf /etc/nginx/http.d/default.conf
 COPY docker/start.sh /usr/local/bin/start.sh
 
 RUN chmod +x /usr/local/bin/start.sh
