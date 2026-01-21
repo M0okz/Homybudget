@@ -4802,7 +4802,7 @@ const App: React.FC = () => {
       >
         <div className="flex min-h-screen">
           <aside
-            className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:py-6 sm:px-4 sm:border-r transition-colors ${
+            className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:py-6 sm:px-4 sm:border-r transition-colors sticky top-0 h-screen ${
               darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'
             }`}
           >
