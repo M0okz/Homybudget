@@ -67,7 +67,6 @@ const normalizeAvatarUrl = (value) => {
 
 const defaultSettings = {
   languagePreference: 'fr',
-  themePreference: 'light',
   soloModeEnabled: false,
   jointAccountEnabled: true,
   sortByCost: false,
@@ -142,6 +141,13 @@ const fetchLatestDockerVersion = async () => {
 };
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const requiredTables = [
+  'monthly_budgets',
+  'users',
+  'password_reset_tokens',
+  'app_settings',
+  'oauth_accounts'
+];
 
 const ensureSchema = async () => {
   const schemaPath = path.join(__dirname, 'schema.sql');
@@ -154,6 +160,21 @@ const ensureSchema = async () => {
   }
   if (!schemaSql.trim()) {
     return;
+  }
+  try {
+    const existing = await pool.query(
+      `select table_name
+       from information_schema.tables
+       where table_schema = 'public'
+         and table_name = any($1::text[])`,
+      [requiredTables]
+    );
+    if (!process.env.FORCE_SCHEMA_INIT && existing.rowCount > 0) {
+      console.log('Database schema already present, skipping init.');
+      return;
+    }
+  } catch (error) {
+    console.warn('Schema presence check failed, continuing with init.', error);
   }
   for (let attempt = 1; attempt <= 10; attempt += 1) {
     try {
@@ -170,13 +191,41 @@ const ensureSchema = async () => {
   }
 };
 
+const ensureThemePreferenceColumn = async () => {
+  try {
+    const columnCheck = await pool.query(
+      `select 1
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'users'
+         and column_name = 'theme_preference'`
+    );
+    if (columnCheck.rowCount > 0) {
+      return;
+    }
+    const ownerResult = await pool.query(
+      `select tableowner
+       from pg_tables
+       where schemaname = 'public'
+         and tablename = 'users'`
+    );
+    const currentResult = await pool.query('select current_user as name');
+    const owner = ownerResult.rows[0]?.tableowner;
+    const currentUser = currentResult.rows[0]?.name;
+    if (!owner || !currentUser || owner !== currentUser) {
+      console.warn('Missing theme_preference column; run migration as table owner to enable per-user theme.');
+      return;
+    }
+    await pool.query(`alter table users add column if not exists theme_preference text not null default 'light'`);
+  } catch (error) {
+    console.warn('Failed to ensure theme_preference column', error);
+  }
+};
+
 const normalizeSettings = (input) => {
   const next = {};
   if (input.languagePreference === 'fr' || input.languagePreference === 'en') {
     next.languagePreference = input.languagePreference;
-  }
-  if (input.themePreference === 'light' || input.themePreference === 'dark') {
-    next.themePreference = input.themePreference;
   }
   if (input.soloModeEnabled !== undefined) {
     next.soloModeEnabled = Boolean(input.soloModeEnabled);
@@ -362,6 +411,7 @@ const sanitizeUser = (user) => ({
   username: user.username,
   displayName: user.display_name,
   avatarUrl: user.avatar_url,
+  themePreference: user.theme_preference || 'light',
   role: user.role,
   isActive: user.is_active,
   createdAt: user.created_at,
@@ -507,7 +557,7 @@ const authRequired = async (req, res, next) => {
 
   try {
     const result = await pool.query(
-      'select id, username, display_name, avatar_url, role, is_active, created_at, last_login_at from users where id = $1',
+      'select id, username, display_name, avatar_url, theme_preference, role, is_active, created_at, last_login_at from users where id = $1',
       [payload.sub]
     );
     if (result.rowCount === 0) {
@@ -895,7 +945,7 @@ app.get('/api/users/me', authRequired, (req, res) => {
 });
 
 app.patch('/api/users/me', authRequired, async (req, res) => {
-  const { displayName, avatarUrl } = req.body || {};
+  const { displayName, avatarUrl, themePreference } = req.body || {};
   const updates = [];
   const values = [];
 
@@ -906,6 +956,14 @@ app.patch('/api/users/me', authRequired, async (req, res) => {
   if (avatarUrl !== undefined) {
     values.push(normalizeAvatarUrl(avatarUrl));
     updates.push(`avatar_url = $${values.length}`);
+  }
+  if (themePreference !== undefined) {
+    if (themePreference !== 'light' && themePreference !== 'dark') {
+      res.status(400).json({ error: 'Invalid theme preference' });
+      return;
+    }
+    values.push(themePreference);
+    updates.push(`theme_preference = $${values.length}`);
   }
 
   if (updates.length === 0) {
@@ -919,7 +977,7 @@ app.patch('/api/users/me', authRequired, async (req, res) => {
     const result = await pool.query(
       `update users set ${updates.join(', ')}, updated_at = now()
        where id = $${values.length}
-       returning id, username, display_name, avatar_url, role, is_active, created_at, last_login_at`,
+       returning id, username, display_name, avatar_url, theme_preference, role, is_active, created_at, last_login_at`,
       values
     );
     if (result.rowCount === 0) {
@@ -943,7 +1001,7 @@ app.post('/api/users/me/avatar', authRequired, avatarUpload.single('avatar'), as
     const result = await pool.query(
       `update users set avatar_url = $1, updated_at = now()
        where id = $2
-       returning id, username, display_name, avatar_url, role, is_active, created_at, last_login_at`,
+       returning id, username, display_name, avatar_url, theme_preference, role, is_active, created_at, last_login_at`,
       [avatarUrl, req.user.id]
     );
     if (result.rowCount === 0) {
@@ -960,7 +1018,7 @@ app.post('/api/users/me/avatar', authRequired, avatarUpload.single('avatar'), as
 app.get('/api/users', authRequired, requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(
-      'select id, username, display_name, avatar_url, role, is_active, created_at, last_login_at from users order by created_at'
+      'select id, username, display_name, avatar_url, theme_preference, role, is_active, created_at, last_login_at from users order by created_at'
     );
     res.json({ users: result.rows.map(sanitizeUser) });
   } catch (error) {
@@ -1031,7 +1089,7 @@ app.patch('/api/users/:userId', authRequired, requireAdmin, async (req, res) => 
     const result = await pool.query(
       `update users set ${updates.join(', ')}, updated_at = now()
        where id = $${values.length}
-       returning id, username, display_name, avatar_url, role, is_active, created_at, last_login_at`,
+       returning id, username, display_name, avatar_url, theme_preference, role, is_active, created_at, last_login_at`,
       values
     );
     if (result.rowCount === 0) {
@@ -1168,6 +1226,7 @@ app.use((err, _req, res, next) => {
 const startServer = async () => {
   try {
     await ensureSchema();
+    await ensureThemePreferenceColumn();
   } catch (error) {
     console.error('Failed to initialize database schema', error);
     process.exit(1);

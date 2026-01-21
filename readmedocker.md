@@ -24,6 +24,9 @@
 - 🔒 JWT authentication and user roles
 - 📱 Responsive UI
 - 🖼️ User profile images
+- 🇬🇧EN/🇫🇷FR Translations
+- 💱 Multi-currency support (Comming Soon)
+- 🌐 PWA Support
 
 ## Requirements
 - Docker and Docker Compose

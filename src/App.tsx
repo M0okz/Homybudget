@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
 import packageJson from '../package.json';
 
@@ -68,7 +68,6 @@ type ApiMonth = {
 
 type AppSettings = {
   languagePreference: LanguageCode;
-  themePreference: 'light' | 'dark';
   soloModeEnabled: boolean;
   jointAccountEnabled: boolean;
   sortByCost: boolean;
@@ -101,11 +100,25 @@ const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
 
 const apiUrl = (path: string) => `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
 
+const resolveAssetUrl = (value: string | null) => {
+  if (!value) {
+    return null;
+  }
+  if (/^(https?:|data:|blob:)/i.test(value)) {
+    return value;
+  }
+  if (!API_BASE_URL) {
+    return value;
+  }
+  return `${API_BASE_URL}${value.startsWith('/') ? '' : '/'}${value}`;
+};
+
 type AuthUser = {
   id: string;
   username: string;
   displayName: string | null;
   avatarUrl: string | null;
+  themePreference: 'light' | 'dark';
   role: 'admin' | 'user';
   isActive: boolean;
   createdAt: string;
@@ -1087,6 +1100,7 @@ const updateUserRequest = async (userId: string, payload: {
 const updateProfileRequest = async (payload: {
   displayName?: string | null;
   avatarUrl?: string | null;
+  themePreference?: 'light' | 'dark';
 }): Promise<AuthUser> => {
   const response = await fetch(apiUrl('/api/users/me'), {
     method: 'PATCH',
@@ -2211,13 +2225,10 @@ type SettingsViewProps = {
   user: AuthUser | null;
   fallbackUsername: string;
   darkMode: boolean;
-  onLogout: () => void;
   onAuthFailure: (error: unknown) => boolean;
   onProfileUpdated: (user: AuthUser) => void;
   sortByCost: boolean;
   onToggleSortByCost: (value: boolean) => void;
-  themePreference: 'light' | 'dark';
-  onThemePreferenceChange: (value: 'light' | 'dark') => void;
   languagePreference: LanguageCode;
   onLanguagePreferenceChange: (value: LanguageCode) => void;
   jointAccountEnabled: boolean;
@@ -2249,13 +2260,10 @@ const SettingsView = ({
   user,
   fallbackUsername,
   darkMode,
-  onLogout,
   onAuthFailure,
   onProfileUpdated,
   sortByCost,
   onToggleSortByCost,
-  themePreference,
-  onThemePreferenceChange,
   languagePreference,
   onLanguagePreferenceChange,
   jointAccountEnabled,
@@ -2289,6 +2297,8 @@ const SettingsView = ({
   const currentUserId = user?.id;
   const profileInitial = (displayName.trim()[0] || 'U').toUpperCase();
   const resolvedOidcLinkName = oidcLinkProviderName.trim() || 'OIDC';
+  const usernameLabel = user?.username || fallbackUsername || '';
+  const activeToggleClass = 'bg-[#5B4B8A]';
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
@@ -2317,6 +2327,92 @@ const SettingsView = ({
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const makeUserLabel = (item: AuthUser) => item.displayName || item.username;
+
+  const ToggleRow = ({
+    icon: Icon,
+    label,
+    hint,
+    checked,
+    onChange,
+    disabled = false
+  }: {
+    icon: React.ComponentType<{ size?: number }>;
+    label: string;
+    hint?: string;
+    checked: boolean;
+    onChange: (next: boolean) => void;
+    disabled?: boolean;
+  }) => (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
+        darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'
+      } ${disabled ? 'opacity-60' : ''}`}
+    >
+      <div className="flex items-center gap-3">
+        <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
+          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-100 text-slate-600'
+        }`}>
+          <Icon size={18} />
+        </span>
+        <div>
+          <div className="font-semibold">{label}</div>
+          {hint && (
+            <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+              {hint}
+            </div>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        disabled={disabled}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+          checked ? activeToggleClass : (darkMode ? 'bg-slate-700' : 'bg-slate-200')
+        } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+            checked ? 'translate-x-5' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  );
+
+  const SelectRow = ({
+    icon: Icon,
+    label,
+    value,
+    onChange,
+    children
+  }: {
+    icon: React.ComponentType<{ size?: number }>;
+    label: string;
+    value: string;
+    onChange: (next: string) => void;
+    children: React.ReactNode;
+  }) => (
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+      <div className="flex items-center gap-3">
+        <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
+          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-100 text-slate-600'
+        }`}>
+          <Icon size={18} />
+        </span>
+        <div className="font-semibold">{label}</div>
+      </div>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+      >
+        {children}
+      </select>
+    </div>
+  );
 
   useEffect(() => {
     setAvatarInput(user?.avatarUrl ?? '');
@@ -2531,560 +2627,523 @@ const SettingsView = ({
     }
   };
 
+  const cardClassName = `rounded-2xl border shadow-sm p-6 ${
+    darkMode ? 'bg-gray-900/80 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+  }`;
+
   return (
-    <div
-      className={`w-full max-w-5xl mx-auto rounded-2xl border shadow-sm p-6 ${
-        darkMode ? 'bg-gray-900/80 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
-      }`}
-    >
-      <div className="space-y-6">
-      <section className="space-y-3">
-        <h3 className="text-lg font-semibold">{t('profileTitle')}</h3>
-          <div className="space-y-3">
-            <div className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{t('userLabel')}</span>
-              <span className="font-semibold">{displayName}</span>
-            </div>
-            <div className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{t('roleLabel')}</span>
-              <span className="font-semibold">{roleDisplay}</span>
-            </div>
-            {oidcLinkEnabled && (
-              <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-                <div>
-                  <div className="font-semibold">{t('oidcLinkTitle')}</div>
-                  <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
-                    {t('oidcLinkHint')}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOidcLink}
-                  disabled={oidcLinkLoading}
-                  className={`px-4 py-2 rounded-md text-xs font-semibold btn-gradient ${oidcLinkLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {oidcLinkLoading ? t('oidcLinking') : `${t('oidcLinkButton')} ${resolvedOidcLinkName}`}
-                </button>
+    <div className="w-full max-w-5xl mx-auto space-y-6">
+      <div className={cardClassName}>
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">{t('profileTitle')}</h3>
+            <div className="space-y-3">
+            <div className={`flex flex-wrap items-center gap-4 rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                {avatarInput.trim() ? (
+                  <img src={resolveAssetUrl(avatarInput.trim()) ?? ''} alt={displayName} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-lg font-semibold">{profileInitial}</span>
+                )}
               </div>
-            )}
-            {oidcLinkError && (
-              <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
-                {oidcLinkError}
-              </div>
-            )}
-            <form onSubmit={handleAvatarUpdate} className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <div className="flex flex-wrap items-center gap-4">
-                <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                  {avatarInput.trim() ? (
-                    <img src={avatarInput.trim()} alt={displayName} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-lg font-semibold">{profileInitial}</span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-[12rem] space-y-1">
-                  <label className={darkMode ? 'text-gray-300' : 'text-gray-600'}>{t('profileImageLabel')}</label>
-                  <input
-                    type="url"
-                    value={avatarInput}
-                    onChange={(event) => setAvatarInput(event.target.value)}
-                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                    placeholder={t('profileImageUrlPlaceholder')}
-                  />
+              <div className="flex-1 min-w-[10rem]">
+                <div className="text-lg font-semibold">{displayName}</div>
+                {usernameLabel && (
                   <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
-                    {t('profileImageHint')}
+                    @{usernameLabel}
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => setAvatarFile(event.target.files?.[0] ?? null)}
-                      className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAvatarUpload}
-                      disabled={avatarUploadLoading || !avatarFile}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold btn-gradient ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    >
-                      {avatarUploadLoading ? t('profileImageUploadLoading') : t('profileImageUploadButton')}
-                    </button>
-                    {avatarFile && (
-                      <span className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
-                        {avatarFile.name}
-                      </span>
+                )}
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${darkMode ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'}`}>
+                {roleDisplay}
+              </span>
+            </div>
+              {oidcLinkEnabled && (
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                  <div>
+                    <div className="font-semibold">{t('oidcLinkTitle')}</div>
+                    <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                      {t('oidcLinkHint')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOidcLink}
+                    disabled={oidcLinkLoading}
+                    className={`px-4 py-2 rounded-md text-xs font-semibold btn-gradient ${oidcLinkLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {oidcLinkLoading ? t('oidcLinking') : `${t('oidcLinkButton')} ${resolvedOidcLinkName}`}
+                  </button>
+                </div>
+              )}
+              {oidcLinkError && (
+                <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                  {oidcLinkError}
+                </div>
+              )}
+              <form onSubmit={handleAvatarUpdate} className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                    {avatarInput.trim() ? (
+                      <img src={resolveAssetUrl(avatarInput.trim()) ?? ''} alt={displayName} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-lg font-semibold">{profileInitial}</span>
                     )}
                   </div>
+                  <div className="flex-1 min-w-[12rem] space-y-1">
+                    <label className={darkMode ? 'text-gray-300' : 'text-gray-600'}>{t('profileImageLabel')}</label>
+                    <input
+                      type="url"
+                      value={avatarInput}
+                      onChange={(event) => setAvatarInput(event.target.value)}
+                      className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                      placeholder={t('profileImageUrlPlaceholder')}
+                    />
+                    <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                      {t('profileImageHint')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => setAvatarFile(event.target.files?.[0] ?? null)}
+                        className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAvatarUpload}
+                        disabled={avatarUploadLoading || !avatarFile}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold btn-gradient ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {avatarUploadLoading ? t('profileImageUploadLoading') : t('profileImageUploadButton')}
+                      </button>
+                      {avatarFile && (
+                        <span className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                          {avatarFile.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={avatarLoading}
-              className={`px-4 py-2 rounded-md font-semibold btn-gradient ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
-              {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
-            </button>
-                {avatarSuccess && (
-                  <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
-                    {avatarSuccess}
-                  </div>
-                )}
-                {avatarError && (
-                  <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
-                    {avatarError}
-                  </div>
-                )}
-              </div>
-            </form>
-          </div>
-      </section>
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={avatarLoading}
+                    className={`px-4 py-2 rounded-md font-semibold btn-gradient ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
+                  </button>
+                  {avatarSuccess && (
+                    <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
+                      {avatarSuccess}
+                    </div>
+                  )}
+                  {avatarError && (
+                    <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                      {avatarError}
+                    </div>
+                  )}
+                </div>
+              </form>
+            </div>
+          </section>
 
-      <section className="space-y-3">
-        <h3 className="text-lg font-semibold">{t('settingsSectionTitle')}</h3>
-        <div className="space-y-3">
-          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-            <div>
-              <div className="font-semibold">{t('sortExpensesLabel')}</div>
-              <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
-                {t('fixedFreeLabel')}
-              </div>
-            </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={sortByCost}
-                onChange={(event) => onToggleSortByCost(event.target.checked)}
-              />
-              <span>{sortByCost ? t('activeLabel') : t('inactiveLabel')}</span>
-            </label>
-          </div>
-          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-            <div>
-              <div className="font-semibold">{t('jointAccountSettingLabel')}</div>
-              <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
-                {t('jointAccountSettingHint')}
-              </div>
-            </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={jointAccountEnabled}
-                onChange={(event) => onToggleJointAccountEnabled(event.target.checked)}
-              />
-              <span>{jointAccountEnabled ? t('activeLabel') : t('inactiveLabel')}</span>
-            </label>
-          </div>
-          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-            <div>
-              <div className="font-semibold">{t('soloModeSettingLabel')}</div>
-              <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
-                {t('soloModeSettingHint')}
-              </div>
-            </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={soloModeEnabled}
-                onChange={(event) => onToggleSoloModeEnabled(event.target.checked)}
-              />
-              <span>{soloModeEnabled ? t('activeLabel') : t('inactiveLabel')}</span>
-            </label>
-          </div>
-          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-            <div className="font-semibold">{t('defaultModeLabel')}</div>
-            <select
-              value={themePreference}
-              onChange={(event) => onThemePreferenceChange(event.target.value === 'dark' ? 'dark' : 'light')}
-              className={`px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-            >
-              <option value="light">{t('lightLabel')}</option>
-              <option value="dark">{t('darkLabel')}</option>
-            </select>
-          </div>
-          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-            <div className="font-semibold">{t('languageLabel')}</div>
-            <select
-              value={languagePreference}
-              onChange={(event) => onLanguagePreferenceChange(event.target.value === 'en' ? 'en' : 'fr')}
-              className={`px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-            >
-              <option value="fr">{t('frenchLabel')}</option>
-              <option value="en">{t('englishLabel')}</option>
-            </select>
-          </div>
-          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-            <div className="font-semibold">{t('currencyLabel')}</div>
-            <select
-              value={currencyPreference}
-              onChange={(event) => onCurrencyPreferenceChange(event.target.value === 'USD' ? 'USD' : 'EUR')}
-              className={`px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-            >
-              <option value="EUR">{t('currencyEuroLabel')}</option>
-              <option value="USD">{t('currencyDollarLabel')}</option>
-            </select>
-          </div>
-          {isAdmin && (
-            <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <div className="flex items-center justify-between">
-                <div className="font-semibold">{t('oidcSectionTitle')}</div>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    type="checkbox"
-                    checked={oidcEnabled}
-                    onChange={(event) => onOidcEnabledChange(event.target.checked)}
-                  />
-                  <span>{oidcEnabled ? t('activeLabel') : t('inactiveLabel')}</span>
-                </label>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold">
-                  {t('oidcProviderLabel')}
-                  <input
-                    type="text"
-                    value={oidcProviderName}
-                    onChange={(event) => onOidcProviderNameChange(event.target.value)}
-                    placeholder="Keycloak / Authentik"
-                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
-                    }`}
-                  />
-                </label>
-                <label className="text-xs font-semibold">
-                  {t('oidcIssuerLabel')}
-                  <input
-                    type="text"
-                    value={oidcIssuer}
-                    onChange={(event) => onOidcIssuerChange(event.target.value)}
-                    placeholder="https://auth.example.com/realms/homybudget"
-                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
-                    }`}
-                  />
-                </label>
-                <label className="text-xs font-semibold">
-                  {t('oidcClientIdLabel')}
-                  <input
-                    type="text"
-                    value={oidcClientId}
-                    onChange={(event) => onOidcClientIdChange(event.target.value)}
-                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
-                    }`}
-                  />
-                </label>
-                <label className="text-xs font-semibold">
-                  {t('oidcClientSecretLabel')}
-                  <input
-                    type="password"
-                    value={oidcClientSecret}
-                    onChange={(event) => onOidcClientSecretChange(event.target.value)}
-                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
-                    }`}
-                  />
-                </label>
-                <label className="text-xs font-semibold sm:col-span-2">
-                  {t('oidcRedirectUriLabel')}
-                  <input
-                    type="text"
-                    value={oidcRedirectUri}
-                    onChange={(event) => onOidcRedirectUriChange(event.target.value)}
-                    placeholder="https://app.example.com/api/auth/oidc/callback"
-                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
-                    }`}
-                  />
-                </label>
-              </div>
-            </div>
-          )}
-          <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
-            {t('moreSettingsSoon')}
-          </div>
-        </div>
-      </section>
-
-      {isAdmin && (
-        <section className="space-y-3">
-          <h3 className="text-lg font-semibold">{t('personLinkSectionTitle')}</h3>
-          <div className="space-y-3">
-            <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <div className="font-semibold">{t('person1Label')}</div>
-              <select
-                value={person1UserId ?? ''}
-                onChange={(event) => {
-                  const selected = users.find(item => item.id === event.target.value) ?? null;
-                  onPersonLinkChange('person1', selected);
-                }}
-                disabled={usersLoading}
-                className={`min-w-[12rem] px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-              >
-                <option value="">{t('unassignedLabel')}</option>
-                {users.map(item => {
-                  const isDisabled = (!item.isActive) || (item.id === person2UserId && item.id !== person1UserId);
-                  const label = makeUserLabel(item);
-                  return (
-                    <option key={item.id} value={item.id} disabled={isDisabled}>
-                      {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <div className="font-semibold">{t('person2Label')}</div>
-              <select
-                value={person2UserId ?? ''}
-                onChange={(event) => {
-                  const selected = users.find(item => item.id === event.target.value) ?? null;
-                  onPersonLinkChange('person2', selected);
-                }}
-                disabled={usersLoading}
-                className={`min-w-[12rem] px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-              >
-                <option value="">{t('unassignedLabel')}</option>
-                {users.map(item => {
-                  const isDisabled = (!item.isActive) || (item.id === person1UserId && item.id !== person2UserId);
-                  const label = makeUserLabel(item);
-                  return (
-                    <option key={item.id} value={item.id} disabled={isDisabled}>
-                      {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
-              {usersLoading ? t('loadingUsers') : t('personLinkSectionHint')}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-3">
-        <h3 className="text-lg font-semibold">{t('changePasswordTitle')}</h3>
-          <form onSubmit={handleChangePassword} className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={passwordForm.current}
-                onChange={(event) => setPasswordForm(prev => ({ ...prev, current: event.target.value }))}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                placeholder={t('currentPasswordPlaceholder')}
-              />
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={passwordForm.next}
-                onChange={(event) => setPasswordForm(prev => ({ ...prev, next: event.target.value }))}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                placeholder={t('newPasswordPlaceholder')}
-              />
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={passwordForm.confirm}
-                onChange={(event) => setPasswordForm(prev => ({ ...prev, confirm: event.target.value }))}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                placeholder={t('confirmPasswordPlaceholder')}
-              />
-            </div>
-            {passwordError && (
-              <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
-                {passwordError}
-              </div>
-            )}
-            {passwordSuccess && (
-              <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
-                {passwordSuccess}
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={passwordLoading}
-              className={`px-4 py-2 rounded-md font-semibold btn-gradient ${passwordLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
-              {passwordLoading ? t('updatingButton') : t('updateButton')}
-            </button>
-          </form>
-        </section>
-
-        {isAdmin && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{t('userManagementTitle')}</h3>
-              <button
-                type="button"
-                onClick={() => void loadUsers()}
-                disabled={usersLoading}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold border ${
-                  darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                } ${usersLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                {t('refreshButton')}
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateUser} className={`rounded-lg border p-4 space-y-3 ${darkMode ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <input
-                  type="text"
-                  value={createForm.username}
-                  onChange={(event) => setCreateForm(prev => ({ ...prev, username: event.target.value }))}
-                  className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                  placeholder={t('createUserUsernamePlaceholder')}
-                />
-                <input
-                  type="text"
-                  value={createForm.displayName}
-                  onChange={(event) => setCreateForm(prev => ({ ...prev, displayName: event.target.value }))}
-                  className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                  placeholder={t('createUserDisplayNamePlaceholder')}
-                />
-              </div>
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">{t('changePasswordTitle')}</h3>
+            <form onSubmit={handleChangePassword} className="space-y-3">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <input
                   type="password"
-                  value={createForm.password}
-                  onChange={(event) => setCreateForm(prev => ({ ...prev, password: event.target.value }))}
+                  autoComplete="current-password"
+                  value={passwordForm.current}
+                  onChange={(event) => setPasswordForm(prev => ({ ...prev, current: event.target.value }))}
                   className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                  placeholder={t('createUserPasswordPlaceholder')}
+                  placeholder={t('currentPasswordPlaceholder')}
                 />
                 <input
                   type="password"
-                  value={createForm.confirmPassword}
-                  onChange={(event) => setCreateForm(prev => ({ ...prev, confirmPassword: event.target.value }))}
+                  autoComplete="new-password"
+                  value={passwordForm.next}
+                  onChange={(event) => setPasswordForm(prev => ({ ...prev, next: event.target.value }))}
                   className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                  placeholder={t('createUserConfirmPlaceholder')}
+                  placeholder={t('newPasswordPlaceholder')}
                 />
-                <select
-                  value={createForm.role}
-                  onChange={(event) => setCreateForm(prev => ({ ...prev, role: event.target.value === 'admin' ? 'admin' : 'user' }))}
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.confirm}
+                  onChange={(event) => setPasswordForm(prev => ({ ...prev, confirm: event.target.value }))}
                   className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
-                >
-                  <option value="user">{t('roleUserLabel')}</option>
-                  <option value="admin">{t('roleAdminLabel')}</option>
-                </select>
+                  placeholder={t('confirmPasswordPlaceholder')}
+                />
               </div>
-              {createError && (
+              {passwordError && (
                 <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
-                  {createError}
+                  {passwordError}
                 </div>
               )}
-              {createSuccess && (
+              {passwordSuccess && (
                 <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
-                  {createSuccess}
+                  {passwordSuccess}
                 </div>
               )}
               <button
                 type="submit"
-                disabled={createLoading}
-                className={`px-4 py-2 rounded-md font-semibold btn-gradient ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                disabled={passwordLoading}
+                className={`px-4 py-2 rounded-md font-semibold btn-gradient ${passwordLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                {createLoading ? t('creatingUserButton') : t('createUserButton')}
+                {passwordLoading ? t('updatingButton') : t('updateButton')}
               </button>
             </form>
+          </section>
 
-            {resetInfo && (
-              <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200 text-gray-700'}`}>
-                <div className="font-semibold mb-1">{t('resetTokenTitle')}</div>
-                <div className="break-all">{resetInfo.token}</div>
-                <div className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {t('expiresOnLabel')} {formatTimestamp(resetInfo.expiresAt)}
-                </div>
-              </div>
-            )}
+        </div>
+      </div>
 
-            <div className={`rounded-lg border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-              <div className="p-4">
-                {usersLoading ? (
-                  <div className="text-sm">{t('loadingUsers')}</div>
-                ) : users.length === 0 ? (
-                  <div className="text-sm">{t('noUsers')}</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className={darkMode ? 'text-gray-400' : 'text-gray-500'}>
-                          <th className="text-left font-medium py-2">{t('accountLabel')}</th>
-                          <th className="text-left font-medium py-2">{t('roleLabel')}</th>
-                          <th className="text-left font-medium py-2">{t('statusLabel')}</th>
-                          <th className="text-left font-medium py-2">{t('lastLoginLabel')}</th>
-                          <th className="text-left font-medium py-2">{t('actionsLabel')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.map(item => {
-                          const isSelf = item.id === currentUserId;
-                          return (
-                            <tr key={item.id} className={darkMode ? 'border-t border-gray-800' : 'border-t border-gray-200'}>
-                              <td className="py-2 pr-4">
-                                <div className="font-semibold">{item.displayName || item.username}</div>
-                                <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>{item.username}</div>
-                              </td>
-                              <td className="py-2 pr-4">
-                                <select
-                                  value={item.role}
-                                  disabled={Boolean(userActionId) || isSelf}
-                                  onChange={(event) => handleRoleChange(item.id, event.target.value === 'admin' ? 'admin' : 'user')}
-                                  className={`px-2 py-1 rounded-md border text-sm ${
-                                    darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
-                                  } ${isSelf ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                >
-                                  <option value="user">{t('roleUserLabel')}</option>
-                                  <option value="admin">{t('roleAdminLabel')}</option>
-                                </select>
-                              </td>
-                              <td className="py-2 pr-4">
-                                <label className="inline-flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={item.isActive}
-                                    disabled={Boolean(userActionId) || isSelf}
-                                    onChange={(event) => handleActiveChange(item.id, event.target.checked)}
-                                  />
-                                  <span>{item.isActive ? t('activeLabel') : t('blockedLabel')}</span>
-                                </label>
-                              </td>
-                              <td className="py-2 pr-4">{formatTimestamp(item.lastLoginAt)}</td>
-                              <td className="py-2">
-                                <button
-                                  type="button"
-                                  disabled={Boolean(userActionId)}
-                                  onClick={() => handleResetPassword(item.id)}
-                                  className={`px-3 py-1.5 rounded-md text-xs font-semibold border ${
-                                    darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                                  } ${userActionId ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                >
-                                  {t('resetButton')}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {usersError && (
-                  <div className={`text-sm mt-3 ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
-                    {usersError}
-                  </div>
-                )}
-              </div>
+      <div className={cardClassName}>
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">{t('settingsSectionTitle')}</h3>
+            <div className="space-y-3">
+              <ToggleRow
+                icon={ArrowUpDown}
+                label={t('sortExpensesLabel')}
+                hint={t('fixedFreeLabel')}
+                checked={sortByCost}
+                onChange={onToggleSortByCost}
+              />
+              <ToggleRow
+                icon={Users}
+                label={t('jointAccountSettingLabel')}
+                hint={t('jointAccountSettingHint')}
+                checked={jointAccountEnabled}
+                onChange={onToggleJointAccountEnabled}
+              />
+              <ToggleRow
+                icon={User}
+                label={t('soloModeSettingLabel')}
+                hint={t('soloModeSettingHint')}
+                checked={soloModeEnabled}
+                onChange={onToggleSoloModeEnabled}
+              />
+              <SelectRow
+                icon={Globe2}
+                label={t('languageLabel')}
+                value={languagePreference}
+                onChange={(value) => onLanguagePreferenceChange(value === 'en' ? 'en' : 'fr')}
+              >
+                <option value="fr">{t('frenchLabel')}</option>
+                <option value="en">{t('englishLabel')}</option>
+              </SelectRow>
+              <SelectRow
+                icon={Coins}
+                label={t('currencyLabel')}
+                value={currencyPreference}
+                onChange={(value) => onCurrencyPreferenceChange(value === 'USD' ? 'USD' : 'EUR')}
+              >
+                <option value="EUR">{t('currencyEuroLabel')}</option>
+                <option value="USD">{t('currencyDollarLabel')}</option>
+              </SelectRow>
+              {isAdmin && (
+                <>
+                  <ToggleRow
+                    icon={KeyRound}
+                    label={t('oidcSectionTitle')}
+                    checked={oidcEnabled}
+                    onChange={onOidcEnabledChange}
+                  />
+                  {oidcEnabled && (
+                    <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs font-semibold">
+                          {t('oidcProviderLabel')}
+                          <input
+                            type="text"
+                            value={oidcProviderName}
+                            onChange={(event) => onOidcProviderNameChange(event.target.value)}
+                            placeholder="Keycloak / Authentik"
+                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            }`}
+                          />
+                        </label>
+                        <label className="text-xs font-semibold">
+                          {t('oidcIssuerLabel')}
+                          <input
+                            type="text"
+                            value={oidcIssuer}
+                            onChange={(event) => onOidcIssuerChange(event.target.value)}
+                            placeholder="https://auth.example.com/realms/homybudget"
+                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            }`}
+                          />
+                        </label>
+                        <label className="text-xs font-semibold">
+                          {t('oidcClientIdLabel')}
+                          <input
+                            type="text"
+                            value={oidcClientId}
+                            onChange={(event) => onOidcClientIdChange(event.target.value)}
+                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            }`}
+                          />
+                        </label>
+                        <label className="text-xs font-semibold">
+                          {t('oidcClientSecretLabel')}
+                          <input
+                            type="password"
+                            value={oidcClientSecret}
+                            onChange={(event) => onOidcClientSecretChange(event.target.value)}
+                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            }`}
+                          />
+                        </label>
+                        <label className="text-xs font-semibold sm:col-span-2">
+                          {t('oidcRedirectUriLabel')}
+                          <input
+                            type="text"
+                            value={oidcRedirectUri}
+                            onChange={(event) => onOidcRedirectUriChange(event.target.value)}
+                            placeholder="https://app.example.com/api/auth/oidc/callback"
+                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            }`}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </section>
-        )}
 
-        <div>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="px-4 py-2 rounded-md font-semibold btn-gradient"
-          >
-            {t('logoutLabel')}
-          </button>
+          {isAdmin && (
+            <section className="space-y-3">
+              <h3 className="text-lg font-semibold">{t('personLinkSectionTitle')}</h3>
+              <div className="space-y-3">
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                  <div className="font-semibold">{t('person1Label')}</div>
+                  <select
+                    value={person1UserId ?? ''}
+                    onChange={(event) => {
+                      const selected = users.find(item => item.id === event.target.value) ?? null;
+                      onPersonLinkChange('person1', selected);
+                    }}
+                    disabled={usersLoading}
+                    className={`min-w-[12rem] px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    <option value="">{t('unassignedLabel')}</option>
+                    {users.map(item => {
+                      const isDisabled = (!item.isActive) || (item.id === person2UserId && item.id !== person1UserId);
+                      const label = makeUserLabel(item);
+                      return (
+                        <option key={item.id} value={item.id} disabled={isDisabled}>
+                          {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                  <div className="font-semibold">{t('person2Label')}</div>
+                  <select
+                    value={person2UserId ?? ''}
+                    onChange={(event) => {
+                      const selected = users.find(item => item.id === event.target.value) ?? null;
+                      onPersonLinkChange('person2', selected);
+                    }}
+                    disabled={usersLoading}
+                    className={`min-w-[12rem] px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    <option value="">{t('unassignedLabel')}</option>
+                    {users.map(item => {
+                      const isDisabled = (!item.isActive) || (item.id === person1UserId && item.id !== person2UserId);
+                      const label = makeUserLabel(item);
+                      return (
+                        <option key={item.id} value={item.id} disabled={isDisabled}>
+                          {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+                  {usersLoading ? t('loadingUsers') : t('personLinkSectionHint')}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {isAdmin && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">{t('userManagementTitle')}</h3>
+                <button
+                  type="button"
+                  onClick={() => void loadUsers()}
+                  disabled={usersLoading}
+                  className={`px-3 py-1.5 rounded-md text-sm font-semibold border ${
+                    darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                  } ${usersLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {t('refreshButton')}
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateUser} className={`rounded-lg border p-4 space-y-3 ${darkMode ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <input
+                    type="text"
+                    value={createForm.username}
+                    onChange={(event) => setCreateForm(prev => ({ ...prev, username: event.target.value }))}
+                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    placeholder={t('createUserUsernamePlaceholder')}
+                  />
+                  <input
+                    type="text"
+                    value={createForm.displayName}
+                    onChange={(event) => setCreateForm(prev => ({ ...prev, displayName: event.target.value }))}
+                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    placeholder={t('createUserDisplayNamePlaceholder')}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <input
+                    type="password"
+                    value={createForm.password}
+                    onChange={(event) => setCreateForm(prev => ({ ...prev, password: event.target.value }))}
+                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    placeholder={t('createUserPasswordPlaceholder')}
+                  />
+                  <input
+                    type="password"
+                    value={createForm.confirmPassword}
+                    onChange={(event) => setCreateForm(prev => ({ ...prev, confirmPassword: event.target.value }))}
+                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    placeholder={t('createUserConfirmPlaceholder')}
+                  />
+                  <select
+                    value={createForm.role}
+                    onChange={(event) => setCreateForm(prev => ({ ...prev, role: event.target.value === 'admin' ? 'admin' : 'user' }))}
+                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    <option value="user">{t('roleUserLabel')}</option>
+                    <option value="admin">{t('roleAdminLabel')}</option>
+                  </select>
+                </div>
+                {createError && (
+                  <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                    {createError}
+                  </div>
+                )}
+                {createSuccess && (
+                  <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
+                    {createSuccess}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className={`px-4 py-2 rounded-md font-semibold btn-gradient ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {createLoading ? t('creatingUserButton') : t('createUserButton')}
+                </button>
+              </form>
+
+              {resetInfo && (
+                <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200 text-gray-700'}`}>
+                  <div className="font-semibold mb-1">{t('resetTokenTitle')}</div>
+                  <div className="break-all">{resetInfo.token}</div>
+                  <div className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {t('expiresOnLabel')} {formatTimestamp(resetInfo.expiresAt)}
+                  </div>
+                </div>
+              )}
+
+              <div className={`rounded-lg border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+                <div className="p-4">
+                  {usersLoading ? (
+                    <div className="text-sm">{t('loadingUsers')}</div>
+                  ) : users.length === 0 ? (
+                    <div className="text-sm">{t('noUsers')}</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className={darkMode ? 'text-gray-400' : 'text-gray-500'}>
+                            <th className="text-left font-medium py-2">{t('accountLabel')}</th>
+                            <th className="text-left font-medium py-2">{t('roleLabel')}</th>
+                            <th className="text-left font-medium py-2">{t('statusLabel')}</th>
+                            <th className="text-left font-medium py-2">{t('lastLoginLabel')}</th>
+                            <th className="text-left font-medium py-2">{t('actionsLabel')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.map(item => {
+                            const isSelf = item.id === currentUserId;
+                            return (
+                              <tr key={item.id} className={darkMode ? 'border-t border-gray-800' : 'border-t border-gray-200'}>
+                                <td className="py-2 pr-4">
+                                  <div className="font-semibold">{item.displayName || item.username}</div>
+                                  <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>{item.username}</div>
+                                </td>
+                                <td className="py-2 pr-4">
+                                  <select
+                                    value={item.role}
+                                    disabled={Boolean(userActionId) || isSelf}
+                                    onChange={(event) => handleRoleChange(item.id, event.target.value === 'admin' ? 'admin' : 'user')}
+                                    className={`px-2 py-1 rounded-md border text-sm ${
+                                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                                    } ${isSelf ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                  >
+                                    <option value="user">{t('roleUserLabel')}</option>
+                                    <option value="admin">{t('roleAdminLabel')}</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 pr-4">
+                                  <label className="inline-flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.isActive}
+                                      disabled={Boolean(userActionId) || isSelf}
+                                      onChange={(event) => handleActiveChange(item.id, event.target.checked)}
+                                    />
+                                    <span>{item.isActive ? t('activeLabel') : t('blockedLabel')}</span>
+                                  </label>
+                                </td>
+                                <td className="py-2 pr-4">{formatTimestamp(item.lastLoginAt)}</td>
+                                <td className="py-2">
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(userActionId)}
+                                    onClick={() => handleResetPassword(item.id)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold border ${
+                                      darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                                    } ${userActionId ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                  >
+                                    {t('resetButton')}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {usersError && (
+                    <div className={`text-sm mt-3 ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                      {usersError}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>
@@ -3172,6 +3231,7 @@ const App: React.FC = () => {
   const userDisplayName = authProfile?.displayName || authProfile?.username || authUser || t('accountLabel');
   const userInitial = (userDisplayName.trim()[0] || 'U').toUpperCase();
   const userAvatarUrl = authProfile?.avatarUrl || null;
+  const resolvedUserAvatarUrl = resolveAssetUrl(userAvatarUrl);
   const currentMonthKey = getCurrentMonthKey(currentDate);
   const data = monthlyBudgets[currentMonthKey] || getDefaultBudgetData();
   const person1UserId = data.person1UserId ?? null;
@@ -3210,7 +3270,6 @@ const App: React.FC = () => {
 
   const buildSettingsPayload = (overrides: Partial<AppSettings> = {}): AppSettings => ({
     languagePreference,
-    themePreference,
     soloModeEnabled,
     jointAccountEnabled,
     sortByCost,
@@ -3232,6 +3291,8 @@ const App: React.FC = () => {
     setAuthToken(result.token);
     setAuthUser(result.user.username);
     setAuthProfile(result.user);
+    setThemePreference(result.user.themePreference);
+    setDarkMode(result.user.themePreference === 'dark');
     setActivePage('budget');
   };
 
@@ -3427,7 +3488,6 @@ const App: React.FC = () => {
     settingsLoaded,
     showOnboarding,
     languagePreference,
-    themePreference,
     soloModeEnabled,
     jointAccountEnabled,
     sortByCost,
@@ -3492,6 +3552,23 @@ const App: React.FC = () => {
         }
         setAuthProfile(profile);
         setAuthUser(profile.username);
+        const storedTheme = typeof window !== 'undefined' ? localStorage.getItem('themePreference') : null;
+        const storedValue = storedTheme === 'dark' ? 'dark' : storedTheme === 'light' ? 'light' : null;
+        const resolvedTheme = storedValue ?? profile.themePreference ?? 'light';
+        if (storedValue && storedValue !== profile.themePreference) {
+          void updateProfileRequest({ themePreference: storedValue })
+            .then((updated) => {
+              setAuthProfile(updated);
+              setAuthUser(updated.username);
+            })
+            .catch((error) => {
+              if (!handleAuthFailure(error)) {
+                console.error('Failed to sync theme preference', error);
+              }
+            });
+        }
+        setThemePreference(resolvedTheme);
+        setDarkMode(resolvedTheme === 'dark');
       } catch (error) {
         if (!isActive) {
           return;
@@ -3577,8 +3654,6 @@ const App: React.FC = () => {
         setOidcClientId(settings.oidcClientId ?? '');
         setOidcClientSecret(settings.oidcClientSecret ?? '');
         setOidcRedirectUri(settings.oidcRedirectUri ?? '');
-        setThemePreference(settings.themePreference);
-        setDarkMode(settings.themePreference === 'dark');
         lastSavedSettingsRef.current = JSON.stringify(settings);
         setSettingsLoaded(true);
       } catch (error) {
@@ -4039,13 +4114,25 @@ const App: React.FC = () => {
 
   const toggleDarkMode = () => {
     const next = !darkMode;
-    setDarkMode(next);
-    setThemePreference(next ? 'dark' : 'light');
+    handleThemePreferenceChange(next ? 'dark' : 'light');
   };
 
   const handleThemePreferenceChange = (value: 'light' | 'dark') => {
     setThemePreference(value);
     setDarkMode(value === 'dark');
+    if (!authToken || showOnboarding) {
+      return;
+    }
+    void updateProfileRequest({ themePreference: value })
+      .then((profile) => {
+        setAuthProfile(profile);
+        setAuthUser(profile.username);
+      })
+      .catch((error) => {
+        if (!handleAuthFailure(error)) {
+          console.error('Failed to update theme preference', error);
+        }
+      });
   };
 
   const resolveUserLabel = (profile: AuthUser | null) => {
@@ -4655,11 +4742,19 @@ const App: React.FC = () => {
                 setJointAccountEnabled(settings.jointAccountEnabled);
                 setSoloModeEnabled(settings.soloModeEnabled);
                 setLanguagePreference(settings.languagePreference);
-                setThemePreference(settings.themePreference);
-                setDarkMode(settings.themePreference === 'dark');
               })
               .catch((error) => {
                 console.error('Failed to save onboarding settings', error);
+              });
+            void updateProfileRequest({ themePreference })
+              .then((profile) => {
+                setAuthProfile(profile);
+                setAuthUser(profile.username);
+                setThemePreference(profile.themePreference);
+                setDarkMode(profile.themePreference === 'dark');
+              })
+              .catch((error) => {
+                console.error('Failed to save onboarding theme', error);
               });
             if (mode === 'duo') {
               setPendingOnboarding({ person1Name, person2Name, mode });
@@ -4746,8 +4841,8 @@ const App: React.FC = () => {
           <div className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
             darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
           }`}>
-            {userAvatarUrl ? (
-              <img src={userAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+            {resolvedUserAvatarUrl ? (
+              <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
             ) : (
               userInitial
             )}
@@ -4969,8 +5064,8 @@ const App: React.FC = () => {
                         }`}
                         aria-label={t('accountMenuLabel')}
                       >
-                        {userAvatarUrl ? (
-                          <img src={userAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+                        {resolvedUserAvatarUrl ? (
+                          <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
                         ) : (
                           userInitial
                         )}
@@ -5027,7 +5122,6 @@ const App: React.FC = () => {
           user={authProfile}
           fallbackUsername={authUser}
           darkMode={darkMode}
-          onLogout={handleLogout}
           onAuthFailure={handleAuthFailure}
           onProfileUpdated={(profile) => {
             setAuthProfile(profile);
@@ -5035,8 +5129,6 @@ const App: React.FC = () => {
           }}
           sortByCost={sortByCost}
           onToggleSortByCost={setSortByCost}
-          themePreference={themePreference}
-          onThemePreferenceChange={handleThemePreferenceChange}
           languagePreference={languagePreference}
           onLanguagePreferenceChange={setLanguagePreference}
           currencyPreference={currencyPreference}

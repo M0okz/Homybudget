@@ -50,6 +50,7 @@ Important: if your password includes special characters (ex: `@`), URL-encode th
 createdb app_budget
 psql -d app_budget -f server/schema.sql
 ```
+Note: the API will auto-init the schema on startup if the database is empty. If you use an external DB where tables already exist (and you are not the owner), the server skips auto-init to avoid permission errors. You can force it with `FORCE_SCHEMA_INIT=true`.
 
 4) Bootstrap the first admin user (only once)
 ```

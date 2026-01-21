@@ -10,6 +10,7 @@ create table if not exists users (
   username text not null unique,
   display_name text,
   avatar_url text,
+  theme_preference text not null default 'light',
   password_hash text not null,
   role text not null default 'user',
   is_active boolean not null default true,
