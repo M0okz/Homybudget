@@ -73,6 +73,12 @@ type AppSettings = {
   jointAccountEnabled: boolean;
   sortByCost: boolean;
   currencyPreference: 'EUR' | 'USD';
+  oidcEnabled: boolean;
+  oidcProviderName: string;
+  oidcIssuer: string;
+  oidcClientId: string;
+  oidcClientSecret: string;
+  oidcRedirectUri: string;
 };
 
 type ExpenseWizardState = {
@@ -137,6 +143,15 @@ type LatestVersionResponse = {
   version: string | null;
   tag: string | null;
   updatedAt: string | null;
+};
+
+type OidcConfigResponse = {
+  enabled: boolean;
+  providerName: string;
+};
+
+type OidcLinkResponse = {
+  url: string;
 };
 
 type ApiError = Error & { status?: number };
@@ -958,6 +973,31 @@ const fetchLatestVersion = async (): Promise<LatestVersionResponse | null> => {
   return await response.json() as LatestVersionResponse;
 };
 
+const fetchOidcConfig = async (): Promise<OidcConfigResponse | null> => {
+  const response = await fetch(apiUrl('/api/auth/oidc/config'));
+  if (!response.ok) {
+    return null;
+  }
+  return await response.json() as OidcConfigResponse;
+};
+
+const startOidcLinkRequest = async (): Promise<OidcLinkResponse> => {
+  const response = await fetch(apiUrl('/api/auth/oidc/link'), {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to start OIDC link (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  return await response.json() as OidcLinkResponse;
+};
+
 const updateAppSettingsRequest = async (payload: Partial<AppSettings>): Promise<AppSettings> => {
   const response = await fetch(apiUrl('/api/settings'), {
     method: 'PATCH',
@@ -1756,12 +1796,25 @@ type LoginScreenProps = {
   loading: boolean;
   darkMode: boolean;
   pageStyle: React.CSSProperties;
+  oidcEnabled: boolean;
+  oidcProviderName: string;
+  onOidcLogin: () => void;
 };
 
-const LoginScreen = ({ onLogin, error, loading, darkMode, pageStyle }: LoginScreenProps) => {
+const LoginScreen = ({
+  onLogin,
+  error,
+  loading,
+  darkMode,
+  pageStyle,
+  oidcEnabled,
+  oidcProviderName,
+  onOidcLogin
+}: LoginScreenProps) => {
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const resolvedProviderName = oidcProviderName.trim() || 'OIDC';
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -1824,6 +1877,17 @@ const LoginScreen = ({ onLogin, error, loading, darkMode, pageStyle }: LoginScre
         >
           {loading ? t('loginLoading') : t('loginButton')}
         </button>
+        {oidcEnabled && (
+          <button
+            type="button"
+            onClick={onOidcLogin}
+            className={`w-full py-2 rounded-md text-sm font-semibold border transition-colors ${
+              darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {t('loginWithProviderLabel')} {resolvedProviderName}
+          </button>
+        )}
       </form>
     </div>
   );
@@ -2162,6 +2226,20 @@ type SettingsViewProps = {
   onToggleSoloModeEnabled: (value: boolean) => void;
   currencyPreference: 'EUR' | 'USD';
   onCurrencyPreferenceChange: (value: 'EUR' | 'USD') => void;
+  oidcEnabled: boolean;
+  oidcProviderName: string;
+  oidcIssuer: string;
+  oidcClientId: string;
+  oidcClientSecret: string;
+  oidcRedirectUri: string;
+  onOidcEnabledChange: (value: boolean) => void;
+  onOidcProviderNameChange: (value: string) => void;
+  onOidcIssuerChange: (value: string) => void;
+  onOidcClientIdChange: (value: string) => void;
+  onOidcClientSecretChange: (value: string) => void;
+  onOidcRedirectUriChange: (value: string) => void;
+  oidcLinkEnabled: boolean;
+  oidcLinkProviderName: string;
   person1UserId: string | null;
   person2UserId: string | null;
   onPersonLinkChange: (personKey: 'person1' | 'person2', user: AuthUser | null) => void;
@@ -2186,6 +2264,20 @@ const SettingsView = ({
   onToggleSoloModeEnabled,
   currencyPreference,
   onCurrencyPreferenceChange,
+  oidcEnabled,
+  oidcProviderName,
+  oidcIssuer,
+  oidcClientId,
+  oidcClientSecret,
+  oidcRedirectUri,
+  onOidcEnabledChange,
+  onOidcProviderNameChange,
+  onOidcIssuerChange,
+  onOidcClientIdChange,
+  onOidcClientSecretChange,
+  onOidcRedirectUriChange,
+  oidcLinkEnabled,
+  oidcLinkProviderName,
   person1UserId,
   person2UserId,
   onPersonLinkChange
@@ -2196,6 +2288,7 @@ const SettingsView = ({
   const isAdmin = user?.role === 'admin';
   const currentUserId = user?.id;
   const profileInitial = (displayName.trim()[0] || 'U').toUpperCase();
+  const resolvedOidcLinkName = oidcLinkProviderName.trim() || 'OIDC';
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
@@ -2206,6 +2299,8 @@ const SettingsView = ({
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [avatarLoading, setAvatarLoading] = useState(false);
   const [avatarUploadLoading, setAvatarUploadLoading] = useState(false);
+  const [oidcLinkLoading, setOidcLinkLoading] = useState(false);
+  const [oidcLinkError, setOidcLinkError] = useState<string | null>(null);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -2287,6 +2382,21 @@ const SettingsView = ({
       }
     } finally {
       setAvatarUploadLoading(false);
+    }
+  };
+
+  const handleOidcLink = async () => {
+    setOidcLinkError(null);
+    setOidcLinkLoading(true);
+    try {
+      const result = await startOidcLinkRequest();
+      window.location.assign(result.url);
+    } catch (error) {
+      if (!onAuthFailure(error)) {
+        setOidcLinkError(resolveErrorMessage(error, t('oidcLinkError')));
+      }
+    } finally {
+      setOidcLinkLoading(false);
     }
   };
 
@@ -2439,6 +2549,29 @@ const SettingsView = ({
               <span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{t('roleLabel')}</span>
               <span className="font-semibold">{roleDisplay}</span>
             </div>
+            {oidcLinkEnabled && (
+              <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                <div>
+                  <div className="font-semibold">{t('oidcLinkTitle')}</div>
+                  <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                    {t('oidcLinkHint')}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOidcLink}
+                  disabled={oidcLinkLoading}
+                  className={`px-4 py-2 rounded-md text-xs font-semibold btn-gradient ${oidcLinkLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {oidcLinkLoading ? t('oidcLinking') : `${t('oidcLinkButton')} ${resolvedOidcLinkName}`}
+                </button>
+              </div>
+            )}
+            {oidcLinkError && (
+              <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                {oidcLinkError}
+              </div>
+            )}
             <form onSubmit={handleAvatarUpdate} className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
               <div className="flex flex-wrap items-center gap-4">
                 <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
@@ -2590,6 +2723,81 @@ const SettingsView = ({
               <option value="USD">{t('currencyDollarLabel')}</option>
             </select>
           </div>
+          {isAdmin && (
+            <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">{t('oidcSectionTitle')}</div>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={oidcEnabled}
+                    onChange={(event) => onOidcEnabledChange(event.target.checked)}
+                  />
+                  <span>{oidcEnabled ? t('activeLabel') : t('inactiveLabel')}</span>
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold">
+                  {t('oidcProviderLabel')}
+                  <input
+                    type="text"
+                    value={oidcProviderName}
+                    onChange={(event) => onOidcProviderNameChange(event.target.value)}
+                    placeholder="Keycloak / Authentik"
+                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                    }`}
+                  />
+                </label>
+                <label className="text-xs font-semibold">
+                  {t('oidcIssuerLabel')}
+                  <input
+                    type="text"
+                    value={oidcIssuer}
+                    onChange={(event) => onOidcIssuerChange(event.target.value)}
+                    placeholder="https://auth.example.com/realms/homybudget"
+                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                    }`}
+                  />
+                </label>
+                <label className="text-xs font-semibold">
+                  {t('oidcClientIdLabel')}
+                  <input
+                    type="text"
+                    value={oidcClientId}
+                    onChange={(event) => onOidcClientIdChange(event.target.value)}
+                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                    }`}
+                  />
+                </label>
+                <label className="text-xs font-semibold">
+                  {t('oidcClientSecretLabel')}
+                  <input
+                    type="password"
+                    value={oidcClientSecret}
+                    onChange={(event) => onOidcClientSecretChange(event.target.value)}
+                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                    }`}
+                  />
+                </label>
+                <label className="text-xs font-semibold sm:col-span-2">
+                  {t('oidcRedirectUriLabel')}
+                  <input
+                    type="text"
+                    value={oidcRedirectUri}
+                    onChange={(event) => onOidcRedirectUriChange(event.target.value)}
+                    placeholder="https://app.example.com/api/auth/oidc/callback"
+                    className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
+                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                    }`}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
           <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
             {t('moreSettingsSoon')}
           </div>
@@ -2927,8 +3135,15 @@ const App: React.FC = () => {
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
   const [currencyPreference, setCurrencyPreference] = useState<'EUR' | 'USD'>(() => getInitialCurrencyPreference());
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [oidcProviderName, setOidcProviderName] = useState('');
+  const [oidcIssuer, setOidcIssuer] = useState('');
+  const [oidcClientId, setOidcClientId] = useState('');
+  const [oidcClientSecret, setOidcClientSecret] = useState('');
+  const [oidcRedirectUri, setOidcRedirectUri] = useState('');
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [oidcLoginConfig, setOidcLoginConfig] = useState<OidcConfigResponse | null>(null);
   const [paletteId, setPaletteId] = useState(() => {
     if (typeof window === 'undefined') {
       return PALETTES[0].id;
@@ -2943,6 +3158,7 @@ const App: React.FC = () => {
   const lastSavedPayloadRef = useRef<Record<string, string>>({});
   const lastSavedSettingsRef = useRef<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const oidcHandledRef = useRef(false);
 
   const palette = getPaletteById(paletteId);
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
@@ -2985,6 +3201,13 @@ const App: React.FC = () => {
       : 'radial-gradient(1200px circle at 85% -10%, rgba(59,130,246,0.10), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(16,185,129,0.10), transparent 50%)'
   } as React.CSSProperties;
 
+  const oidcLoginEnabled = Boolean(oidcLoginConfig?.enabled);
+  const oidcLoginProviderName = (oidcLoginConfig?.providerName || 'OIDC').trim() || 'OIDC';
+  const oidcLinkEnabled = Boolean(
+    (oidcEnabled && oidcIssuer && oidcClientId && oidcRedirectUri) || oidcLoginConfig?.enabled
+  );
+  const oidcLinkProviderName = (oidcProviderName || oidcLoginConfig?.providerName || 'OIDC').trim() || 'OIDC';
+
   const buildSettingsPayload = (overrides: Partial<AppSettings> = {}): AppSettings => ({
     languagePreference,
     themePreference,
@@ -2992,6 +3215,12 @@ const App: React.FC = () => {
     jointAccountEnabled,
     sortByCost,
     currencyPreference,
+    oidcEnabled,
+    oidcProviderName,
+    oidcIssuer,
+    oidcClientId,
+    oidcClientSecret,
+    oidcRedirectUri,
     ...overrides
   });
 
@@ -3059,6 +3288,71 @@ const App: React.FC = () => {
       setAuthLoading(false);
     }
   };
+
+  const handleOidcLogin = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.location.assign(apiUrl('/api/auth/oidc/start'));
+  };
+
+  const resolveOidcStatusMessage = (status: string) => {
+    switch (status) {
+      case 'unlinked':
+        return t('oidcUnlinkedError');
+      case 'inactive':
+        return t('oidcInactiveError');
+      case 'failed':
+        return t('oidcFailedError');
+      case 'expired':
+        return t('oidcExpiredError');
+      case 'invalid':
+        return t('oidcInvalidError');
+      case 'linked':
+        return t('oidcLinkSuccess');
+      case 'linked_conflict':
+        return t('oidcLinkConflictError');
+      default:
+        return null;
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || oidcHandledRef.current) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const oidcStatus = params.get('oidc');
+    if (!token && !oidcStatus) {
+      return;
+    }
+    oidcHandledRef.current = true;
+    if (token) {
+      setAuthError(null);
+      setAuthLoading(false);
+      setAuthToken(token);
+      setAuthUser('');
+      setAuthProfile(null);
+      setActivePage('budget');
+    }
+    if (oidcStatus) {
+      const message = resolveOidcStatusMessage(oidcStatus);
+      if (message) {
+        const isSuccess = oidcStatus === 'linked';
+        if (authToken || token || isSuccess) {
+          alert(message);
+        } else {
+          setAuthError(message);
+        }
+      }
+    }
+    params.delete('token');
+    params.delete('oidc');
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [authToken, t]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -3137,7 +3431,13 @@ const App: React.FC = () => {
     soloModeEnabled,
     jointAccountEnabled,
     sortByCost,
-    currencyPreference
+    currencyPreference,
+    oidcEnabled,
+    oidcProviderName,
+    oidcIssuer,
+    oidcClientId,
+    oidcClientSecret,
+    oidcRedirectUri
   ]);
 
   useEffect(() => {
@@ -3231,6 +3531,26 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let isActive = true;
+    const loadOidcConfig = async () => {
+      try {
+        const config = await fetchOidcConfig();
+        if (isActive) {
+          setOidcLoginConfig(config);
+        }
+      } catch (error) {
+        if (isActive) {
+          setOidcLoginConfig(null);
+        }
+      }
+    };
+    void loadOidcConfig();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!authToken) {
       setSettingsLoaded(false);
       lastSavedSettingsRef.current = null;
@@ -3251,6 +3571,12 @@ const App: React.FC = () => {
         setSoloModeEnabled(settings.soloModeEnabled);
         setLanguagePreference(settings.languagePreference);
         setCurrencyPreference(settings.currencyPreference ?? 'EUR');
+        setOidcEnabled(settings.oidcEnabled ?? false);
+        setOidcProviderName(settings.oidcProviderName ?? '');
+        setOidcIssuer(settings.oidcIssuer ?? '');
+        setOidcClientId(settings.oidcClientId ?? '');
+        setOidcClientSecret(settings.oidcClientSecret ?? '');
+        setOidcRedirectUri(settings.oidcRedirectUri ?? '');
         setThemePreference(settings.themePreference);
         setDarkMode(settings.themePreference === 'dark');
         lastSavedSettingsRef.current = JSON.stringify(settings);
@@ -4363,6 +4689,9 @@ const App: React.FC = () => {
           loading={authLoading}
           darkMode={darkMode}
           pageStyle={pageStyle}
+          oidcEnabled={oidcLoginEnabled}
+          oidcProviderName={oidcLoginProviderName}
+          onOidcLogin={handleOidcLogin}
         />
       </TranslationContext.Provider>
     );
@@ -4712,6 +5041,20 @@ const App: React.FC = () => {
           onLanguagePreferenceChange={setLanguagePreference}
           currencyPreference={currencyPreference}
           onCurrencyPreferenceChange={setCurrencyPreference}
+          oidcEnabled={oidcEnabled}
+          oidcProviderName={oidcProviderName}
+          oidcIssuer={oidcIssuer}
+          oidcClientId={oidcClientId}
+          oidcClientSecret={oidcClientSecret}
+          oidcRedirectUri={oidcRedirectUri}
+          onOidcEnabledChange={setOidcEnabled}
+          onOidcProviderNameChange={setOidcProviderName}
+          onOidcIssuerChange={setOidcIssuer}
+          onOidcClientIdChange={setOidcClientId}
+          onOidcClientSecretChange={setOidcClientSecret}
+          onOidcRedirectUriChange={setOidcRedirectUri}
+          oidcLinkEnabled={oidcLinkEnabled}
+          oidcLinkProviderName={oidcLinkProviderName}
           jointAccountEnabled={jointAccountEnabled}
           onToggleJointAccountEnabled={setJointAccountEnabled}
           soloModeEnabled={soloModeEnabled}

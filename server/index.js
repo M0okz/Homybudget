@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
+import { Issuer, generators } from 'openid-client';
 import { fileURLToPath } from 'url';
 import { pool } from './db.js';
 
@@ -19,6 +20,7 @@ fs.mkdirSync(avatarDir, { recursive: true });
 
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = corsOrigin.split(',').map(origin => origin.trim()).filter(Boolean);
+const getFrontendBase = () => allowedOrigins[0] || 'http://localhost:5173';
 
 app.disable('x-powered-by');
 app.use(cors({
@@ -69,7 +71,13 @@ const defaultSettings = {
   soloModeEnabled: false,
   jointAccountEnabled: true,
   sortByCost: false,
-  currencyPreference: 'EUR'
+  currencyPreference: 'EUR',
+  oidcEnabled: false,
+  oidcProviderName: '',
+  oidcIssuer: '',
+  oidcClientId: '',
+  oidcClientSecret: '',
+  oidcRedirectUri: ''
 };
 
 const dockerHubRepo = process.env.DOCKERHUB_REPO || 'homynudget/homybudget';
@@ -182,7 +190,122 @@ const normalizeSettings = (input) => {
   if (input.currencyPreference === 'EUR' || input.currencyPreference === 'USD') {
     next.currencyPreference = input.currencyPreference;
   }
+  if (input.oidcEnabled !== undefined) {
+    next.oidcEnabled = Boolean(input.oidcEnabled);
+  }
+  if (typeof input.oidcProviderName === 'string') {
+    next.oidcProviderName = input.oidcProviderName.trim();
+  }
+  if (typeof input.oidcIssuer === 'string') {
+    next.oidcIssuer = input.oidcIssuer.trim();
+  }
+  if (typeof input.oidcClientId === 'string') {
+    next.oidcClientId = input.oidcClientId.trim();
+  }
+  if (typeof input.oidcClientSecret === 'string') {
+    next.oidcClientSecret = input.oidcClientSecret.trim();
+  }
+  if (typeof input.oidcRedirectUri === 'string') {
+    next.oidcRedirectUri = input.oidcRedirectUri.trim();
+  }
   return next;
+};
+
+const oidcStateStore = new Map();
+const oidcClientCache = { key: '', client: null };
+const oidcStateTtlMs = 10 * 60 * 1000;
+
+const resolveOidcSettings = (settings) => {
+  if (!settings?.oidcEnabled) {
+    return null;
+  }
+  const issuer = (settings.oidcIssuer || '').trim();
+  const clientId = (settings.oidcClientId || '').trim();
+  const redirectUri = (settings.oidcRedirectUri || '').trim();
+  if (!issuer || !clientId || !redirectUri) {
+    return null;
+  }
+  return {
+    providerName: (settings.oidcProviderName || '').trim() || 'OIDC',
+    issuer,
+    clientId,
+    clientSecret: (settings.oidcClientSecret || '').trim(),
+    redirectUri
+  };
+};
+
+const getOidcClient = async (settings) => {
+  const cacheKey = [
+    settings.issuer,
+    settings.clientId,
+    settings.clientSecret ? 'secret' : 'public',
+    settings.redirectUri
+  ].join('|');
+  if (oidcClientCache.key === cacheKey && oidcClientCache.client) {
+    return oidcClientCache.client;
+  }
+  const discovered = await Issuer.discover(settings.issuer);
+  const client = new discovered.Client({
+    client_id: settings.clientId,
+    client_secret: settings.clientSecret || undefined,
+    redirect_uris: [settings.redirectUri],
+    response_types: ['code']
+  });
+  oidcClientCache.key = cacheKey;
+  oidcClientCache.client = client;
+  return client;
+};
+
+const cleanupOidcState = () => {
+  const now = Date.now();
+  for (const [state, data] of oidcStateStore.entries()) {
+    if (now - data.createdAt > oidcStateTtlMs) {
+      oidcStateStore.delete(state);
+    }
+  }
+};
+
+const createOidcState = (type, userId = null) => {
+  cleanupOidcState();
+  const state = generators.state();
+  const nonce = generators.nonce();
+  const codeVerifier = generators.codeVerifier();
+  const codeChallenge = generators.codeChallenge(codeVerifier);
+  oidcStateStore.set(state, {
+    type,
+    userId,
+    codeVerifier,
+    nonce,
+    createdAt: Date.now()
+  });
+  return { state, nonce, codeVerifier, codeChallenge };
+};
+
+const findOauthAccount = async (issuer, subject) => {
+  const result = await pool.query(
+    'select * from oauth_accounts where issuer = $1 and subject = $2 limit 1',
+    [issuer, subject]
+  );
+  return result.rows[0] ?? null;
+};
+
+const createOauthAccount = async ({ provider, issuer, subject, userId }) => {
+  const id = crypto.randomUUID();
+  const result = await pool.query(
+    `insert into oauth_accounts (id, provider, issuer, subject, user_id, created_at)
+     values ($1, $2, $3, $4, $5, now())
+     returning *`,
+    [id, provider, issuer, subject, userId]
+  );
+  return result.rows[0];
+};
+
+const getUserById = async (userId) => {
+  const result = await pool.query(
+    'select * from users where id = $1 limit 1',
+    [userId]
+  );
+  return result.rows[0] ?? null;
 };
 
 const getAppSettings = async () => {
@@ -244,6 +367,37 @@ const sanitizeUser = (user) => ({
   createdAt: user.created_at,
   lastLoginAt: user.last_login_at
 });
+
+const stripOidcSettings = (settings) => {
+  if (!settings || typeof settings !== 'object') {
+    return settings;
+  }
+  const {
+    oidcEnabled,
+    oidcProviderName,
+    oidcIssuer,
+    oidcClientId,
+    oidcClientSecret,
+    oidcRedirectUri,
+    ...rest
+  } = settings;
+  return rest;
+};
+
+const sanitizeSettingsForUser = (settings, user) => {
+  if (user?.role === 'admin') {
+    return settings;
+  }
+  return {
+    ...stripOidcSettings(settings),
+    oidcEnabled: false,
+    oidcProviderName: '',
+    oidcIssuer: '',
+    oidcClientId: '',
+    oidcClientSecret: '',
+    oidcRedirectUri: ''
+  };
+};
 
 const createAuthToken = (user) => {
   if (!jwtSecret) {
@@ -465,10 +619,160 @@ app.get('/api/auth/bootstrap-status', async (_req, res) => {
 app.post('/api/login', loginHandler);
 app.post('/api/auth/login', loginHandler);
 
-app.get('/api/settings', authRequired, async (_req, res) => {
+app.get('/api/auth/oidc/config', async (_req, res) => {
   try {
     const settings = await getAppSettings();
-    res.json({ settings });
+    const oidc = resolveOidcSettings(settings);
+    res.json({
+      enabled: Boolean(oidc),
+      providerName: oidc?.providerName ?? ''
+    });
+  } catch (error) {
+    console.error('OIDC config load failed', error);
+    res.status(500).json({ error: 'Failed to load OIDC config' });
+  }
+});
+
+app.get('/api/auth/oidc/start', async (_req, res) => {
+  try {
+    const settings = await getAppSettings();
+    const oidc = resolveOidcSettings(settings);
+    if (!oidc) {
+      res.status(400).json({ error: 'OIDC not configured' });
+      return;
+    }
+    const client = await getOidcClient(oidc);
+    const { state, nonce, codeChallenge } = createOidcState('login');
+    const url = client.authorizationUrl({
+      scope: 'openid profile email',
+      response_mode: 'query',
+      redirect_uri: oidc.redirectUri,
+      state,
+      nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
+    });
+    res.redirect(url);
+  } catch (error) {
+    console.error('OIDC start failed', error);
+    res.status(500).json({ error: 'OIDC start failed' });
+  }
+});
+
+app.post('/api/auth/oidc/link', authRequired, async (req, res) => {
+  try {
+    const settings = await getAppSettings();
+    const oidc = resolveOidcSettings(settings);
+    if (!oidc) {
+      res.status(400).json({ error: 'OIDC not configured' });
+      return;
+    }
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const client = await getOidcClient(oidc);
+    const { state, nonce, codeChallenge } = createOidcState('link', userId);
+    const url = client.authorizationUrl({
+      scope: 'openid profile email',
+      response_mode: 'query',
+      redirect_uri: oidc.redirectUri,
+      state,
+      nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
+    });
+    res.json({ url });
+  } catch (error) {
+    console.error('OIDC link start failed', error);
+    res.status(500).json({ error: 'OIDC link failed' });
+  }
+});
+
+app.get('/api/auth/oidc/callback', async (req, res) => {
+  try {
+    const settings = await getAppSettings();
+    const oidc = resolveOidcSettings(settings);
+    if (!oidc) {
+      res.status(400).json({ error: 'OIDC not configured' });
+      return;
+    }
+    const client = await getOidcClient(oidc);
+    const params = client.callbackParams(req);
+    const stored = params.state ? oidcStateStore.get(params.state) : null;
+    if (!stored || !params.state) {
+      res.status(400).json({ error: 'Invalid state' });
+      return;
+    }
+    oidcStateStore.delete(params.state);
+    if (Date.now() - stored.createdAt > oidcStateTtlMs) {
+      res.redirect(`${getFrontendBase()}/?oidc=expired`);
+      return;
+    }
+
+    const tokenSet = await client.callback(oidc.redirectUri, params, {
+      code_verifier: stored.codeVerifier,
+      state: params.state,
+      nonce: stored.nonce
+    });
+    const claims = tokenSet.claims();
+    const subject = claims?.sub;
+    if (!subject) {
+      res.redirect(`${getFrontendBase()}/?oidc=invalid`);
+      return;
+    }
+
+    const account = await findOauthAccount(oidc.issuer, subject);
+
+    if (stored.type === 'link') {
+      const userId = stored.userId;
+      if (!userId) {
+        res.redirect(`${getFrontendBase()}/?oidc=invalid`);
+        return;
+      }
+      if (account && account.user_id !== userId) {
+        res.redirect(`${getFrontendBase()}/?oidc=linked_conflict`);
+        return;
+      }
+      if (!account) {
+        await createOauthAccount({
+          provider: oidc.providerName,
+          issuer: oidc.issuer,
+          subject,
+          userId
+        });
+      }
+      res.redirect(`${getFrontendBase()}/?oidc=linked`);
+      return;
+    }
+
+    if (!account) {
+      res.redirect(`${getFrontendBase()}/?oidc=unlinked`);
+      return;
+    }
+    const user = await getUserById(account.user_id);
+    if (!user || !user.is_active) {
+      res.redirect(`${getFrontendBase()}/?oidc=inactive`);
+      return;
+    }
+    await pool.query('update users set last_login_at = now(), updated_at = now() where id = $1', [user.id]);
+    const token = createAuthToken(user);
+    if (!token) {
+      res.status(500).json({ error: 'Server misconfigured' });
+      return;
+    }
+    res.redirect(`${getFrontendBase()}/?token=${encodeURIComponent(token)}`);
+  } catch (error) {
+    console.error('OIDC callback failed', error);
+    res.redirect(`${getFrontendBase()}/?oidc=failed`);
+  }
+});
+
+app.get('/api/settings', authRequired, async (req, res) => {
+  try {
+    const settings = await getAppSettings();
+    res.json({ settings: sanitizeSettingsForUser(settings, req.user) });
   } catch (error) {
     console.error('Failed to load settings', error);
     res.status(500).json({ error: 'Failed to load settings' });
@@ -476,14 +780,17 @@ app.get('/api/settings', authRequired, async (_req, res) => {
 });
 
 app.patch('/api/settings', authRequired, async (req, res) => {
-  const updates = normalizeSettings(req.body || {});
+  let updates = normalizeSettings(req.body || {});
+  if (req.user?.role !== 'admin') {
+    updates = stripOidcSettings(updates);
+  }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: 'No updates provided' });
     return;
   }
   try {
     const settings = await updateAppSettings(updates);
-    res.json({ settings });
+    res.json({ settings: sanitizeSettingsForUser(settings, req.user) });
   } catch (error) {
     console.error('Failed to update settings', error);
     res.status(500).json({ error: 'Failed to update settings' });

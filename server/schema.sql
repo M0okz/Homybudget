@@ -36,3 +36,14 @@ create table if not exists app_settings (
   data jsonb not null,
   updated_at timestamptz not null default now()
 );
+
+create table if not exists oauth_accounts (
+  id text primary key,
+  provider text not null,
+  issuer text not null,
+  subject text not null,
+  user_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (issuer, subject),
+  unique (issuer, user_id)
+);
