@@ -45,7 +45,6 @@ services:
       POSTGRES_DB: homybudget
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./server/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U homybudget -d homybudget"]
       interval: 5s
@@ -57,8 +56,6 @@ services:
     environment:
       PORT: 3001
       CORS_ORIGIN: http://localhost:8080
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: change_me_secure_password
       JWT_SECRET: change_me_very_long_secret_key
       PASSWORD_MIN_LENGTH: 8
       PASSWORD_RESET_TOKEN_TTL_MINUTES: 60
@@ -92,9 +89,9 @@ docker compose up -d
 http://localhost:8080
 ```
 
-4) Log in with:
-- **Username**: `admin`
-- **Password**: `change_me_secure_password` (or what you set)
+4) Complete the first-run wizard to create your admin user.
+
+Note: the database schema is initialized automatically by the app on first start.
 
 ### Option 2: Docker with external database
 
@@ -104,8 +101,6 @@ docker run -d \
   -p 8080:80 \
   -e PORT=3001 \
   -e CORS_ORIGIN=http://localhost:8080 \
-  -e ADMIN_USERNAME=admin \
-  -e ADMIN_PASSWORD=YourSecurePassword \
   -e JWT_SECRET=YourVerySecretJWTKey \
   -e PASSWORD_MIN_LENGTH=8 \
   -e PASSWORD_RESET_TOKEN_TTL_MINUTES=60 \
@@ -126,8 +121,6 @@ docker run -d \
 |---|---|---|---|
 | `PORT` | Internal API port | `3001` | No |
 | `CORS_ORIGIN` | Allowed CORS origin | `http://localhost:8080` | Yes |
-| `ADMIN_USERNAME` | Initial admin username | `admin` | Yes |
-| `ADMIN_PASSWORD` | Initial admin password | - | Yes |
 | `JWT_SECRET` | JWT signing key | - | Yes |
 | `PASSWORD_MIN_LENGTH` | Minimum password length | `8` | No |
 | `PASSWORD_RESET_TOKEN_TTL_MINUTES` | Reset token TTL | `60` | No |
@@ -207,8 +200,8 @@ docker compose logs db
 - Review app logs for authentication errors.
 
 ## License
-MIT — see `LICENSE`.
+` GPL-3.0 license`.
 
 ---
 
-Made with ❤️ for the best of your personal finances
+Made with ❤️ for better personal finance management

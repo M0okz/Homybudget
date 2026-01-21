@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut } from 'lucide-react';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
+import packageJson from '../package.json';
 
 interface Category {
   id: string;
@@ -87,6 +88,8 @@ type ExpenseWizardState = {
   startMonth: string;
 };
 
+const APP_VERSION = packageJson.version;
+
 const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
 
 const apiUrl = (path: string) => `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
@@ -126,6 +129,13 @@ type ResetTokenResponse = {
 
 type SettingsResponse = {
   settings: AppSettings;
+};
+
+type LatestVersionResponse = {
+  repo: string;
+  version: string | null;
+  tag: string | null;
+  updatedAt: string | null;
 };
 
 type ApiError = Error & { status?: number };
@@ -587,6 +597,23 @@ const formatAmount = (value: number) => {
   return String(Math.round(numeric));
 };
 
+const compareVersions = (current: string, latest: string) => {
+  const partsA = current.split('.').map(Number);
+  const partsB = latest.split('.').map(Number);
+  const length = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < length; i += 1) {
+    const valueA = partsA[i] ?? 0;
+    const valueB = partsB[i] ?? 0;
+    if (valueA > valueB) {
+      return 1;
+    }
+    if (valueA < valueB) {
+      return -1;
+    }
+  }
+  return 0;
+};
+
 const useAnimatedNumber = (value: number, duration = 350) => {
   const [animated, setAnimated] = useState(value);
   const animatedRef = useRef(value);
@@ -908,6 +935,14 @@ const fetchAppSettings = async (): Promise<AppSettings> => {
   }
   const payload = await response.json() as SettingsResponse;
   return payload.settings;
+};
+
+const fetchLatestVersion = async (): Promise<LatestVersionResponse | null> => {
+  const response = await fetch(apiUrl('/api/version/latest'));
+  if (!response.ok) {
+    return null;
+  }
+  return await response.json() as LatestVersionResponse;
 };
 
 const updateAppSettingsRequest = async (payload: Partial<AppSettings>): Promise<AppSettings> => {
@@ -2852,6 +2887,8 @@ const App: React.FC = () => {
   const [languagePreference, setLanguagePreference] = useState<LanguageCode>(() => getInitialLanguagePreference());
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [paletteId, setPaletteId] = useState(() => {
     if (typeof window === 'undefined') {
       return PALETTES[0].id;
@@ -3120,6 +3157,29 @@ const App: React.FC = () => {
       isActive = false;
     };
   }, [authToken]);
+
+  useEffect(() => {
+    let isActive = true;
+    const loadLatest = async () => {
+      try {
+        const latest = await fetchLatestVersion();
+        if (!isActive || !latest?.version) {
+          return;
+        }
+        setLatestVersion(latest.version);
+        setUpdateAvailable(compareVersions(APP_VERSION, latest.version) < 0);
+      } catch (error) {
+        if (isActive) {
+          setLatestVersion(null);
+          setUpdateAvailable(false);
+        }
+      }
+    };
+    void loadLatest();
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!authToken) {
@@ -4344,13 +4404,21 @@ const App: React.FC = () => {
           {darkMode ? t('darkLabel') : t('lightLabel')}
         </span>
       </button>
+      <div className={`mt-2 flex items-center justify-center gap-2 text-xs uppercase tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+        <span>V{APP_VERSION}</span>
+        {updateAvailable && latestVersion && (
+          <span className={`${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+            {t('updateAvailableLabel')} v{latestVersion}
+          </span>
+        )}
+      </div>
     </div>
   );
 
   return (
     <TranslationContext.Provider value={{ t, language: languagePreference }}>
       <div
-        className={`min-h-screen app-fade ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
+        className={`min-h-screen app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
         style={pageStyle}
       >
         <div className="flex min-h-screen">
@@ -4437,13 +4505,13 @@ const App: React.FC = () => {
                       <button
                         onClick={goToPreviousMonth}
                         disabled={!canGoToPreviousMonth}
-                        className={`p-2 rounded-lg transition-all ${
+                        className={`p-1.5 sm:p-2 rounded-lg transition-all ${
                           canGoToPreviousMonth
                             ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
                             : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
                         }`}
                       >
-                        <ChevronLeft size={24} />
+                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
                       </button>
                       <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                         <span>{t('budgetLabel')} -</span>
@@ -4474,13 +4542,13 @@ const App: React.FC = () => {
                       <button
                         onClick={goToNextMonth}
                         disabled={!canGoToNextMonth}
-                        className={`p-2 rounded-lg transition-all ${
+                        className={`p-1.5 sm:p-2 rounded-lg transition-all ${
                           canGoToNextMonth
                             ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
                             : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
                         }`}
                       >
-                        <ChevronRight size={24} />
+                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
                       </button>
                     </>
                   ) : (

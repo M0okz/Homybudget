@@ -71,6 +71,96 @@ const defaultSettings = {
   sortByCost: false
 };
 
+const dockerHubRepo = process.env.DOCKERHUB_REPO || 'homynudget/homybudget';
+const dockerHubApiBase = 'https://hub.docker.com/v2/repositories';
+const versionCache = { value: null, checkedAt: 0 };
+
+const parseVersionTag = (tag) => {
+  if (!tag) {
+    return null;
+  }
+  const match = tag.match(/v?(\d+(?:\.\d+){0,2})/i);
+  return match ? match[1] : null;
+};
+
+const compareVersions = (a, b) => {
+  const partsA = a.split('.').map(Number);
+  const partsB = b.split('.').map(Number);
+  const length = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < length; i += 1) {
+    const valueA = partsA[i] ?? 0;
+    const valueB = partsB[i] ?? 0;
+    if (valueA > valueB) {
+      return 1;
+    }
+    if (valueA < valueB) {
+      return -1;
+    }
+  }
+  return 0;
+};
+
+const fetchLatestDockerVersion = async () => {
+  const now = Date.now();
+  if (versionCache.value && now - versionCache.checkedAt < 15 * 60 * 1000) {
+    return versionCache.value;
+  }
+  const response = await fetch(`${dockerHubApiBase}/${dockerHubRepo}/tags?page_size=50&ordering=last_updated`);
+  if (!response.ok) {
+    throw new Error(`Docker Hub request failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  const versions = (payload.results || []).map(tag => {
+    const version = parseVersionTag(tag.name);
+    if (!version) {
+      return null;
+    }
+    return {
+      version,
+      tag: tag.name,
+      updatedAt: tag.last_updated
+    };
+  }).filter(Boolean);
+  if (versions.length === 0) {
+    return null;
+  }
+  const latest = versions.reduce((best, entry) => (
+    compareVersions(entry.version, best.version) > 0 ? entry : best
+  ));
+  versionCache.value = latest;
+  versionCache.checkedAt = now;
+  return latest;
+};
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const ensureSchema = async () => {
+  const schemaPath = path.join(__dirname, 'schema.sql');
+  let schemaSql = '';
+  try {
+    schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  } catch (error) {
+    console.warn('Schema file not found, skipping init.', error);
+    return;
+  }
+  if (!schemaSql.trim()) {
+    return;
+  }
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      await pool.query(schemaSql);
+      console.log('Database schema ready');
+      return;
+    } catch (error) {
+      console.error(`Database schema init failed (attempt ${attempt})`, error);
+      if (attempt === 10) {
+        throw error;
+      }
+      await sleep(2000);
+    }
+  }
+};
+
 const normalizeSettings = (input) => {
   const next = {};
   if (input.languagePreference === 'fr' || input.languagePreference === 'en') {
@@ -393,6 +483,21 @@ app.patch('/api/settings', authRequired, async (req, res) => {
   } catch (error) {
     console.error('Failed to update settings', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+app.get('/api/version/latest', async (_req, res) => {
+  try {
+    const latest = await fetchLatestDockerVersion();
+    res.json({
+      repo: dockerHubRepo,
+      version: latest?.version ?? null,
+      tag: latest?.tag ?? null,
+      updatedAt: latest?.updatedAt ?? null
+    });
+  } catch (error) {
+    console.error('Version check failed', error);
+    res.status(500).json({ error: 'Version check failed' });
   }
 });
 
@@ -749,6 +854,16 @@ app.use((err, _req, res, next) => {
   next(err);
 });
 
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
-});
+const startServer = async () => {
+  try {
+    await ensureSchema();
+  } catch (error) {
+    console.error('Failed to initialize database schema', error);
+    process.exit(1);
+  }
+  app.listen(port, () => {
+    console.log(`API listening on http://localhost:${port}`);
+  });
+};
+
+startServer();
