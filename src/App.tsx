@@ -72,6 +72,7 @@ type AppSettings = {
   soloModeEnabled: boolean;
   jointAccountEnabled: boolean;
   sortByCost: boolean;
+  currencyPreference: 'EUR' | 'USD';
 };
 
 type ExpenseWizardState = {
@@ -174,6 +175,13 @@ const getInitialLanguagePreference = (): LanguageCode => {
     return 'fr';
   }
   return localStorage.getItem('languagePreference') === 'en' ? 'en' : 'fr';
+};
+
+const getInitialCurrencyPreference = (): 'EUR' | 'USD' => {
+  if (typeof window === 'undefined') {
+    return 'EUR';
+  }
+  return localStorage.getItem('currencyPreference') === 'USD' ? 'USD' : 'EUR';
 };
 
 const getAuthToken = () => {
@@ -595,6 +603,11 @@ const getCategoryById = (id?: string | null) => {
 const formatAmount = (value: number) => {
   const numeric = Number.isFinite(value) ? value : 0;
   return String(Math.round(numeric));
+};
+
+const formatCurrency = (value: number, currency: 'EUR' | 'USD') => {
+  const amount = formatAmount(value);
+  return currency === 'USD' ? `$${amount}` : `${amount} €`;
 };
 
 const compareVersions = (current: string, latest: string) => {
@@ -1116,6 +1129,7 @@ type BudgetColumnProps = {
   darkMode: boolean;
   sortByCost: boolean;
   palette: Palette;
+  currencyPreference: 'EUR' | 'USD';
   editingName: string | null;
   tempName: string;
   setTempName: (value: string) => void;
@@ -1139,6 +1153,7 @@ type BudgetHeaderSectionProps = Pick<
   | 'personKey'
   | 'darkMode'
   | 'palette'
+  | 'currencyPreference'
   | 'addIncomeSource'
   | 'deleteIncomeSource'
   | 'updateIncomeSource'
@@ -1151,6 +1166,7 @@ type BudgetFixedSectionProps = Pick<
   | 'darkMode'
   | 'sortByCost'
   | 'palette'
+  | 'currencyPreference'
   | 'openExpenseWizard'
   | 'openExpenseWizardForEdit'
   | 'updateFixedExpense'
@@ -1164,6 +1180,7 @@ type BudgetFreeSectionProps = Pick<
   | 'darkMode'
   | 'sortByCost'
   | 'palette'
+  | 'currencyPreference'
   | 'openExpenseWizard'
   | 'openExpenseWizardForEdit'
   | 'updateCategory'
@@ -1231,6 +1248,7 @@ const BudgetHeaderSection = ({
   personKey,
   darkMode,
   palette,
+  currencyPreference,
   addIncomeSource,
   deleteIncomeSource,
   updateIncomeSource
@@ -1284,15 +1302,15 @@ const BudgetHeaderSection = ({
       <div className={`mt-auto space-y-1 text-sm border-t pt-2 ${darkMode ? 'border-gray-600' : ''}`}>
         <div className="flex justify-between">
           <span className={darkMode ? 'text-gray-300' : ''}>{t('totalIncomeLabel')}:</span>
-          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatAmount(animatedIncome)} €</span>
+          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatCurrency(animatedIncome, currencyPreference)}</span>
         </div>
         <div className="flex justify-between">
           <span className={darkMode ? 'text-gray-300' : ''}>{t('totalExpensesLabel')}:</span>
-          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatAmount(animatedExpenses)} €</span>
+          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatCurrency(animatedExpenses, currencyPreference)}</span>
         </div>
         <div className="flex justify-between font-bold" style={availableTextStyle}>
           <span>{t('availableLabel')}:</span>
-          <span className={available < 0 ? 'text-red-600' : ''}>{formatAmount(animatedAvailable)} €</span>
+          <span className={available < 0 ? 'text-red-600' : ''}>{formatCurrency(animatedAvailable, currencyPreference)}</span>
         </div>
       </div>
     </div>
@@ -1305,6 +1323,7 @@ const BudgetFixedSection = ({
   darkMode,
   sortByCost,
   palette,
+  currencyPreference,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateFixedExpense,
@@ -1379,7 +1398,7 @@ const BudgetFixedSection = ({
                       </span>
                     )}
                     <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
-                      {formatAmount(amountValue)} €
+                      {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!sortByCost && (
                       <div className="flex items-center gap-1">
@@ -1420,7 +1439,7 @@ const BudgetFixedSection = ({
       </div>
       <div className={`mt-3 pt-3 flex justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
-        <span>{formatAmount(animatedTotalFixed)} €</span>
+        <span>{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
       </div>
     </div>
   );
@@ -1432,6 +1451,7 @@ const BudgetFreeSection = ({
   darkMode,
   sortByCost,
   palette,
+  currencyPreference,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateCategory,
@@ -1512,7 +1532,7 @@ const BudgetFreeSection = ({
                       </span>
                     )}
                     <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
-                      {formatAmount(amountValue)} €
+                      {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!sortByCost && (
                       <div className="flex items-center gap-1">
@@ -1553,7 +1573,7 @@ const BudgetFreeSection = ({
       </div>
       <div className={`mt-3 pt-3 flex justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
-        <span>{formatAmount(animatedTotalCategories)} €</span>
+        <span>{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
       </div>
     </div>
   );
@@ -1565,6 +1585,7 @@ const BudgetColumn = ({
   darkMode,
   sortByCost,
   palette,
+  currencyPreference,
   editingName,
   tempName,
   setTempName,
@@ -1587,6 +1608,7 @@ const BudgetColumn = ({
       personKey={personKey}
       darkMode={darkMode}
       palette={palette}
+      currencyPreference={currencyPreference}
       addIncomeSource={addIncomeSource}
       deleteIncomeSource={deleteIncomeSource}
       updateIncomeSource={updateIncomeSource}
@@ -1597,6 +1619,7 @@ const BudgetColumn = ({
       darkMode={darkMode}
       sortByCost={sortByCost}
       palette={palette}
+      currencyPreference={currencyPreference}
       openExpenseWizard={openExpenseWizard}
       openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateFixedExpense={updateFixedExpense}
@@ -1608,6 +1631,7 @@ const BudgetColumn = ({
       darkMode={darkMode}
       sortByCost={sortByCost}
       palette={palette}
+      currencyPreference={currencyPreference}
       openExpenseWizard={openExpenseWizard}
       openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateCategory={updateCategory}
@@ -2136,6 +2160,8 @@ type SettingsViewProps = {
   onToggleJointAccountEnabled: (value: boolean) => void;
   soloModeEnabled: boolean;
   onToggleSoloModeEnabled: (value: boolean) => void;
+  currencyPreference: 'EUR' | 'USD';
+  onCurrencyPreferenceChange: (value: 'EUR' | 'USD') => void;
   person1UserId: string | null;
   person2UserId: string | null;
   onPersonLinkChange: (personKey: 'person1' | 'person2', user: AuthUser | null) => void;
@@ -2158,6 +2184,8 @@ const SettingsView = ({
   onToggleJointAccountEnabled,
   soloModeEnabled,
   onToggleSoloModeEnabled,
+  currencyPreference,
+  onCurrencyPreferenceChange,
   person1UserId,
   person2UserId,
   onPersonLinkChange
@@ -2551,6 +2579,17 @@ const SettingsView = ({
               <option value="en">{t('englishLabel')}</option>
             </select>
           </div>
+          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+            <div className="font-semibold">{t('currencyLabel')}</div>
+            <select
+              value={currencyPreference}
+              onChange={(event) => onCurrencyPreferenceChange(event.target.value === 'USD' ? 'USD' : 'EUR')}
+              className={`px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+            >
+              <option value="EUR">{t('currencyEuroLabel')}</option>
+              <option value="USD">{t('currencyDollarLabel')}</option>
+            </select>
+          </div>
           <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
             {t('moreSettingsSoon')}
           </div>
@@ -2887,6 +2926,7 @@ const App: React.FC = () => {
   const [languagePreference, setLanguagePreference] = useState<LanguageCode>(() => getInitialLanguagePreference());
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
+  const [currencyPreference, setCurrencyPreference] = useState<'EUR' | 'USD'>(() => getInitialCurrencyPreference());
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [paletteId, setPaletteId] = useState(() => {
@@ -2951,6 +2991,7 @@ const App: React.FC = () => {
     soloModeEnabled,
     jointAccountEnabled,
     sortByCost,
+    currencyPreference,
     ...overrides
   });
 
@@ -3062,6 +3103,13 @@ const App: React.FC = () => {
   }, [languagePreference]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    localStorage.setItem('currencyPreference', currencyPreference);
+  }, [currencyPreference]);
+
+  useEffect(() => {
     if (!authToken || !settingsLoaded || showOnboarding) {
       return;
     }
@@ -3088,7 +3136,8 @@ const App: React.FC = () => {
     themePreference,
     soloModeEnabled,
     jointAccountEnabled,
-    sortByCost
+    sortByCost,
+    currencyPreference
   ]);
 
   useEffect(() => {
@@ -3201,6 +3250,7 @@ const App: React.FC = () => {
         setJointAccountEnabled(settings.jointAccountEnabled);
         setSoloModeEnabled(settings.soloModeEnabled);
         setLanguagePreference(settings.languagePreference);
+        setCurrencyPreference(settings.currencyPreference ?? 'EUR');
         setThemePreference(settings.themePreference);
         setDarkMode(settings.themePreference === 'dark');
         lastSavedSettingsRef.current = JSON.stringify(settings);
@@ -4660,6 +4710,8 @@ const App: React.FC = () => {
           onThemePreferenceChange={handleThemePreferenceChange}
           languagePreference={languagePreference}
           onLanguagePreferenceChange={setLanguagePreference}
+          currencyPreference={currencyPreference}
+          onCurrencyPreferenceChange={setCurrencyPreference}
           jointAccountEnabled={jointAccountEnabled}
           onToggleJointAccountEnabled={setJointAccountEnabled}
           soloModeEnabled={soloModeEnabled}
@@ -4708,6 +4760,7 @@ const App: React.FC = () => {
               darkMode={darkMode}
               sortByCost={sortByCost}
               palette={palette}
+              currencyPreference={currencyPreference}
               editingName={editingName}
               tempName={tempName}
               setTempName={setTempName}
@@ -4746,6 +4799,7 @@ const App: React.FC = () => {
                   personKey="person1"
                   darkMode={darkMode}
                   palette={palette}
+                  currencyPreference={currencyPreference}
                   addIncomeSource={addIncomeSource}
                   deleteIncomeSource={deleteIncomeSource}
                   updateIncomeSource={updateIncomeSource}
@@ -4756,6 +4810,7 @@ const App: React.FC = () => {
                   darkMode={darkMode}
                   sortByCost={sortByCost}
                   palette={palette}
+                  currencyPreference={currencyPreference}
                   openExpenseWizard={openExpenseWizard}
                   openExpenseWizardForEdit={openExpenseWizardForEdit}
                   updateFixedExpense={updateFixedExpense}
@@ -4767,6 +4822,7 @@ const App: React.FC = () => {
                   darkMode={darkMode}
                   sortByCost={sortByCost}
                   palette={palette}
+                  currencyPreference={currencyPreference}
                   openExpenseWizard={openExpenseWizard}
                   openExpenseWizardForEdit={openExpenseWizardForEdit}
                   updateCategory={updateCategory}
@@ -4805,6 +4861,7 @@ const App: React.FC = () => {
                 personKey="person1"
                 darkMode={darkMode}
                 palette={palette}
+                currencyPreference={currencyPreference}
                 addIncomeSource={addIncomeSource}
                 deleteIncomeSource={deleteIncomeSource}
                 updateIncomeSource={updateIncomeSource}
@@ -4814,6 +4871,7 @@ const App: React.FC = () => {
                 personKey="person2"
                 darkMode={darkMode}
                 palette={palette}
+                currencyPreference={currencyPreference}
                 addIncomeSource={addIncomeSource}
                 deleteIncomeSource={deleteIncomeSource}
                 updateIncomeSource={updateIncomeSource}
@@ -4824,6 +4882,7 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
+                currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateFixedExpense={updateFixedExpense}
@@ -4835,6 +4894,7 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
+                currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateFixedExpense={updateFixedExpense}
@@ -4846,6 +4906,7 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
+                currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateCategory={updateCategory}
@@ -4857,6 +4918,7 @@ const App: React.FC = () => {
                 darkMode={darkMode}
                 sortByCost={sortByCost}
                 palette={palette}
+                currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateCategory={updateCategory}
@@ -4895,12 +4957,14 @@ const App: React.FC = () => {
                       onChange={(e) => updateInitialBalance(parseNumberInput(e.target.value))}
                       className={`w-full sm:w-32 px-3 py-1 border rounded text-right ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
                     />
-                    <span className={darkMode ? 'text-gray-300' : ''}>€</span>
+                    <span className={darkMode ? 'text-gray-300' : ''}>
+                      {currencyPreference === 'USD' ? '$' : '€'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{t('currentBalanceLabel')}:</span>
                     <span className={`text-xl sm:text-2xl font-bold ${calculateJointBalance() < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatAmount(calculateJointBalance())} €
+                      {formatCurrency(calculateJointBalance(), currencyPreference)}
                     </span>
                   </div>
                 </div>

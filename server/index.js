@@ -68,7 +68,8 @@ const defaultSettings = {
   themePreference: 'light',
   soloModeEnabled: false,
   jointAccountEnabled: true,
-  sortByCost: false
+  sortByCost: false,
+  currencyPreference: 'EUR'
 };
 
 const dockerHubRepo = process.env.DOCKERHUB_REPO || 'homynudget/homybudget';
@@ -177,6 +178,9 @@ const normalizeSettings = (input) => {
   }
   if (input.sortByCost !== undefined) {
     next.sortByCost = Boolean(input.sortByCost);
+  }
+  if (input.currencyPreference === 'EUR' || input.currencyPreference === 'USD') {
+    next.currencyPreference = input.currencyPreference;
   }
   return next;
 };
