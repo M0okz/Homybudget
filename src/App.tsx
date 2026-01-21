@@ -3210,6 +3210,8 @@ const App: React.FC = () => {
     return localStorage.getItem('paletteId') ?? PALETTES[0].id;
   });
   const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
+  const [deleteMonthOpen, setDeleteMonthOpen] = useState(false);
+  const [deleteMonthInput, setDeleteMonthInput] = useState('');
 
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget>({});
   const [isHydrated, setIsHydrated] = useState(false);
@@ -3223,6 +3225,8 @@ const App: React.FC = () => {
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
   const isBudgetView = activePage === 'budget';
   const isSettingsView = activePage === 'settings';
+  const deleteConfirmToken = t('deleteMonthConfirmToken');
+  const isDeleteConfirmValid = deleteMonthInput.trim().toLowerCase() === deleteConfirmToken.toLowerCase();
   const pageLabel = activePage === 'dashboard'
     ? t('dashboardLabel')
     : activePage === 'reports'
@@ -4049,9 +4053,6 @@ const App: React.FC = () => {
     if (!monthlyBudgets[monthKey]) {
       return;
     }
-    if (!window.confirm(`${t('deleteMonth')}? ${t('deleteMonthConfirm')}`)) {
-      return;
-    }
 
     if (saveTimeoutRef.current !== null) {
       window.clearTimeout(saveTimeoutRef.current);
@@ -4082,6 +4083,20 @@ const App: React.FC = () => {
       return applyJointBalanceCarryover(next, targetKey);
     });
     setCurrentDate(new Date(`${targetKey}-01`));
+  };
+
+  const requestDeleteCurrentMonth = () => {
+    setDeleteMonthInput('');
+    setDeleteMonthOpen(true);
+  };
+
+  const confirmDeleteCurrentMonth = async () => {
+    if (!isDeleteConfirmValid) {
+      return;
+    }
+    setDeleteMonthOpen(false);
+    setDeleteMonthInput('');
+    await deleteCurrentMonth();
   };
 
   const trySelectMonthKey = (monthKey: string) => {
@@ -5142,7 +5157,7 @@ const App: React.FC = () => {
                   >
                     {isBudgetView && (
                       <button
-                        onClick={deleteCurrentMonth}
+                        onClick={requestDeleteCurrentMonth}
                         className="hidden sm:inline-flex px-3 py-1.5 rounded-md text-sm font-semibold btn-gradient transition-all"
                       >
                         {t('deleteMonth')}
@@ -5176,7 +5191,7 @@ const App: React.FC = () => {
               {isBudgetView && (
                 <div className="flex items-center justify-end sm:hidden">
                   <button
-                    onClick={deleteCurrentMonth}
+                    onClick={requestDeleteCurrentMonth}
                     className="px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
                   >
                     {t('deleteMonth')}
@@ -5714,6 +5729,55 @@ const App: React.FC = () => {
                       : (expenseWizard.mode === 'edit' ? t('updateButton') : t('addLabel'))}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {deleteMonthOpen && (
+          <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
+            <div
+              className={`w-full max-w-sm rounded-2xl border shadow-lg p-6 space-y-4 ${
+                darkMode ? 'bg-gray-900/95 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+              }`}
+            >
+              <div className="space-y-2">
+                <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+                <h2 className="text-lg font-semibold">{t('deleteMonth')}</h2>
+                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('deleteMonthConfirm')}</p>
+                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('deleteMonthPrompt')}</p>
+              </div>
+              <input
+                type="text"
+                value={deleteMonthInput}
+                onChange={(e) => setDeleteMonthInput(e.target.value)}
+                placeholder={deleteConfirmToken}
+                className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+              />
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteMonthOpen(false);
+                    setDeleteMonthInput('');
+                  }}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                    darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {t('cancelLabel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteCurrentMonth}
+                  disabled={!isDeleteConfirmValid}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    isDeleteConfirmValid
+                      ? (darkMode ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-600 text-white hover:bg-red-500')
+                      : (darkMode ? 'bg-red-900/50 text-red-200/60' : 'bg-red-200 text-red-400')
+                  }`}
+                >
+                  {t('confirmDeleteLabel')}
+                </button>
               </div>
             </div>
           </div>
