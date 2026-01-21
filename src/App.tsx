@@ -4898,9 +4898,7 @@ const App: React.FC = () => {
       <div className={`mt-2 flex items-center justify-center gap-2 text-xs uppercase tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
         <span>V{APP_VERSION}</span>
         {updateAvailable && latestVersion && (
-          <span className={`${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-            {t('updateAvailableLabel')} v{latestVersion}
-          </span>
+          <span className="version-pill version-breathing">{latestVersion}</span>
         )}
       </div>
     </div>
@@ -5597,7 +5595,9 @@ const App: React.FC = () => {
             >
               <div className="space-y-1">
                 <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
-                <h2 className="text-xl font-semibold">{t('expenseWizardTitle')}</h2>
+                <h2 className="text-xl font-semibold">
+                  {expenseWizard.mode === 'edit' ? t('expenseWizardEditTitle') : t('expenseWizardTitle')}
+                </h2>
                 <div className="text-xs text-gray-500">{t('onboardingStepLabel')} {expenseWizard.step}/2</div>
                 <div className="text-xs font-semibold text-gray-500">
                   {expenseWizard.type === 'fixed' ? t('fixedMoneyLabel') : t('freeMoneyLabel')}
