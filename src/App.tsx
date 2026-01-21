@@ -2336,7 +2336,7 @@ const SettingsView = ({
     onChange,
     disabled = false
   }: {
-    icon: React.ComponentType<{ size?: number }>;
+    icon: React.ComponentType<{ size?: number | string }>;
     label: string;
     hint?: string;
     checked: boolean;
@@ -2389,7 +2389,7 @@ const SettingsView = ({
     onChange,
     children
   }: {
-    icon: React.ComponentType<{ size?: number }>;
+    icon: React.ComponentType<{ size?: number | string }>;
     label: string;
     value: string;
     onChange: (next: string) => void;
@@ -3505,6 +3505,8 @@ const App: React.FC = () => {
       return;
     }
     const root = document.body;
+    const html = document.documentElement;
+    html.style.setProperty('--app-bg', darkMode ? '#020617' : '#f8fafc');
     root.classList.add('theme-transition');
     const timeout = window.setTimeout(() => {
       root.classList.remove('theme-transition');
@@ -4954,15 +4956,113 @@ const App: React.FC = () => {
 
           <main className="flex-1 p-4 sm:p-6">
             <div className="flex flex-col gap-4 mb-6">
-              <div className="flex items-center gap-3">
+              <div className="sm:hidden flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
-                  className={`sm:hidden p-2 rounded-lg ${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-700'}`}
+                  className={`p-2 rounded-lg ${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-700'}`}
                   aria-label="Open menu"
                 >
                   <Menu size={20} />
                 </button>
+                <div ref={menuRef} className="relative">
+                  <button
+                    onClick={() => setMenuOpen(prev => !prev)}
+                    className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
+                      darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
+                    aria-label={t('accountMenuLabel')}
+                  >
+                    {resolvedUserAvatarUrl ? (
+                      <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+                    ) : (
+                      userInitial
+                    )}
+                  </button>
+                  {menuOpen && (
+                    <div
+                      className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
+                        darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-800'
+                      }`}
+                    >
+                      <div className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500">
+                        {userDisplayName}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {isSettingsView ? (
+                <div className="sm:hidden flex flex-col items-start gap-2">
+                  <button
+                    onClick={() => setActivePage('budget')}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100'
+                    } transition-all`}
+                  >
+                    {t('backLabel')}
+                  </button>
+                  <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                    {t('settingsLabel')}
+                  </h1>
+                </div>
+              ) : isBudgetView ? (
+                <div className="sm:hidden grid grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2">
+                  <button
+                    onClick={goToPreviousMonth}
+                    disabled={!canGoToPreviousMonth}
+                    className={`p-2 rounded-lg transition-all ${
+                      canGoToPreviousMonth
+                        ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
+                        : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                    }`}
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <h1 className={`text-xl font-bold flex items-center justify-center gap-2 min-w-0 text-center ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                    <span className="shrink-0">{t('budgetLabel')} -</span>
+                    <div
+                      className={`relative inline-flex items-center rounded-md pl-1 pr-1 py-0.5 font-bold leading-none transition-colors min-w-0 ${
+                        darkMode
+                          ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
+                          : 'text-gray-800 hover:bg-gray-900/5 border-gray-300/30 focus-within:border-gray-400/50'
+                      }`}
+                    >
+                      <span className="truncate">{formatMonthKey(currentMonthKey)}</span>
+                      <select
+                        id="month-year-select-mobile"
+                        value={currentMonthKey}
+                        disabled={!isHydrated}
+                        onChange={(e) => trySelectMonthKey(e.target.value)}
+                        aria-label={t('monthSelectLabel')}
+                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      >
+                        {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
+                          <option key={monthKey} value={monthKey}>
+                            {formatMonthKey(monthKey)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </h1>
+                  <button
+                    onClick={goToNextMonth}
+                    disabled={!canGoToNextMonth}
+                    className={`p-2 rounded-lg transition-all ${
+                      canGoToNextMonth
+                        ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
+                        : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                    }`}
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+              ) : (
+                <h1 className={`sm:hidden text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                  {pageLabel}
+                </h1>
+              )}
+              <div className="hidden sm:flex items-center gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   {isSettingsView ? (
                     <div className="flex flex-col items-start gap-2">
@@ -5035,7 +5135,7 @@ const App: React.FC = () => {
                     </h1>
                   )}
                 </div>
-                <div className="ml-auto flex items-center gap-3">
+                <div className="ml-auto hidden sm:flex items-center gap-3">
                   <div className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
                     darkMode ? 'bg-gray-900/50 border border-gray-800' : 'bg-white/80 border border-gray-200'
                   }`}
@@ -5056,32 +5156,6 @@ const App: React.FC = () => {
                         darkMode={darkMode}
                       />
                     </div>
-                    <div ref={menuRef} className="relative sm:hidden">
-                      <button
-                        onClick={() => setMenuOpen(prev => !prev)}
-                        className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
-                          darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
-                        }`}
-                        aria-label={t('accountMenuLabel')}
-                      >
-                        {resolvedUserAvatarUrl ? (
-                          <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
-                        ) : (
-                          userInitial
-                        )}
-                      </button>
-                      {menuOpen && (
-                        <div
-                          className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
-                            darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-800'
-                          }`}
-                        >
-                          <div className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500">
-                            {userDisplayName}
-                          </div>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -5100,10 +5174,10 @@ const App: React.FC = () => {
                 ))}
               </nav>
               {isBudgetView && (
-                <div className="flex items-center gap-2 sm:hidden">
+                <div className="flex items-center justify-end sm:hidden">
                   <button
                     onClick={deleteCurrentMonth}
-                    className="w-full px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
+                    className="px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
                   >
                     {t('deleteMonth')}
                   </button>

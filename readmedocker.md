@@ -20,12 +20,12 @@
 - 📊 Monthly budget dashboards
 - 💳 Fixed and flexible expense tracking
 - 👥 Shared budgets for couples
-- 🎨 Theme, language, and sorting preferences
+- 🎨 Theme, language, and sorting preferences (per user)
 - 🔒 JWT authentication and user roles
 - 📱 Responsive UI
 - 🖼️ User profile images
 - 🇬🇧EN/🇫🇷FR Translations
-- 💱 Multi-currency support (Comming Soon)
+- 💱 Multi-currency support (EUR/USD)
 - 🌐 PWA Support
 
 ## Requirements
@@ -62,6 +62,7 @@ services:
       JWT_SECRET: change_me_very_long_secret_key
       PASSWORD_MIN_LENGTH: 8
       PASSWORD_RESET_TOKEN_TTL_MINUTES: 60
+      # FORCE_SCHEMA_INIT: "true" # only if your DB user owns the tables
       PGHOST: db
       PGPORT: 5432
       PGUSER: homybudget
@@ -94,7 +95,9 @@ http://localhost:8080
 
 4) Complete the first-run wizard to create your admin user.
 
-Note: the database schema is initialized automatically by the app on first start.
+Note: the database schema is initialized automatically by the app on first start (empty DB).
+If you use an external DB with existing tables and a non-owner user, the app skips schema init.
+You can force it with `FORCE_SCHEMA_INIT=true` (only if your DB user owns the tables).
 
 ### Option 2: Docker with external database
 
@@ -107,6 +110,7 @@ docker run -d \
   -e JWT_SECRET=YourVerySecretJWTKey \
   -e PASSWORD_MIN_LENGTH=8 \
   -e PASSWORD_RESET_TOKEN_TTL_MINUTES=60 \
+  -e FORCE_SCHEMA_INIT=true \
   -e PGHOST=your_db_host \
   -e PGPORT=5432 \
   -e PGUSER=your_db_user \
@@ -132,6 +136,7 @@ docker run -d \
 | `PGUSER` | PostgreSQL user | - | Yes |
 | `PGPASSWORD` | PostgreSQL password | - | Yes |
 | `PGDATABASE` | PostgreSQL database name | - | Yes |
+| `FORCE_SCHEMA_INIT` | Force schema init even if tables exist | - | No |
 
 ## Volumes
 
@@ -199,7 +204,7 @@ docker compose logs db
 ```
 
 ### Can’t log in
-- Check `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
+- Make sure the first-run wizard was completed.
 - Review app logs for authentication errors.
 
 ## License

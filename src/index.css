@@ -9,6 +9,12 @@
   --homy-red: #E85D5D;
   --homy-orange: #F5915D;
   --homy-yellow: #F9B55E;
+  --app-bg: #f8fafc;
+}
+
+html,
+body {
+  background-color: var(--app-bg, #f8fafc);
 }
 
 body {
