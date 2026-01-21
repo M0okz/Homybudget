@@ -4437,7 +4437,9 @@ const App: React.FC = () => {
                 {t('appName')}
               </div>
             </div>
-            {sidebarNav}
+            <div className="flex-1 overflow-y-auto">
+              {sidebarNav}
+            </div>
             {sidebarFooter}
           </aside>
 
@@ -4447,7 +4449,7 @@ const App: React.FC = () => {
               onClick={() => setSidebarOpen(false)}
             />
             <aside
-              className={`absolute left-0 top-0 h-full w-64 p-4 transition-transform duration-300 ${
+              className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 ${
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full'
               } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white text-slate-800'}`}
             >
@@ -4469,7 +4471,9 @@ const App: React.FC = () => {
                   <X size={18} />
                 </button>
               </div>
-              {sidebarNav}
+              <div className="flex-1 overflow-y-auto">
+                {sidebarNav}
+              </div>
               {sidebarFooter}
             </aside>
           </div>
