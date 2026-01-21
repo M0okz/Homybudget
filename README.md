@@ -1,6 +1,8 @@
 # Homybudget
 A budget app that is both smart and useful.
-![alt text](<CleanShot 2026-01-20 at 10.59.36.png>)
+
+![alt text](<CleanShot 2026-01-21 at 11.19.19.png>)
+
 Budget tracker with a React + Vite frontend and a Node/Express + PostgreSQL API.
 
 ## Features
