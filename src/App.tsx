@@ -1300,7 +1300,7 @@ const PersonColumnHeader = ({
           onChange={(e) => setTempName(e.target.value)}
           className={`px-3 py-1.5 border rounded-lg text-sm ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
         />
-        <button onClick={() => saveName(personKey)} className={darkMode ? 'text-white' : 'text-gray-800'}>
+        <button onClick={() => saveName(personKey)} className={darkMode ? 'text-emerald-300' : 'text-emerald-600'}>
           <Check size={16} />
         </button>
         <button onClick={cancelEditingName} className="text-red-600">
@@ -1459,7 +1459,7 @@ const BudgetFixedSection = ({
           <Plus size={16} />
         </button>
       </div>
-      <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-gray-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
+      <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
         {orderedExpenses.length === 0 ? (
           <div className="py-6" />
         ) : (
@@ -1492,7 +1492,7 @@ const BudgetFixedSection = ({
                         <span>{categoryLabel}</span>
                       </span>
                     )}
-                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!sortByCost && (
@@ -1501,7 +1501,7 @@ const BudgetFixedSection = ({
                           type="button"
                           onClick={() => moveFixedExpense(personKey, expense.id, 'up')}
                           disabled={isFirst}
-                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
                           aria-label={t('moveUpLabel')}
                         >
                           <ChevronUp size={14} />
@@ -1510,7 +1510,7 @@ const BudgetFixedSection = ({
                           type="button"
                           onClick={() => moveFixedExpense(personKey, expense.id, 'down')}
                           disabled={isLast}
-                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
                           aria-label={t('moveDownLabel')}
                         >
                           <ChevronDown size={14} />
@@ -1520,7 +1520,7 @@ const BudgetFixedSection = ({
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
-                      className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
+                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
                       aria-label={t('editLabel')}
                     >
                       <Edit2 size={14} />
@@ -1540,7 +1540,7 @@ const BudgetFixedSection = ({
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 darkMode
-                  ? 'bg-white/10 text-gray-200'
+                  ? 'bg-white/10 text-slate-200'
                   : 'bg-[#fff1ec] text-[#c45b47]'
               }`}
               title={t('remainingToPayLabel')}
@@ -1605,7 +1605,7 @@ const BudgetFreeSection = ({
           <Plus size={16} />
         </button>
       </div>
-      <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-gray-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
+      <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
         {orderedCategories.length === 0 ? (
           <div className="py-6" />
         ) : (
@@ -1640,11 +1640,11 @@ const BudgetFreeSection = ({
                       </span>
                     )}
                     {recurringLabel && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-gray-300' : 'bg-slate-100 text-slate-600'}`}>
-                        {recurringLabel}
-                      </span>
-                    )}
-                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                      {recurringLabel}
+                    </span>
+                  )}
+                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!sortByCost && (
@@ -1653,7 +1653,7 @@ const BudgetFreeSection = ({
                           type="button"
                           onClick={() => moveCategory(personKey, category.id, 'up')}
                           disabled={isFirst}
-                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
                           aria-label={t('moveUpLabel')}
                         >
                           <ChevronUp size={14} />
@@ -1662,7 +1662,7 @@ const BudgetFreeSection = ({
                           type="button"
                           onClick={() => moveCategory(personKey, category.id, 'down')}
                           disabled={isLast}
-                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-gray-200' : 'text-gray-600'}`}
+                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
                           aria-label={t('moveDownLabel')}
                         >
                           <ChevronDown size={14} />
@@ -1672,7 +1672,7 @@ const BudgetFreeSection = ({
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
-                      className={`p-1 rounded ${darkMode ? 'text-gray-200' : 'text-gray-600'} hover:opacity-80`}
+                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
                       aria-label={t('editLabel')}
                     >
                       <Edit2 size={14} />
@@ -1692,7 +1692,7 @@ const BudgetFreeSection = ({
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 darkMode
-                  ? 'bg-white/10 text-gray-200'
+                  ? 'bg-white/10 text-slate-200'
                   : 'bg-[#fff1ec] text-[#c45b47]'
               }`}
               title={t('remainingToPayLabel')}
@@ -1910,17 +1910,17 @@ const LoginScreen = ({
 
   return (
     <div
-      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
+      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
       style={pageStyle}
     >
       <form
         onSubmit={handleSubmit}
-        className={`w-full max-w-sm rounded-2xl border shadow-lg p-6 space-y-4 ${
-          darkMode ? 'bg-gray-900/90 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+        className={`w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-lg ${
+          darkMode ? 'bg-slate-950/80 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
         }`}
       >
         <div className="space-y-1">
-          <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+          <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
           <h1 className="text-2xl font-semibold">{t('loginTitle')}</h1>
         </div>
 
@@ -1933,7 +1933,7 @@ const LoginScreen = ({
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               placeholder="admin"
             />
           </div>
@@ -1945,7 +1945,7 @@ const LoginScreen = ({
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+              className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               placeholder="********"
             />
           </div>
@@ -1969,7 +1969,7 @@ const LoginScreen = ({
             type="button"
             onClick={onOidcLogin}
             className={`w-full py-2 rounded-md text-sm font-semibold border transition-colors ${
-              darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+              darkMode ? 'border-slate-700 text-slate-100 hover:bg-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
           >
             {t('loginWithProviderLabel')} {resolvedProviderName}
@@ -2058,18 +2058,18 @@ const OnboardingWizard = ({
 
   return (
     <div
-      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
+      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
       style={pageStyle}
     >
       <div
-        className={`w-full max-w-sm rounded-2xl border shadow-lg p-6 space-y-4 ${
-          darkMode ? 'bg-gray-900/90 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+        className={`w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-lg ${
+          darkMode ? 'bg-slate-950/80 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
         }`}
       >
         <div className="space-y-1">
-          <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+          <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
           <h1 className="text-2xl font-semibold">{t('onboardingTitle')}</h1>
-          <div className="text-xs text-gray-500">{t('onboardingStepLabel')} {step + 1}/{totalSteps}</div>
+          <div className="text-xs text-slate-500">{t('onboardingStepLabel')} {step + 1}/{totalSteps}</div>
         </div>
 
         {step === 0 && (
@@ -2082,7 +2082,7 @@ const OnboardingWizard = ({
                 autoComplete="username"
                 value={adminForm.username}
                 onChange={(event) => setAdminForm(prev => ({ ...prev, username: event.target.value }))}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               />
             </div>
             <div className="space-y-1">
@@ -2093,7 +2093,7 @@ const OnboardingWizard = ({
                 autoComplete="new-password"
                 value={adminForm.password}
                 onChange={(event) => setAdminForm(prev => ({ ...prev, password: event.target.value }))}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               />
             </div>
             <div className="space-y-1">
@@ -2104,7 +2104,7 @@ const OnboardingWizard = ({
                 autoComplete="new-password"
                 value={adminForm.confirm}
                 onChange={(event) => setAdminForm(prev => ({ ...prev, confirm: event.target.value }))}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               />
             </div>
             {error && (
@@ -2129,8 +2129,8 @@ const OnboardingWizard = ({
                 onClick={() => onLanguageChange('fr')}
                 className={`px-3 py-2 rounded-md border text-sm font-semibold ${
                   languagePreference === 'fr'
-                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
-                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                    ? (darkMode ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-600 text-white border-emerald-600')
+                    : (darkMode ? 'border-slate-700 text-slate-200' : 'border-slate-200 text-slate-600')
                 }`}
               >
                 {t('frenchLabel')}
@@ -2140,15 +2140,15 @@ const OnboardingWizard = ({
                 onClick={() => onLanguageChange('en')}
                 className={`px-3 py-2 rounded-md border text-sm font-semibold ${
                   languagePreference === 'en'
-                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
-                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                    ? (darkMode ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-600 text-white border-emerald-600')
+                    : (darkMode ? 'border-slate-700 text-slate-200' : 'border-slate-200 text-slate-600')
                 }`}
               >
                 {t('englishLabel')}
               </button>
             </div>
             <div className="flex items-center justify-between">
-              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-slate-500">
                 {t('onboardingBack')}
               </button>
               <button
@@ -2171,8 +2171,8 @@ const OnboardingWizard = ({
                 onClick={() => onThemeChange('light')}
                 className={`px-3 py-2 rounded-md border text-sm font-semibold ${
                   themePreference === 'light'
-                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
-                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                    ? (darkMode ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-600 text-white border-emerald-600')
+                    : (darkMode ? 'border-slate-700 text-slate-200' : 'border-slate-200 text-slate-600')
                 }`}
               >
                 {t('lightLabel')}
@@ -2182,15 +2182,15 @@ const OnboardingWizard = ({
                 onClick={() => onThemeChange('dark')}
                 className={`px-3 py-2 rounded-md border text-sm font-semibold ${
                   themePreference === 'dark'
-                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
-                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                    ? (darkMode ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-600 text-white border-emerald-600')
+                    : (darkMode ? 'border-slate-700 text-slate-200' : 'border-slate-200 text-slate-600')
                 }`}
               >
                 {t('darkLabel')}
               </button>
             </div>
             <div className="flex items-center justify-between">
-              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-slate-500">
                 {t('onboardingBack')}
               </button>
               <button
@@ -2216,8 +2216,8 @@ const OnboardingWizard = ({
                 }}
                 className={`px-3 py-2 rounded-md border text-sm font-semibold ${
                   modeChoice === 'solo'
-                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
-                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                    ? (darkMode ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-600 text-white border-emerald-600')
+                    : (darkMode ? 'border-slate-700 text-slate-200' : 'border-slate-200 text-slate-600')
                 }`}
               >
                 {t('onboardingSoloLabel')}
@@ -2230,15 +2230,15 @@ const OnboardingWizard = ({
                 }}
                 className={`px-3 py-2 rounded-md border text-sm font-semibold ${
                   modeChoice === 'duo'
-                    ? (darkMode ? 'bg-white text-gray-900 border-white' : 'bg-slate-900 text-white border-slate-900')
-                    : (darkMode ? 'border-gray-700 text-gray-200' : 'border-gray-300 text-gray-700')
+                    ? (darkMode ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-600 text-white border-emerald-600')
+                    : (darkMode ? 'border-slate-700 text-slate-200' : 'border-slate-200 text-slate-600')
                 }`}
               >
                 {t('onboardingDuoLabel')}
               </button>
             </div>
             <div className="flex items-center justify-between">
-              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-slate-500">
                 {t('onboardingBack')}
               </button>
               <button
@@ -2261,18 +2261,18 @@ const OnboardingWizard = ({
                 value={person1Name}
                 onChange={(event) => setPerson1Name(event.target.value)}
                 placeholder={t('onboardingPerson1Placeholder')}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               />
               <input
                 type="text"
                 value={person2Name}
                 onChange={(event) => setPerson2Name(event.target.value)}
                 placeholder={t('onboardingPerson2Placeholder')}
-                className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               />
             </div>
             <div className="flex items-center justify-between">
-              <button type="button" onClick={handleBack} className="text-sm font-semibold text-gray-500">
+              <button type="button" onClick={handleBack} className="text-sm font-semibold text-slate-500">
                 {t('onboardingBack')}
               </button>
               <button
@@ -2373,7 +2373,7 @@ const SettingsView = ({
   const profileInitial = (displayName.trim()[0] || 'U').toUpperCase();
   const resolvedOidcLinkName = oidcLinkProviderName.trim() || 'OIDC';
   const usernameLabel = user?.username || fallbackUsername || '';
-  const activeToggleClass = 'bg-[#5B4B8A]';
+  const activeToggleClass = 'bg-emerald-500';
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
@@ -2422,20 +2422,20 @@ const SettingsView = ({
     disabled?: boolean;
   }) => (
     <div
-      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
-        darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+        darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
       } ${disabled ? 'opacity-60' : ''}`}
     >
       <div className="flex items-center gap-3">
         <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
-          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-100 text-slate-600'
+          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
         }`}>
           <Icon size={18} />
         </span>
         <div>
           <div className="font-semibold">{label}</div>
           {hint && (
-            <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+            <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
               {hint}
             </div>
           )}
@@ -2473,10 +2473,10 @@ const SettingsView = ({
     onChange: (next: string) => void;
     children: React.ReactNode;
   }) => (
-    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
       <div className="flex items-center gap-3">
         <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
-          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-100 text-slate-600'
+          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
         }`}>
           <Icon size={18} />
         </span>
@@ -2485,7 +2485,7 @@ const SettingsView = ({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+        className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
       >
         {children}
       </select>
@@ -2749,19 +2749,19 @@ const SettingsView = ({
     }
   };
 
-  const cardClassName = `rounded-2xl border shadow-sm p-6 ${
-    darkMode ? 'bg-gray-900/80 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+  const cardClassName = `rounded-2xl p-6 ${
+    darkMode ? 'bg-slate-900/70 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
   }`;
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-6">
+    <div className="w-full max-w-5xl mx-auto space-y-8">
       <div className={cardClassName}>
         <div className="space-y-6">
           <section className="space-y-3">
             <h3 className="text-lg font-semibold">{t('profileTitle')}</h3>
             <div className="space-y-3">
-            <div className={`flex flex-wrap items-center gap-4 rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
-              <div className={`h-12 w-12 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
+            <div className={`flex flex-wrap items-center gap-4 rounded-xl border px-4 py-3 ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
                 {avatarInput.trim() ? (
                   <img src={resolveAssetUrl(avatarInput.trim()) ?? ''} alt={displayName} className="h-full w-full object-cover" />
                 ) : (
@@ -2771,20 +2771,22 @@ const SettingsView = ({
               <div className="flex-1 min-w-[10rem]">
                 <div className="text-lg font-semibold">{displayName}</div>
                 {usernameLabel && (
-                  <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                  <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
                     @{usernameLabel}
                   </div>
                 )}
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${darkMode ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'}`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${darkMode ? 'bg-slate-800 text-slate-200' : 'bg-emerald-50 text-emerald-700'}`}>
                 {roleDisplay}
               </span>
             </div>
               {oidcLinkEnabled && (
-                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+                  darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
+                }`}>
                   <div>
                     <div className="font-semibold">{t('oidcLinkTitle')}</div>
-                    <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                    <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
                       {t('oidcLinkHint')}
                     </div>
                   </div>
@@ -2792,7 +2794,7 @@ const SettingsView = ({
                     type="button"
                     onClick={handleOidcLink}
                     disabled={oidcLinkLoading}
-                    className={`px-4 py-2 rounded-md text-xs font-semibold btn-gradient ${oidcLinkLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    className={`px-4 py-2 rounded-full text-xs font-semibold pill-emerald ${oidcLinkLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     {oidcLinkLoading ? t('oidcLinking') : `${t('oidcLinkButton')} ${resolvedOidcLinkName}`}
                   </button>
@@ -2803,9 +2805,9 @@ const SettingsView = ({
                   {oidcLinkError}
                 </div>
               )}
-              <form onSubmit={handleAvatarUpdate} className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+              <form onSubmit={handleAvatarUpdate} className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
                 <div className="flex flex-wrap items-center gap-4">
-                  <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                  <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
                     {avatarInput.trim() ? (
                       <img src={resolveAssetUrl(avatarInput.trim()) ?? ''} alt={displayName} className="h-full w-full object-cover" />
                     ) : (
@@ -2813,15 +2815,15 @@ const SettingsView = ({
                     )}
                   </div>
                   <div className="flex-1 min-w-[12rem] space-y-1">
-                    <label className={darkMode ? 'text-gray-300' : 'text-gray-600'}>{t('profileImageLabel')}</label>
+                    <label className={darkMode ? 'text-slate-300' : 'text-slate-600'}>{t('profileImageLabel')}</label>
                     <input
                       type="url"
                       value={avatarInput}
                       onChange={(event) => setAvatarInput(event.target.value)}
-                      className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                      className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                       placeholder={t('profileImageUrlPlaceholder')}
                     />
-                    <div className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                    <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
                       {t('profileImageHint')}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -2829,18 +2831,18 @@ const SettingsView = ({
                         type="file"
                         accept="image/*"
                         onChange={(event) => setAvatarFile(event.target.files?.[0] ?? null)}
-                        className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                        className={`text-xs ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}
                       />
                       <button
                         type="button"
                         onClick={handleAvatarUpload}
                         disabled={avatarUploadLoading || !avatarFile}
-                        className={`px-3 py-1.5 rounded-md text-xs font-semibold btn-gradient ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold pill-emerald ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         {avatarUploadLoading ? t('profileImageUploadLoading') : t('profileImageUploadButton')}
                       </button>
                       {avatarFile && (
-                        <span className={darkMode ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                        <span className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
                           {avatarFile.name}
                         </span>
                       )}
@@ -2851,7 +2853,7 @@ const SettingsView = ({
                   <button
                     type="submit"
                     disabled={avatarLoading}
-                    className={`px-4 py-2 rounded-md font-semibold btn-gradient ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    className={`px-4 py-2 rounded-full font-semibold pill-emerald ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
                   </button>
@@ -2879,7 +2881,7 @@ const SettingsView = ({
                   autoComplete="current-password"
                   value={passwordForm.current}
                   onChange={(event) => setPasswordForm(prev => ({ ...prev, current: event.target.value }))}
-                  className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   placeholder={t('currentPasswordPlaceholder')}
                 />
                 <input
@@ -2887,7 +2889,7 @@ const SettingsView = ({
                   autoComplete="new-password"
                   value={passwordForm.next}
                   onChange={(event) => setPasswordForm(prev => ({ ...prev, next: event.target.value }))}
-                  className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   placeholder={t('newPasswordPlaceholder')}
                 />
                 <input
@@ -2895,7 +2897,7 @@ const SettingsView = ({
                   autoComplete="new-password"
                   value={passwordForm.confirm}
                   onChange={(event) => setPasswordForm(prev => ({ ...prev, confirm: event.target.value }))}
-                  className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   placeholder={t('confirmPasswordPlaceholder')}
                 />
               </div>
@@ -2912,7 +2914,7 @@ const SettingsView = ({
               <button
                 type="submit"
                 disabled={passwordLoading}
-                className={`px-4 py-2 rounded-md font-semibold btn-gradient ${passwordLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`px-4 py-2 rounded-full font-semibold pill-emerald ${passwordLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 {passwordLoading ? t('updatingButton') : t('updateButton')}
               </button>
@@ -2975,7 +2977,7 @@ const SettingsView = ({
                     onChange={onOidcEnabledChange}
                   />
                   {oidcEnabled && (
-                    <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                    <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="text-xs font-semibold">
                           {t('oidcProviderLabel')}
@@ -2984,8 +2986,8 @@ const SettingsView = ({
                             value={oidcProviderName}
                             onChange={(event) => onOidcProviderNameChange(event.target.value)}
                             placeholder="Keycloak / Authentik"
-                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                             }`}
                           />
                         </label>
@@ -2996,8 +2998,8 @@ const SettingsView = ({
                             value={oidcIssuer}
                             onChange={(event) => onOidcIssuerChange(event.target.value)}
                             placeholder="https://auth.example.com/realms/homybudget"
-                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                             }`}
                           />
                         </label>
@@ -3007,8 +3009,8 @@ const SettingsView = ({
                             type="text"
                             value={oidcClientId}
                             onChange={(event) => onOidcClientIdChange(event.target.value)}
-                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                             }`}
                           />
                         </label>
@@ -3018,8 +3020,8 @@ const SettingsView = ({
                             type="password"
                             value={oidcClientSecret}
                             onChange={(event) => onOidcClientSecretChange(event.target.value)}
-                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                             }`}
                           />
                         </label>
@@ -3030,8 +3032,8 @@ const SettingsView = ({
                             value={oidcRedirectUri}
                             onChange={(event) => onOidcRedirectUriChange(event.target.value)}
                             placeholder="https://app.example.com/api/auth/oidc/callback"
-                            className={`mt-1 w-full px-3 py-2 rounded-md border text-sm font-semibold ${
-                              darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                             }`}
                           />
                         </label>
@@ -3047,7 +3049,9 @@ const SettingsView = ({
             <section className="space-y-3">
               <h3 className="text-lg font-semibold">{t('personLinkSectionTitle')}</h3>
               <div className="space-y-3">
-                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+                  darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
+                }`}>
                   <div className="font-semibold">{t('person1Label')}</div>
                   <select
                     value={person1UserId ?? ''}
@@ -3056,7 +3060,7 @@ const SettingsView = ({
                       onPersonLinkChange('person1', selected);
                     }}
                     disabled={usersLoading}
-                    className={`min-w-[12rem] px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`min-w-[12rem] px-3 py-1.5 rounded-lg border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   >
                     <option value="">{t('unassignedLabel')}</option>
                     {users.map(item => {
@@ -3070,7 +3074,9 @@ const SettingsView = ({
                     })}
                   </select>
                 </div>
-                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200'}`}>
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+                  darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
+                }`}>
                   <div className="font-semibold">{t('person2Label')}</div>
                   <select
                     value={person2UserId ?? ''}
@@ -3079,7 +3085,7 @@ const SettingsView = ({
                       onPersonLinkChange('person2', selected);
                     }}
                     disabled={usersLoading}
-                    className={`min-w-[12rem] px-3 py-1.5 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`min-w-[12rem] px-3 py-1.5 rounded-lg border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   >
                     <option value="">{t('unassignedLabel')}</option>
                     {users.map(item => {
@@ -3093,7 +3099,7 @@ const SettingsView = ({
                     })}
                   </select>
                 </div>
-                <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+                <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
                   {usersLoading ? t('loadingUsers') : t('personLinkSectionHint')}
                 </div>
               </div>
@@ -3108,28 +3114,28 @@ const SettingsView = ({
                   type="button"
                   onClick={() => void loadUsers()}
                   disabled={usersLoading}
-                  className={`px-3 py-1.5 rounded-md text-sm font-semibold border ${
-                    darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold border ${
+                    darkMode ? 'border-slate-700 text-slate-100 hover:bg-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   } ${usersLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   {t('refreshButton')}
                 </button>
               </div>
 
-              <form onSubmit={handleCreateUser} className={`rounded-lg border p-4 space-y-3 ${darkMode ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+              <form onSubmit={handleCreateUser} className={`rounded-xl border p-4 space-y-3 ${darkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-100 bg-white/90'}`}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <input
                     type="text"
                     value={createForm.username}
                     onChange={(event) => setCreateForm(prev => ({ ...prev, username: event.target.value }))}
-                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                     placeholder={t('createUserUsernamePlaceholder')}
                   />
                   <input
                     type="text"
                     value={createForm.displayName}
                     onChange={(event) => setCreateForm(prev => ({ ...prev, displayName: event.target.value }))}
-                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                     placeholder={t('createUserDisplayNamePlaceholder')}
                   />
                 </div>
@@ -3138,20 +3144,20 @@ const SettingsView = ({
                     type="password"
                     value={createForm.password}
                     onChange={(event) => setCreateForm(prev => ({ ...prev, password: event.target.value }))}
-                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                     placeholder={t('createUserPasswordPlaceholder')}
                   />
                   <input
                     type="password"
                     value={createForm.confirmPassword}
                     onChange={(event) => setCreateForm(prev => ({ ...prev, confirmPassword: event.target.value }))}
-                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                     placeholder={t('createUserConfirmPlaceholder')}
                   />
                   <select
                     value={createForm.role}
                     onChange={(event) => setCreateForm(prev => ({ ...prev, role: event.target.value === 'admin' ? 'admin' : 'user' }))}
-                    className={`w-full px-3 py-2 rounded-md border text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   >
                     <option value="user">{t('roleUserLabel')}</option>
                     <option value="admin">{t('roleAdminLabel')}</option>
@@ -3170,23 +3176,23 @@ const SettingsView = ({
                 <button
                   type="submit"
                   disabled={createLoading}
-                  className={`px-4 py-2 rounded-md font-semibold btn-gradient ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`px-4 py-2 rounded-full font-semibold pill-emerald ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   {createLoading ? t('creatingUserButton') : t('createUserButton')}
                 </button>
               </form>
 
               {resetInfo && (
-                <div className={`rounded-lg border px-4 py-3 text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-200 text-gray-700'}`}>
+                <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 text-slate-200' : 'border-slate-100 text-slate-700'}`}>
                   <div className="font-semibold mb-1">{t('resetTokenTitle')}</div>
                   <div className="break-all">{resetInfo.token}</div>
-                  <div className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <div className={`text-xs mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                     {t('expiresOnLabel')} {formatTimestamp(resetInfo.expiresAt)}
                   </div>
                 </div>
               )}
 
-              <div className={`rounded-lg border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+              <div className={`rounded-xl border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
                 <div className="p-4">
                   {usersLoading ? (
                     <div className="text-sm">{t('loadingUsers')}</div>
@@ -3196,7 +3202,7 @@ const SettingsView = ({
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className={darkMode ? 'text-gray-400' : 'text-gray-500'}>
+                          <tr className={darkMode ? 'text-slate-400' : 'text-slate-500'}>
                             <th className="text-left font-medium py-2">{t('accountLabel')}</th>
                             <th className="text-left font-medium py-2">{t('roleLabel')}</th>
                             <th className="text-left font-medium py-2">{t('statusLabel')}</th>
@@ -3208,7 +3214,7 @@ const SettingsView = ({
                           {users.map(item => {
                             const isSelf = item.id === currentUserId;
                             return (
-                              <tr key={item.id} className={darkMode ? 'border-t border-gray-800' : 'border-t border-gray-200'}>
+                              <tr key={item.id} className={darkMode ? 'border-t border-slate-800' : 'border-t border-slate-100'}>
                                 <td className="py-2 pr-4">
                                   {editDisplayNameId === item.id ? (
                                     <div className="space-y-1">
@@ -3228,16 +3234,16 @@ const SettingsView = ({
                                             }
                                           }}
                                           placeholder={item.username}
-                                          className={`w-full max-w-[14rem] px-2 py-1 rounded-md border text-sm ${
-                                            darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                                          className={`w-full max-w-[14rem] px-2 py-1 rounded-lg border text-sm ${
+                                            darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                                           }`}
                                           autoFocus
                                         />
                                         <button
                                           type="button"
                                           onClick={() => void saveDisplayNameEdit(item)}
-                                          className={`p-1.5 rounded-md ${
-                                            darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                          className={`p-1.5 rounded-full ${
+                                            darkMode ? 'bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                           }`}
                                           title={t('updateButton')}
                                         >
@@ -3246,15 +3252,15 @@ const SettingsView = ({
                                         <button
                                           type="button"
                                           onClick={cancelDisplayNameEdit}
-                                          className={`p-1.5 rounded-md ${
-                                            darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                          className={`p-1.5 rounded-full ${
+                                            darkMode ? 'bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                           }`}
                                           title={t('cancelLabel')}
                                         >
                                           <X size={14} />
                                         </button>
                                       </div>
-                                      <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>
+                                      <div className={darkMode ? 'text-slate-500 text-xs' : 'text-slate-500 text-xs'}>
                                         @{item.username}
                                       </div>
                                       {displayNameError && (
@@ -3268,12 +3274,12 @@ const SettingsView = ({
                                       type="button"
                                       onClick={() => startDisplayNameEdit(item)}
                                       disabled={Boolean(userActionId)}
-                                      className={`text-left ${darkMode ? 'text-gray-100' : 'text-gray-800'} ${
+                                      className={`text-left ${darkMode ? 'text-slate-100' : 'text-slate-800'} ${
                                         userActionId ? 'opacity-60 cursor-not-allowed' : 'hover:underline'
                                       }`}
                                     >
                                       <div className="font-semibold">{item.displayName || item.username}</div>
-                                      <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>
+                                      <div className={darkMode ? 'text-slate-500 text-xs' : 'text-slate-500 text-xs'}>
                                         @{item.username}
                                       </div>
                                     </button>
@@ -3284,8 +3290,8 @@ const SettingsView = ({
                                     value={item.role}
                                     disabled={Boolean(userActionId) || isSelf}
                                     onChange={(event) => handleRoleChange(item.id, event.target.value === 'admin' ? 'admin' : 'user')}
-                                    className={`px-2 py-1 rounded-md border text-sm ${
-                                      darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                                    className={`px-2 py-1 rounded-lg border text-sm ${
+                                      darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
                                     } ${isSelf ? 'opacity-60 cursor-not-allowed' : ''}`}
                                   >
                                     <option value="user">{t('roleUserLabel')}</option>
@@ -3299,6 +3305,7 @@ const SettingsView = ({
                                       checked={item.isActive}
                                       disabled={Boolean(userActionId) || isSelf}
                                       onChange={(event) => handleActiveChange(item.id, event.target.checked)}
+                                      className="h-4 w-4 accent-emerald-500"
                                     />
                                     <span>{item.isActive ? t('activeLabel') : t('blockedLabel')}</span>
                                   </label>
@@ -3309,8 +3316,8 @@ const SettingsView = ({
                                     type="button"
                                     disabled={Boolean(userActionId)}
                                     onClick={() => handleResetPassword(item.id)}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-semibold border ${
-                                      darkMode ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                                      darkMode ? 'border-slate-700 text-slate-100 hover:bg-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                                     } ${userActionId ? 'opacity-60 cursor-not-allowed' : ''}`}
                                   >
                                     {t('resetButton')}
@@ -5101,10 +5108,10 @@ const App: React.FC = () => {
             key={item.key}
             type="button"
             onClick={() => handleNavigate(item.key)}
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
               isActive
-                ? (darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-900')
-                : (darkMode ? 'text-slate-300 hover:bg-slate-800/60' : 'text-slate-600 hover:bg-slate-100/70')
+                ? (darkMode ? 'bg-slate-800 text-emerald-200' : 'bg-emerald-50 text-emerald-700 shadow-sm')
+                : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
             }`}
           >
             <Icon size={18} />
@@ -5116,13 +5123,13 @@ const App: React.FC = () => {
   );
 
   const sidebarFooter = (
-    <div className={`mt-auto pt-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+    <div className={`mt-auto pt-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => handleNavigate('settings')}
-          className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-            darkMode ? 'hover:bg-slate-800/70 text-slate-200' : 'hover:bg-slate-100/70 text-slate-700'
+          className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${
+            darkMode ? 'hover:bg-slate-900/70 text-slate-200' : 'hover:bg-white/80 text-slate-700'
           }`}
         >
           <div className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
@@ -5146,8 +5153,8 @@ const App: React.FC = () => {
         <button
           type="button"
           onClick={handleLogout}
-          className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all ${
-            darkMode ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          className={`h-9 w-9 flex items-center justify-center rounded-xl transition-all ${
+            darkMode ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white text-slate-500 hover:bg-slate-100'
           }`}
           aria-label={t('logoutLabel')}
           title={t('logoutLabel')}
@@ -5158,8 +5165,8 @@ const App: React.FC = () => {
       <button
         type="button"
         onClick={toggleDarkMode}
-        className={`mt-3 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
-          darkMode ? 'hover:bg-slate-800/70 text-slate-200' : 'hover:bg-slate-100/70 text-slate-700'
+        className={`mt-3 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all ${
+          darkMode ? 'hover:bg-slate-900/70 text-slate-200' : 'hover:bg-white/80 text-slate-700'
         }`}
         aria-label={t('themeToggleLabel')}
       >
@@ -5169,7 +5176,7 @@ const App: React.FC = () => {
           {darkMode ? t('darkLabel') : t('lightLabel')}
         </span>
       </button>
-      <div className={`mt-2 flex items-center justify-center gap-2 text-xs uppercase tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+      <div className={`mt-3 flex items-center justify-center gap-2 text-xs uppercase tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
         <span>V{APP_VERSION}</span>
         {updateAvailable && latestVersion && (
           <span className="version-pill version-breathing">{latestVersion}</span>
@@ -5187,12 +5194,12 @@ const App: React.FC = () => {
         <div className="flex min-h-screen">
           <aside
             className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:py-6 sm:px-4 sm:border-r transition-colors sticky top-0 h-screen ${
-              darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'
-            }`}
+              darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/70 border-slate-100'
+            } backdrop-blur-lg`}
           >
             <div className="flex items-center gap-3 px-2 mb-6">
               <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-800'
+                darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
               }`}>
                 HB
               </div>
@@ -5214,12 +5221,12 @@ const App: React.FC = () => {
             <aside
               className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 ${
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-              } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white text-slate-800'}`}
+              } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white/90 text-slate-800'} backdrop-blur-lg`}
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                    darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-800'
+                    darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
                   }`}>
                     HB
                   </div>
@@ -5228,7 +5235,7 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(false)}
-                  className={`p-2 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-100'}`}
+                  className={`p-2 rounded-xl ${darkMode ? 'bg-slate-800' : 'bg-white'}`}
                   aria-label="Close menu"
                 >
                   <X size={18} />
@@ -5247,7 +5254,7 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
-                  className={`p-2 rounded-lg ${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-700'}`}
+                  className={`p-2 rounded-full shadow-sm ${darkMode ? 'bg-slate-900 text-white' : 'bg-white/90 text-slate-700'}`}
                   aria-label="Open menu"
                 >
                   <Menu size={20} />
@@ -5255,8 +5262,8 @@ const App: React.FC = () => {
                 <div ref={menuRef} className="relative">
                   <button
                     onClick={() => setMenuOpen(prev => !prev)}
-                    className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
-                      darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
+                    className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden shadow-sm ${
+                      darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'
                     }`}
                     aria-label={t('accountMenuLabel')}
                   >
@@ -5269,10 +5276,10 @@ const App: React.FC = () => {
                   {menuOpen && (
                     <div
                       className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
-                        darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-800'
+                        darkMode ? 'bg-slate-950/90 border-slate-800 text-slate-100' : 'bg-white/95 border-slate-100 text-slate-800'
                       }`}
                     >
-                      <div className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500">
+                      <div className="px-3 py-2 text-xs uppercase tracking-wide text-slate-500">
                         {userDisplayName}
                       </div>
                     </div>
@@ -5284,12 +5291,12 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setActivePage('budget')}
                     className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                      darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100'
+                      darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-white text-slate-700 hover:bg-slate-50'
                     } transition-all`}
                   >
                     {t('backLabel')}
                   </button>
-                  <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                  <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                     {t('settingsLabel')}
                   </h1>
                 </div>
@@ -5298,21 +5305,21 @@ const App: React.FC = () => {
                   <button
                     onClick={goToPreviousMonth}
                     disabled={!canGoToPreviousMonth}
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-2 rounded-full shadow-sm transition-all ${
                       canGoToPreviousMonth
-                        ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
-                        : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                        ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
+                        : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
                     }`}
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
-                  <h1 className={`text-xl font-bold flex items-center justify-center gap-2 min-w-0 text-center ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                  <h1 className={`text-xl font-bold flex items-center justify-center gap-2 min-w-0 text-center ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                     <span className="shrink-0">{t('budgetLabel')} -</span>
                     <div
                       className={`relative inline-flex items-center rounded-md pl-1 pr-1 py-0.5 font-bold leading-none transition-colors min-w-0 ${
                         darkMode
                           ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
-                          : 'text-gray-800 hover:bg-gray-900/5 border-gray-300/30 focus-within:border-gray-400/50'
+                          : 'text-slate-800 hover:bg-slate-900/5 border-slate-300/30 focus-within:border-slate-400/50'
                       }`}
                     >
                       <span className="truncate">{formatMonthKey(currentMonthKey)}</span>
@@ -5335,17 +5342,17 @@ const App: React.FC = () => {
                   <button
                     onClick={goToNextMonth}
                     disabled={!canGoToNextMonth}
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-2 rounded-full shadow-sm transition-all ${
                       canGoToNextMonth
-                        ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
-                        : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                        ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
+                        : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
                     }`}
                   >
                     <ChevronRight className="h-5 w-5" />
                   </button>
                 </div>
               ) : (
-                <h1 className={`sm:hidden text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                <h1 className={`sm:hidden text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                   {pageLabel}
                 </h1>
               )}
@@ -5355,13 +5362,13 @@ const App: React.FC = () => {
                     <div className="flex flex-col items-start gap-2">
                       <button
                         onClick={() => setActivePage('budget')}
-                        className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                          darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-2 rounded-full text-sm font-semibold shadow-sm ${
+                          darkMode ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-white text-slate-700 hover:bg-slate-50'
                         } transition-all`}
                       >
                         {t('backLabel')}
                       </button>
-                      <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                         {t('settingsLabel')}
                       </h1>
                     </div>
@@ -5370,21 +5377,21 @@ const App: React.FC = () => {
                       <button
                         onClick={goToPreviousMonth}
                         disabled={!canGoToPreviousMonth}
-                        className={`p-1.5 sm:p-2 rounded-lg transition-all ${
+                        className={`p-2 rounded-full shadow-sm transition-all ${
                           canGoToPreviousMonth
-                            ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
-                            : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                            ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
+                            : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
                         }`}
                       >
                         <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
                       </button>
-                      <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                         <span>{t('budgetLabel')} -</span>
                         <div
                           className={`relative inline-flex items-center rounded-md pl-1.5 pr-1.5 py-0.5 text-2xl sm:text-3xl font-bold leading-none transition-colors focus-within:outline-none focus-within:border ${
                             darkMode
                               ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
-                              : 'text-gray-800 hover:bg-gray-900/5 border-gray-300/30 focus-within:border-gray-400/50'
+                              : 'text-slate-800 hover:bg-slate-900/5 border-slate-300/30 focus-within:border-slate-400/50'
                           }`}
                         >
                           <span className="whitespace-nowrap">{formatMonthKey(currentMonthKey)}</span>
@@ -5407,30 +5414,30 @@ const App: React.FC = () => {
                       <button
                         onClick={goToNextMonth}
                         disabled={!canGoToNextMonth}
-                        className={`p-1.5 sm:p-2 rounded-lg transition-all ${
+                        className={`p-2 rounded-full shadow-sm transition-all ${
                           canGoToNextMonth
-                            ? (darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-100')
-                            : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400')
+                            ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
+                            : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
                         }`}
                       >
                         <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
                       </button>
                     </>
                   ) : (
-                    <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                    <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                       {pageLabel}
                     </h1>
                   )}
                 </div>
                 <div className="ml-auto hidden sm:flex items-center gap-3">
-                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
-                    darkMode ? 'bg-gray-900/50 border border-gray-800' : 'bg-white/80 border border-gray-200'
+                  <div className={`flex items-center gap-2 rounded-full px-3 py-1 border ${
+                    darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-white/80 border-slate-100'
                   }`}
                   >
                     {isBudgetView && (
                       <button
                         onClick={requestDeleteCurrentMonth}
-                        className="hidden sm:inline-flex px-3 py-1.5 rounded-md text-sm font-semibold btn-gradient transition-all"
+                        className="hidden sm:inline-flex px-3 py-1.5 rounded-full text-sm font-semibold pill-coral transition-all"
                       >
                         {t('deleteMonth')}
                       </button>
@@ -5448,13 +5455,13 @@ const App: React.FC = () => {
               </div>
               <nav
                 aria-label="breadcrumb"
-                className={`flex items-center gap-2 text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}
+                className={`flex items-center gap-2 text-xs sm:text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
               >
-                <Home size={14} className={darkMode ? 'text-gray-300' : 'text-gray-400'} />
+                <Home size={14} className={darkMode ? 'text-slate-300' : 'text-slate-400'} />
                 {breadcrumbItems.map((item, index) => (
                   <span key={`${item}-${index}`} className="flex items-center gap-2">
-                    <ChevronRight size={12} className={darkMode ? 'text-gray-500' : 'text-gray-400'} />
-                    <span className={index === breadcrumbItems.length - 1 ? (darkMode ? 'text-gray-200' : 'text-gray-700') : ''}>
+                    <ChevronRight size={12} className={darkMode ? 'text-slate-500' : 'text-slate-400'} />
+                    <span className={index === breadcrumbItems.length - 1 ? (darkMode ? 'text-slate-200' : 'text-slate-700') : ''}>
                       {item}
                     </span>
                   </span>
@@ -5464,7 +5471,7 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-end sm:hidden">
                   <button
                     onClick={requestDeleteCurrentMonth}
-                    className="px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap btn-gradient transition-all"
+                    className="px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap pill-coral transition-all"
                   >
                     {t('deleteMonth')}
                   </button>
@@ -5521,14 +5528,14 @@ const App: React.FC = () => {
         <>
           {!soloModeEnabled && (
             <div className="mb-4 flex flex-wrap items-center gap-2 sm:hidden">
-              <label className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`} htmlFor="person-select">
+              <label className={`text-sm font-semibold ${darkMode ? 'text-slate-200' : 'text-slate-700'}`} htmlFor="person-select">
                 {t('tableLabel')}
               </label>
               <select
                 id="person-select"
                 value={activePersonKey}
                 onChange={(event) => setActivePersonKey(event.target.value === 'person2' ? 'person2' : 'person1')}
-                className={`px-3 py-2 rounded-md border text-sm font-semibold ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                className={`px-3 py-2 rounded-md border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               >
                 <option value="person1">{data.person1.name || t('person1Label')}</option>
                 <option value="person2">{data.person2.name || t('person2Label')}</option>
@@ -5870,17 +5877,17 @@ const App: React.FC = () => {
         {expenseWizard && (
           <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
             <div
-              className={`w-full max-w-md rounded-2xl border shadow-lg p-6 space-y-4 ${
-                darkMode ? 'bg-gray-900/95 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+              className={`w-full max-w-md rounded-2xl p-6 space-y-4 shadow-lg ${
+                darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
               }`}
             >
               <div className="space-y-1">
-                <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+                <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
                 <h2 className="text-xl font-semibold">
                   {expenseWizard.mode === 'edit' ? t('expenseWizardEditTitle') : t('expenseWizardTitle')}
                 </h2>
-                <div className="text-xs text-gray-500">{t('onboardingStepLabel')} {expenseWizard.step}/2</div>
-                <div className="text-xs font-semibold text-gray-500">
+                <div className="text-xs text-slate-500">{t('onboardingStepLabel')} {expenseWizard.step}/2</div>
+                <div className="text-xs font-semibold text-slate-500">
                   {expenseWizard.type === 'fixed' ? t('fixedMoneyLabel') : t('freeMoneyLabel')}
                 </div>
               </div>
@@ -5895,7 +5902,7 @@ const App: React.FC = () => {
                       value={expenseWizard.name}
                       onChange={(e) => updateExpenseWizard({ name: e.target.value })}
                       placeholder={expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel')}
-                      className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                      className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     />
                   </div>
                   <div className="space-y-1">
@@ -5905,7 +5912,7 @@ const App: React.FC = () => {
                       type="number"
                       value={expenseWizard.amount}
                       onChange={(e) => updateExpenseWizard({ amount: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                      className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     />
                   </div>
                 </div>
@@ -5919,7 +5926,7 @@ const App: React.FC = () => {
                       id="expense-category"
                       value={expenseWizard.categoryOverrideId}
                       onChange={(e) => updateExpenseWizard({ categoryOverrideId: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                      className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     >
                       <option value="">{t('categoryAutoLabel')}</option>
                       {AUTO_CATEGORIES.map(category => (
@@ -5953,9 +5960,9 @@ const App: React.FC = () => {
                                 recurringMonths: Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1
                               });
                             }}
-                            className={`w-20 px-2 py-1 border rounded text-right ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                            className={`w-20 px-2 py-1 border rounded text-right ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                           />
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-slate-500">
                             {t('startLabel')}: {expenseWizard.startMonth}
                           </span>
                         </div>
@@ -5972,7 +5979,7 @@ const App: React.FC = () => {
                       type="button"
                       onClick={handleExpenseWizardDelete}
                       className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                        darkMode ? 'bg-red-900/70 text-red-100 hover:bg-red-900' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        darkMode ? 'bg-rose-500/20 text-rose-200 hover:bg-rose-500/30' : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
                       }`}
                     >
                       {t('deleteLabel')}
@@ -5982,7 +5989,7 @@ const App: React.FC = () => {
                     type="button"
                     onClick={closeExpenseWizard}
                     className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                      darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
                     {t('cancelLabel')}
@@ -5994,7 +6001,7 @@ const App: React.FC = () => {
                       type="button"
                       onClick={handleExpenseWizardBack}
                       className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                        darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       {t('onboardingBack')}
@@ -6017,22 +6024,22 @@ const App: React.FC = () => {
         {deleteMonthOpen && (
           <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
             <div
-              className={`w-full max-w-sm rounded-2xl border shadow-lg p-6 space-y-4 ${
-                darkMode ? 'bg-gray-900/95 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+              className={`w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-lg ${
+                darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
               }`}
             >
               <div className="space-y-2">
-                <p className="text-sm uppercase tracking-wide text-gray-500">{t('appName')}</p>
+                <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
                 <h2 className="text-lg font-semibold">{t('deleteMonth')}</h2>
-                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('deleteMonthConfirm')}</p>
-                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{t('deleteMonthPrompt')}</p>
+                <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>{t('deleteMonthConfirm')}</p>
+                <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>{t('deleteMonthPrompt')}</p>
               </div>
               <input
                 type="text"
                 value={deleteMonthInput}
                 onChange={(e) => setDeleteMonthInput(e.target.value)}
                 placeholder={deleteConfirmToken}
-                className={`w-full px-3 py-2 border rounded ${darkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}
+                className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
               />
               <div className="flex items-center justify-between gap-2 pt-2">
                 <button
@@ -6042,7 +6049,7 @@ const App: React.FC = () => {
                     setDeleteMonthInput('');
                   }}
                   className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                    darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
                   {t('cancelLabel')}
