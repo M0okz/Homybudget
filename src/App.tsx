@@ -1396,6 +1396,11 @@ const BudgetFixedSection = ({
         return nameDiff !== 0 ? nameDiff : a.id.localeCompare(b.id);
       })
     : person.fixedExpenses;
+  const paidFixedTotal = orderedExpenses.reduce((sum, expense) => (
+    expense.isChecked ? sum + coerceNumber(expense.amount) : sum
+  ), 0);
+  const remainingFixedTotal = Math.max(0, totalFixed - paidFixedTotal);
+  const hasPaidFixed = paidFixedTotal > 0;
   const fixedColors = palette.slots[1];
   const fixedBgStyle = { backgroundColor: darkMode ? fixedColors.darkBg : fixedColors.lightBg };
   const fixedTextStyle = { color: darkMode ? fixedColors.darkText : fixedColors.lightText };
@@ -1491,9 +1496,22 @@ const BudgetFixedSection = ({
           </div>
         )}
       </div>
-      <div className={`mt-3 pt-3 flex justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
+      <div className={`mt-3 pt-3 flex items-center justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
-        <span>{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
+        <div className="flex items-center gap-2">
+          <span>{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
+          {hasPaidFixed && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                darkMode
+                  ? 'bg-white/10 text-gray-200'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {formatCurrency(remainingFixedTotal, currencyPreference)}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1524,6 +1542,11 @@ const BudgetFreeSection = ({
         return nameDiff !== 0 ? nameDiff : a.id.localeCompare(b.id);
       })
     : person.categories;
+  const paidCategoriesTotal = orderedCategories.reduce((sum, category) => (
+    category.isChecked ? sum + coerceNumber(category.amount) : sum
+  ), 0);
+  const remainingCategoriesTotal = Math.max(0, totalCategories - paidCategoriesTotal);
+  const hasPaidCategories = paidCategoriesTotal > 0;
   const freeColors = palette.slots[2];
   const freeBgStyle = { backgroundColor: darkMode ? freeColors.darkBg : freeColors.lightBg };
   const freeTextStyle = { color: darkMode ? freeColors.darkText : freeColors.lightText };
@@ -1625,9 +1648,22 @@ const BudgetFreeSection = ({
           </div>
         )}
       </div>
-      <div className={`mt-3 pt-3 flex justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
+      <div className={`mt-3 pt-3 flex items-center justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
-        <span>{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
+        <div className="flex items-center gap-2">
+          <span>{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
+          {hasPaidCategories && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                darkMode
+                  ? 'bg-white/10 text-gray-200'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {formatCurrency(remainingCategoriesTotal, currencyPreference)}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
