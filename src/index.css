@@ -219,6 +219,37 @@ body.theme-transition * {
   animation: version-breathing 1.8s ease-in-out infinite;
 }
 
+.month-live {
+  position: relative;
+}
+
+.month-live::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(31, 157, 106, 0.65), rgba(242, 123, 99, 0.65));
+  opacity: 0.6;
+  transform: scaleX(0.85);
+  transform-origin: left;
+  animation: month-live 2.6s ease-in-out infinite;
+}
+
+@keyframes month-live {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleX(0.85);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scaleX(1);
+  }
+}
+
 @keyframes app-fade {
   from {
     opacity: 0;

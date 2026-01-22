@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
+import { Dialog, DialogContent } from './components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
 import packageJson from '../package.json';
 
@@ -257,40 +259,85 @@ type PaletteSlot = {
 type Palette = {
   id: string;
   name: string;
-  slots: [PaletteSlot, PaletteSlot, PaletteSlot];
+  dominant: string;
+  slots: [PaletteSlot, PaletteSlot, PaletteSlot, PaletteSlot];
 };
 
 const PALETTES: Palette[] = [
   {
-    id: 'sage-sky-honey',
-    name: 'Sage / Sky / Honey',
+    id: 'default',
+    name: 'Cloud',
+    dominant: '#94A3B8',
     slots: [
       {
-        lightBg: '#E7F6EC',
-        darkBg: '#0F2A1E',
-        lightText: '#1F6F46',
-        darkText: '#7BE6A7',
-        swatch: '#27A968'
+        lightBg: 'rgba(255, 255, 255, 0.9)',
+        darkBg: 'rgba(15, 23, 42, 0.72)',
+        lightText: '#64748B',
+        darkText: '#CBD5F5',
+        swatch: '#94A3B8'
       },
       {
-        lightBg: '#E7F0FF',
-        darkBg: '#0B2345',
-        lightText: '#2155D6',
-        darkText: '#9DB7FF',
-        swatch: '#3867F0'
+        lightBg: 'rgba(255, 255, 255, 0.9)',
+        darkBg: 'rgba(15, 23, 42, 0.72)',
+        lightText: '#64748B',
+        darkText: '#CBD5F5',
+        swatch: '#94A3B8'
       },
       {
-        lightBg: '#FFF3D6',
-        darkBg: '#3A2B0A',
-        lightText: '#B45309',
-        darkText: '#FAD38A',
-        swatch: '#E2A13A'
+        lightBg: 'rgba(255, 255, 255, 0.9)',
+        darkBg: 'rgba(15, 23, 42, 0.72)',
+        lightText: '#64748B',
+        darkText: '#CBD5F5',
+        swatch: '#94A3B8'
+      },
+      {
+        lightBg: 'rgba(255, 255, 255, 0.9)',
+        darkBg: 'rgba(15, 23, 42, 0.72)',
+        lightText: '#64748B',
+        darkText: '#CBD5F5',
+        swatch: '#94A3B8'
+      }
+    ]
+  },
+  {
+    id: 'emerald-coral-sand-violet',
+    name: 'Citrus',
+    dominant: '#1F9D6A',
+    slots: [
+      {
+        lightBg: '#E9F8F0',
+        darkBg: '#0E2A1E',
+        lightText: '#1F7A4C',
+        darkText: '#7EE8B0',
+        swatch: '#1F9D6A'
+      },
+      {
+        lightBg: '#FFF1EC',
+        darkBg: '#331513',
+        lightText: '#C2553E',
+        darkText: '#F7B0A1',
+        swatch: '#E56B5B'
+      },
+      {
+        lightBg: '#FFF5E5',
+        darkBg: '#35240E',
+        lightText: '#C57B2A',
+        darkText: '#F6C27A',
+        swatch: '#F4A259'
+      },
+      {
+        lightBg: '#F1ECFF',
+        darkBg: '#1C1436',
+        lightText: '#6D4BD9',
+        darkText: '#B6A1FF',
+        swatch: '#7D5CE8'
       }
     ]
   },
   {
     id: 'teal-citrus-clay',
-    name: 'Teal / Citrus / Clay',
+    name: 'Berry',
+    dominant: '#18A89E',
     slots: [
       {
         lightBg: '#E0F7F4',
@@ -312,12 +359,20 @@ const PALETTES: Palette[] = [
         lightText: '#C2410C',
         darkText: '#FDBA74',
         swatch: '#F07F4F'
+      },
+      {
+        lightBg: '#FCE7F3',
+        darkBg: '#3A1126',
+        lightText: '#BE185D',
+        darkText: '#F9A8D4',
+        swatch: '#E0488F'
       }
     ]
   },
   {
     id: 'navy-mint-apricot',
-    name: 'Navy / Mint / Apricot',
+    name: 'Berry',
+    dominant: '#3454C5',
     slots: [
       {
         lightBg: '#E9EFF9',
@@ -339,6 +394,13 @@ const PALETTES: Palette[] = [
         lightText: '#C2410C',
         darkText: '#FDBA74',
         swatch: '#F39C5A'
+      },
+      {
+        lightBg: '#F2EEFF',
+        darkBg: '#1B1736',
+        lightText: '#6B4FD6',
+        darkText: '#C4B5FD',
+        swatch: '#8B5CF6'
       }
     ]
   }
@@ -803,6 +865,15 @@ const normalizeBudgetData = (data: BudgetData): BudgetData => ({
 
 const getPaletteById = (paletteId: string) => {
   return PALETTES.find(palette => palette.id === paletteId) ?? PALETTES[0];
+};
+
+const getPaletteTone = (palette: Palette, slotIndex: number, darkMode: boolean) => {
+  const slot = palette.slots[slotIndex] ?? palette.slots[0];
+  return {
+    background: darkMode ? slot.darkBg : slot.lightBg,
+    text: darkMode ? slot.darkText : slot.lightText,
+    border: darkMode ? slot.darkText : slot.lightText
+  };
 };
 
 const applyJointBalanceCarryover = (budgets: MonthlyBudget, startMonthKey: string) => {
@@ -1341,26 +1412,35 @@ const BudgetHeaderSection = ({
   const animatedIncome = useAnimatedNumber(totalIncome);
   const animatedExpenses = useAnimatedNumber(totalExpenses);
   const animatedAvailable = useAnimatedNumber(available);
-  const revenueBorderClass = darkMode ? 'border-emerald-500/60' : 'border-emerald-500';
-  const revenueHeaderClass = darkMode ? 'text-emerald-300' : 'text-emerald-700';
+  const revenueTone = getPaletteTone(palette, 0, darkMode);
+  const isDefaultPalette = palette.id === 'default';
+  const revenueButtonStyle = {
+    borderColor: revenueTone.border,
+    color: revenueTone.text,
+    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
+  };
   const summaryLabelClass = darkMode ? 'text-slate-400' : 'text-slate-500';
   const summaryValueClass = darkMode ? 'text-slate-100' : 'text-slate-700';
 
   return (
     <div
-      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border-l-4 ${
-        darkMode ? 'bg-slate-900/70 border-slate-800' : 'card-float border-emerald-100'
-      } ${revenueBorderClass}`}
+      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border border-l-4 ${
+        darkMode ? 'border-slate-800' : 'card-float'
+      }`}
+      style={{
+        backgroundColor: revenueTone.background,
+        borderColor: revenueTone.border,
+        border: isDefaultPalette ? 'none' : undefined
+      }}
     >
       <div className="mb-3">
         <div className="flex justify-between items-center mb-2">
-          <span className={`text-sm font-semibold ${revenueHeaderClass}`}>{t('incomeLabel')}:</span>
+          <span className="text-sm font-semibold" style={{ color: revenueTone.text }}>{t('incomeLabel')}:</span>
           <button
             type="button"
             onClick={() => addIncomeSource(personKey)}
-            className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
-              darkMode ? 'border-emerald-400/50 text-emerald-200 bg-emerald-400/10' : 'border-emerald-200 text-emerald-700 bg-emerald-50'
-            }`}
+            className="h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105"
+            style={revenueButtonStyle}
             aria-label={t('addLabel')}
           >
             <Plus size={16} />
@@ -1399,7 +1479,10 @@ const BudgetHeaderSection = ({
           <span>{t('totalExpensesLabel')}:</span>
           <span className={`font-semibold ${summaryValueClass}`}>{formatCurrency(animatedExpenses, currencyPreference)}</span>
         </div>
-        <div className={`flex justify-between font-semibold ${available < 0 ? 'text-red-600' : revenueHeaderClass}`}>
+        <div
+          className={`flex justify-between font-semibold ${available < 0 ? 'text-red-600' : ''}`}
+          style={available < 0 ? undefined : { color: revenueTone.text }}
+        >
           <span>{t('availableLabel')}:</span>
           <span>{formatCurrency(animatedAvailable, currencyPreference)}</span>
         </div>
@@ -1438,22 +1521,36 @@ const BudgetFixedSection = ({
   ), 0);
   const remainingFixedTotal = Math.max(0, totalFixed - paidFixedTotal);
   const hasPaidFixed = paidFixedTotal > 0;
-  const fixedHeaderClass = darkMode ? 'text-rose-200' : 'text-rose-600';
+  const fixedTone = getPaletteTone(palette, 1, darkMode);
+  const isDefaultPalette = palette.id === 'default';
+  const fixedButtonStyle = {
+    borderColor: fixedTone.border,
+    color: fixedTone.text,
+    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
+  };
+  const fixedBadgeStyle = {
+    color: fixedTone.text,
+    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
+  };
 
   return (
     <div
-      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border-l-4 ${
-        darkMode ? 'bg-slate-900/70 border-slate-800' : 'card-float border-rose-100'
-      } ${darkMode ? 'border-rose-400/60' : 'border-[#f27b63]'}`}
+      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border border-l-4 ${
+        darkMode ? 'border-slate-800' : 'card-float'
+      }`}
+      style={{
+        backgroundColor: fixedTone.background,
+        borderColor: fixedTone.border,
+        border: isDefaultPalette ? 'none' : undefined
+      }}
     >
       <div className="flex justify-between items-center mb-3">
-        <h3 className={`text-sm font-semibold ${fixedHeaderClass}`}>{t('fixedMoneyLabel')}</h3>
+        <h3 className="text-sm font-semibold" style={{ color: fixedTone.text }}>{t('fixedMoneyLabel')}</h3>
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'fixed')}
-          className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
-            darkMode ? 'border-rose-400/50 text-rose-200 bg-rose-400/10' : 'border-rose-200 text-rose-500 bg-rose-50'
-          }`}
+          className="h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105"
+          style={fixedButtonStyle}
           aria-label={t('addRowLabel')}
         >
           <Plus size={16} />
@@ -1480,7 +1577,8 @@ const BudgetFixedSection = ({
                       type="checkbox"
                       checked={expense.isChecked || false}
                       onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
-                      className="h-4 w-4 accent-[#f27b63]"
+                      className="h-4 w-4"
+                      style={{ accentColor: fixedTone.border }}
                       aria-label={t('validateExpenseLabel')}
                     />
                     <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
@@ -1538,11 +1636,8 @@ const BudgetFixedSection = ({
           <span className="tabular-nums">{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
           {hasPaidFixed && (
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                darkMode
-                  ? 'bg-white/10 text-slate-200'
-                  : 'bg-[#fff1ec] text-[#c45b47]'
-              }`}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={fixedBadgeStyle}
               title={t('remainingToPayLabel')}
             >
               {formatCurrency(remainingFixedTotal, currencyPreference)}
@@ -1584,22 +1679,36 @@ const BudgetFreeSection = ({
   ), 0);
   const remainingCategoriesTotal = Math.max(0, totalCategories - paidCategoriesTotal);
   const hasPaidCategories = paidCategoriesTotal > 0;
-  const freeHeaderClass = darkMode ? 'text-rose-200' : 'text-rose-600';
+  const freeTone = getPaletteTone(palette, 2, darkMode);
+  const isDefaultPalette = palette.id === 'default';
+  const freeButtonStyle = {
+    borderColor: freeTone.border,
+    color: freeTone.text,
+    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
+  };
+  const freeBadgeStyle = {
+    color: freeTone.text,
+    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
+  };
 
   return (
     <div
-      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border-l-4 ${
-        darkMode ? 'bg-slate-900/70 border-slate-800' : 'card-float border-rose-100'
-      } ${darkMode ? 'border-rose-400/70' : 'border-[#f27b63]'}`}
+      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border border-l-4 ${
+        darkMode ? 'border-slate-800' : 'card-float'
+      }`}
+      style={{
+        backgroundColor: freeTone.background,
+        borderColor: freeTone.border,
+        border: isDefaultPalette ? 'none' : undefined
+      }}
     >
       <div className="flex justify-between items-center mb-3">
-        <h3 className={`text-sm font-semibold ${freeHeaderClass}`}>{t('freeMoneyLabel')}</h3>
+        <h3 className="text-sm font-semibold" style={{ color: freeTone.text }}>{t('freeMoneyLabel')}</h3>
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'free')}
-          className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
-            darkMode ? 'border-rose-400/50 text-rose-200 bg-rose-400/10' : 'border-rose-200 text-rose-500 bg-rose-50'
-          }`}
+          className="h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105"
+          style={freeButtonStyle}
           aria-label={t('addRowLabel')}
         >
           <Plus size={16} />
@@ -1627,7 +1736,8 @@ const BudgetFreeSection = ({
                       type="checkbox"
                       checked={category.isChecked || false}
                       onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
-                      className="h-4 w-4 accent-[#f27b63]"
+                      className="h-4 w-4"
+                      style={{ accentColor: freeTone.border }}
                       aria-label={t('validateExpenseLabel')}
                     />
                     <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
@@ -1690,11 +1800,8 @@ const BudgetFreeSection = ({
           <span className="tabular-nums">{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
           {hasPaidCategories && (
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                darkMode
-                  ? 'bg-white/10 text-slate-200'
-                  : 'bg-[#fff1ec] text-[#c45b47]'
-              }`}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={freeBadgeStyle}
               title={t('remainingToPayLabel')}
             >
               {formatCurrency(remainingCategoriesTotal, currencyPreference)}
@@ -1816,19 +1923,15 @@ const PaletteSelector = ({ palettes, value, onChange, darkMode }: PaletteSelecto
         onClick={() => setIsOpen(prev => !prev)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border shadow-sm backdrop-blur-sm transition ${
-          darkMode ? 'bg-slate-900/70 border-slate-700/60' : 'bg-white/80 border-slate-200'
+        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl border shadow-sm backdrop-blur-sm transition ${
+          darkMode ? 'bg-slate-900/70 border-slate-700/60 text-slate-100' : 'bg-white/80 border-slate-200 text-slate-700'
         }`}
       >
-        <span className="flex items-center gap-1">
-          {selectedPalette.slots.map((slot, index) => (
-            <span
-              key={`${selectedPalette.id}-${index}`}
-              className="h-2.5 w-2.5 rounded-[3px]"
-              style={{ backgroundColor: slot.swatch }}
-            />
-          ))}
-        </span>
+        <span
+          className="h-2.5 w-2.5 rounded-full"
+          style={{ backgroundColor: selectedPalette.dominant }}
+        />
+        <span className={`text-xs font-semibold ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{selectedPalette.name}</span>
       </button>
       {isOpen && (
         <div className="absolute left-1/2 top-full mt-2 -translate-x-1/2 z-10">
@@ -1845,7 +1948,7 @@ const PaletteSelector = ({ palettes, value, onChange, darkMode }: PaletteSelecto
             {otherPalettes.length === 0 ? (
               <div className="px-2 py-1 text-xs">{t('noOtherPaletteLabel')}</div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2">
                 {otherPalettes.map(palette => (
                   <button
                     key={palette.id}
@@ -1853,19 +1956,17 @@ const PaletteSelector = ({ palettes, value, onChange, darkMode }: PaletteSelecto
                     onClick={() => handleSelect(palette.id)}
                     title={palette.name}
                     aria-label={palette.name}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                    className={`flex items-center gap-2 px-2 py-1 rounded-md border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
                       darkMode
                         ? 'bg-slate-900 border-slate-700/70 hover:border-slate-500/80 focus-visible:ring-slate-200/70 focus-visible:ring-offset-slate-900'
                         : 'bg-white border-slate-200 hover:border-slate-300 focus-visible:ring-slate-300 focus-visible:ring-offset-white'
                     }`}
                   >
-                    {palette.slots.map((slot, index) => (
-                      <span
-                        key={`${palette.id}-${index}`}
-                        className="h-2.5 w-2.5 rounded-[3px]"
-                        style={{ backgroundColor: slot.swatch }}
-                      />
-                    ))}
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: palette.dominant }}
+                    />
+                    <span className="text-xs font-semibold">{palette.name}</span>
                   </button>
                 ))}
               </div>
@@ -2465,13 +2566,13 @@ const SettingsView = ({
     label,
     value,
     onChange,
-    children
+    options
   }: {
     icon: React.ComponentType<{ size?: number | string }>;
     label: string;
     value: string;
     onChange: (next: string) => void;
-    children: React.ReactNode;
+    options: Array<{ value: string; label: string }>;
   }) => (
     <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
       <div className="flex items-center gap-3">
@@ -2482,13 +2583,26 @@ const SettingsView = ({
         </span>
         <div className="font-semibold">{label}</div>
       </div>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
-      >
-        {children}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger
+          className={`min-w-[10rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent
+          className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}
+        >
+          {options.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'focus:bg-emerald-50 focus:text-emerald-700'}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 
@@ -2955,19 +3069,21 @@ const SettingsView = ({
                 label={t('languageLabel')}
                 value={languagePreference}
                 onChange={(value) => onLanguagePreferenceChange(value === 'en' ? 'en' : 'fr')}
-              >
-                <option value="fr">{t('frenchLabel')}</option>
-                <option value="en">{t('englishLabel')}</option>
-              </SelectRow>
+                options={[
+                  { value: 'fr', label: t('frenchLabel') },
+                  { value: 'en', label: t('englishLabel') }
+                ]}
+              />
               <SelectRow
                 icon={Coins}
                 label={t('currencyLabel')}
                 value={currencyPreference}
                 onChange={(value) => onCurrencyPreferenceChange(value === 'USD' ? 'USD' : 'EUR')}
-              >
-                <option value="EUR">{t('currencyEuroLabel')}</option>
-                <option value="USD">{t('currencyDollarLabel')}</option>
-              </SelectRow>
+                options={[
+                  { value: 'EUR', label: t('currencyEuroLabel') },
+                  { value: 'USD', label: t('currencyDollarLabel') }
+                ]}
+              />
               {isAdmin && (
                 <>
                   <ToggleRow
@@ -3053,51 +3169,67 @@ const SettingsView = ({
                   darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
                 }`}>
                   <div className="font-semibold">{t('person1Label')}</div>
-                  <select
-                    value={person1UserId ?? ''}
-                    onChange={(event) => {
-                      const selected = users.find(item => item.id === event.target.value) ?? null;
+                  <Select
+                    value={person1UserId ?? 'unassigned'}
+                    onValueChange={(value) => {
+                      const selected = value === 'unassigned'
+                        ? null
+                        : (users.find(item => item.id === value) ?? null);
                       onPersonLinkChange('person1', selected);
                     }}
                     disabled={usersLoading}
-                    className={`min-w-[12rem] px-3 py-1.5 rounded-lg border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   >
-                    <option value="">{t('unassignedLabel')}</option>
-                    {users.map(item => {
-                      const isDisabled = (!item.isActive) || (item.id === person2UserId && item.id !== person1UserId);
-                      const label = makeUserLabel(item);
-                      return (
-                        <option key={item.id} value={item.id} disabled={isDisabled}>
-                          {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    <SelectTrigger
+                      className={`min-w-[12rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                      <SelectItem value="unassigned">{t('unassignedLabel')}</SelectItem>
+                      {users.map(item => {
+                        const isDisabled = (!item.isActive) || (item.id === person2UserId && item.id !== person1UserId);
+                        const label = makeUserLabel(item);
+                        return (
+                          <SelectItem key={item.id} value={item.id} disabled={isDisabled}>
+                            {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
                   darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
                 }`}>
                   <div className="font-semibold">{t('person2Label')}</div>
-                  <select
-                    value={person2UserId ?? ''}
-                    onChange={(event) => {
-                      const selected = users.find(item => item.id === event.target.value) ?? null;
+                  <Select
+                    value={person2UserId ?? 'unassigned'}
+                    onValueChange={(value) => {
+                      const selected = value === 'unassigned'
+                        ? null
+                        : (users.find(item => item.id === value) ?? null);
                       onPersonLinkChange('person2', selected);
                     }}
                     disabled={usersLoading}
-                    className={`min-w-[12rem] px-3 py-1.5 rounded-lg border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                   >
-                    <option value="">{t('unassignedLabel')}</option>
-                    {users.map(item => {
-                      const isDisabled = (!item.isActive) || (item.id === person1UserId && item.id !== person2UserId);
-                      const label = makeUserLabel(item);
-                      return (
-                        <option key={item.id} value={item.id} disabled={isDisabled}>
-                          {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    <SelectTrigger
+                      className={`min-w-[12rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                      <SelectItem value="unassigned">{t('unassignedLabel')}</SelectItem>
+                      {users.map(item => {
+                        const isDisabled = (!item.isActive) || (item.id === person1UserId && item.id !== person2UserId);
+                        const label = makeUserLabel(item);
+                        return (
+                          <SelectItem key={item.id} value={item.id} disabled={isDisabled}>
+                            {item.isActive ? label : `${label} (${t('inactiveLabel')})`}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
                   {usersLoading ? t('loadingUsers') : t('personLinkSectionHint')}
@@ -3154,14 +3286,20 @@ const SettingsView = ({
                     className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
                     placeholder={t('createUserConfirmPlaceholder')}
                   />
-                  <select
+                  <Select
                     value={createForm.role}
-                    onChange={(event) => setCreateForm(prev => ({ ...prev, role: event.target.value === 'admin' ? 'admin' : 'user' }))}
-                    className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                    onValueChange={(value) => setCreateForm(prev => ({ ...prev, role: value === 'admin' ? 'admin' : 'user' }))}
                   >
-                    <option value="user">{t('roleUserLabel')}</option>
-                    <option value="admin">{t('roleAdminLabel')}</option>
-                  </select>
+                    <SelectTrigger
+                      className={`w-full ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                      <SelectItem value="user">{t('roleUserLabel')}</SelectItem>
+                      <SelectItem value="admin">{t('roleAdminLabel')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 {createError && (
                   <div className={`text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
@@ -3286,17 +3424,21 @@ const SettingsView = ({
                                   )}
                                 </td>
                                 <td className="py-2 pr-4">
-                                  <select
+                                  <Select
                                     value={item.role}
+                                    onValueChange={(value) => handleRoleChange(item.id, value === 'admin' ? 'admin' : 'user')}
                                     disabled={Boolean(userActionId) || isSelf}
-                                    onChange={(event) => handleRoleChange(item.id, event.target.value === 'admin' ? 'admin' : 'user')}
-                                    className={`px-2 py-1 rounded-lg border text-sm ${
-                                      darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
-                                    } ${isSelf ? 'opacity-60 cursor-not-allowed' : ''}`}
                                   >
-                                    <option value="user">{t('roleUserLabel')}</option>
-                                    <option value="admin">{t('roleAdminLabel')}</option>
-                                  </select>
+                                    <SelectTrigger
+                                      className={`w-[9rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'} ${isSelf ? 'opacity-60' : ''}`}
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                                      <SelectItem value="user">{t('roleUserLabel')}</SelectItem>
+                                      <SelectItem value="admin">{t('roleAdminLabel')}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </td>
                                 <td className="py-2 pr-4">
                                   <label className="inline-flex items-center gap-2">
@@ -3417,6 +3559,8 @@ const App: React.FC = () => {
   const oidcHandledRef = useRef(false);
 
   const palette = getPaletteById(paletteId);
+  const jointTone = getPaletteTone(palette, 3, darkMode);
+  const isDefaultPalette = palette.id === 'default';
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
   const isBudgetView = activePage === 'budget';
   const isSettingsView = activePage === 'settings';
@@ -3456,6 +3600,7 @@ const App: React.FC = () => {
       ? [t('appName'), t('settingsLabel'), t('profileTitle')]
       : [t('appName'), pageLabel];
   const pageStyle = {
+    backgroundColor: darkMode ? '#0b1220' : '#fbf7f2',
     backgroundImage: darkMode
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
       : 'radial-gradient(1200px circle at 15% -15%, rgba(31,157,106,0.12), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(242,123,99,0.10), transparent 50%)'
@@ -5248,9 +5393,9 @@ const App: React.FC = () => {
             </aside>
           </div>
 
-          <main className="flex-1 p-4 sm:p-6">
+          <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
             <div className="flex flex-col gap-4 mb-6">
-              <div className="sm:hidden flex items-center justify-between">
+              <div className="sm:hidden flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
@@ -5259,31 +5404,49 @@ const App: React.FC = () => {
                 >
                   <Menu size={20} />
                 </button>
-                <div ref={menuRef} className="relative">
+                <div className="flex items-center gap-2">
+                  <PaletteSelector
+                    palettes={PALETTES}
+                    value={palette.id}
+                    onChange={setPaletteId}
+                    darkMode={darkMode}
+                  />
                   <button
-                    onClick={() => setMenuOpen(prev => !prev)}
-                    className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden shadow-sm ${
-                      darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'
+                    type="button"
+                    onClick={toggleDarkMode}
+                    className={`h-9 w-9 rounded-full flex items-center justify-center shadow-sm ${
+                      darkMode ? 'bg-slate-900 text-slate-100' : 'bg-white text-slate-600'
                     }`}
-                    aria-label={t('accountMenuLabel')}
+                    aria-label={t('themeToggleLabel')}
                   >
-                    {resolvedUserAvatarUrl ? (
-                      <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
-                    ) : (
-                      userInitial
-                    )}
+                    {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} />}
                   </button>
-                  {menuOpen && (
-                    <div
-                      className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
-                        darkMode ? 'bg-slate-950/90 border-slate-800 text-slate-100' : 'bg-white/95 border-slate-100 text-slate-800'
+                  <div ref={menuRef} className="relative">
+                    <button
+                      onClick={() => setMenuOpen(prev => !prev)}
+                      className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden shadow-sm ${
+                        darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'
                       }`}
+                      aria-label={t('accountMenuLabel')}
                     >
-                      <div className="px-3 py-2 text-xs uppercase tracking-wide text-slate-500">
-                        {userDisplayName}
+                      {resolvedUserAvatarUrl ? (
+                        <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+                      ) : (
+                        userInitial
+                      )}
+                    </button>
+                    {menuOpen && (
+                      <div
+                        className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
+                          darkMode ? 'bg-slate-950/90 border-slate-800 text-slate-100' : 'bg-white/95 border-slate-100 text-slate-800'
+                        }`}
+                      >
+                        <div className="px-3 py-2 text-xs uppercase tracking-wide text-slate-500">
+                          {userDisplayName}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
               {isSettingsView ? (
@@ -5301,55 +5464,32 @@ const App: React.FC = () => {
                   </h1>
                 </div>
               ) : isBudgetView ? (
-                <div className="sm:hidden grid grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2">
-                  <button
-                    onClick={goToPreviousMonth}
-                    disabled={!canGoToPreviousMonth}
-                    className={`p-2 rounded-full shadow-sm transition-all ${
-                      canGoToPreviousMonth
-                        ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
-                        : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
-                    }`}
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  <h1 className={`text-xl font-bold flex items-center justify-center gap-2 min-w-0 text-center ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                    <span className="shrink-0">{t('budgetLabel')} -</span>
-                    <div
-                      className={`relative inline-flex items-center rounded-md pl-1 pr-1 py-0.5 font-bold leading-none transition-colors min-w-0 ${
-                        darkMode
-                          ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
-                          : 'text-slate-800 hover:bg-slate-900/5 border-slate-300/30 focus-within:border-slate-400/50'
-                      }`}
+                <div className="sm:hidden flex items-center justify-end">
+                  <h1 className={`text-2xl font-bold flex items-center gap-2 min-w-0 text-right leading-snug ${darkMode ? 'text-white' : 'text-slate-800'}`}>
+                    <Select
+                      value={currentMonthKey}
+                      onValueChange={(value) => trySelectMonthKey(value)}
+                      disabled={!isHydrated}
                     >
-                      <span className="truncate">{formatMonthKey(currentMonthKey)}</span>
-                      <select
-                        id="month-year-select-mobile"
-                        value={currentMonthKey}
-                        disabled={!isHydrated}
-                        onChange={(e) => trySelectMonthKey(e.target.value)}
+                      <SelectTrigger
                         aria-label={t('monthSelectLabel')}
-                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        className={`month-live h-10 min-w-0 border-none bg-transparent px-0 py-0 text-2xl font-bold shadow-none [&_svg]:hidden ${
+                          darkMode
+                            ? 'text-white hover:bg-white/5 focus:ring-white/30'
+                            : 'text-slate-800 hover:bg-slate-900/5 focus:ring-slate-300/40'
+                        }`}
                       >
+                        <SelectValue className="truncate" />
+                      </SelectTrigger>
+                      <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
                         {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
-                          <option key={monthKey} value={monthKey}>
+                          <SelectItem key={monthKey} value={monthKey}>
                             {formatMonthKey(monthKey)}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
-                    </div>
+                      </SelectContent>
+                    </Select>
                   </h1>
-                  <button
-                    onClick={goToNextMonth}
-                    disabled={!canGoToNextMonth}
-                    className={`p-2 rounded-full shadow-sm transition-all ${
-                      canGoToNextMonth
-                        ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
-                        : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
-                    }`}
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
                 </div>
               ) : (
                 <h1 className={`sm:hidden text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
@@ -5373,56 +5513,31 @@ const App: React.FC = () => {
                       </h1>
                     </div>
                   ) : isBudgetView ? (
-                    <>
-                      <button
-                        onClick={goToPreviousMonth}
-                        disabled={!canGoToPreviousMonth}
-                        className={`p-2 rounded-full shadow-sm transition-all ${
-                          canGoToPreviousMonth
-                            ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
-                            : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
-                        }`}
+                    <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
+                      <Select
+                        value={currentMonthKey}
+                        onValueChange={(value) => trySelectMonthKey(value)}
+                        disabled={!isHydrated}
                       >
-                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
-                      </button>
-                      <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                        <span>{t('budgetLabel')} -</span>
-                        <div
-                          className={`relative inline-flex items-center rounded-md pl-1.5 pr-1.5 py-0.5 text-2xl sm:text-3xl font-bold leading-none transition-colors focus-within:outline-none focus-within:border ${
+                        <SelectTrigger
+                          aria-label={t('monthSelectLabel')}
+                          className={`month-live h-auto border-none bg-transparent px-0 py-0 text-2xl sm:text-3xl font-bold leading-none shadow-none [&_svg]:hidden ${
                             darkMode
-                              ? 'text-white hover:bg-white/5 border-white/20 focus-within:border-white/30'
-                              : 'text-slate-800 hover:bg-slate-900/5 border-slate-300/30 focus-within:border-slate-400/50'
+                              ? 'text-white hover:bg-white/5 focus:ring-white/30'
+                              : 'text-slate-800 hover:bg-slate-900/5 focus:ring-slate-300/40'
                           }`}
                         >
-                          <span className="whitespace-nowrap">{formatMonthKey(currentMonthKey)}</span>
-                          <select
-                            id="month-year-select"
-                            value={currentMonthKey}
-                            disabled={!isHydrated}
-                            onChange={(e) => trySelectMonthKey(e.target.value)}
-                            aria-label={t('monthSelectLabel')}
-                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                          >
-                            {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
-                              <option key={monthKey} value={monthKey}>
-                                {formatMonthKey(monthKey)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </h1>
-                      <button
-                        onClick={goToNextMonth}
-                        disabled={!canGoToNextMonth}
-                        className={`p-2 rounded-full shadow-sm transition-all ${
-                          canGoToNextMonth
-                            ? (darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-50')
-                            : (darkMode ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-400')
-                        }`}
-                      >
-                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
-                      </button>
-                    </>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                          {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
+                            <SelectItem key={monthKey} value={monthKey}>
+                              {formatMonthKey(monthKey)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </h1>
                   ) : (
                     <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                       {pageLabel}
@@ -5455,7 +5570,7 @@ const App: React.FC = () => {
               </div>
               <nav
                 aria-label="breadcrumb"
-                className={`flex items-center gap-2 text-xs sm:text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
+                className={`hidden sm:flex items-center gap-2 text-xs sm:text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
               >
                 <Home size={14} className={darkMode ? 'text-slate-300' : 'text-slate-400'} />
                 {breadcrumbItems.map((item, index) => (
@@ -5468,14 +5583,7 @@ const App: React.FC = () => {
                 ))}
               </nav>
               {isBudgetView && (
-                <div className="flex items-center justify-end sm:hidden">
-                  <button
-                    onClick={requestDeleteCurrentMonth}
-                    className="px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap pill-coral transition-all"
-                  >
-                    {t('deleteMonth')}
-                  </button>
-                </div>
+                <div className="flex items-center justify-end sm:hidden" />
               )}
             </div>
 
@@ -5527,19 +5635,38 @@ const App: React.FC = () => {
       ) : isBudgetView ? (
         <>
           {!soloModeEnabled && (
-            <div className="mb-4 flex flex-wrap items-center gap-2 sm:hidden">
-              <label className={`text-sm font-semibold ${darkMode ? 'text-slate-200' : 'text-slate-700'}`} htmlFor="person-select">
-                {t('tableLabel')}
-              </label>
-              <select
+            <div className="mb-4 flex flex-wrap items-center justify-center gap-2 sm:hidden">
+              <div
                 id="person-select"
-                value={activePersonKey}
-                onChange={(event) => setActivePersonKey(event.target.value === 'person2' ? 'person2' : 'person1')}
-                className={`px-3 py-2 rounded-md border text-sm font-semibold ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                role="group"
+                aria-label={t('tableLabel')}
+                className={`inline-flex items-center rounded-full border p-1 ${
+                  darkMode ? 'border-slate-700 bg-slate-900/60' : 'border-slate-200 bg-white/80'
+                }`}
               >
-                <option value="person1">{data.person1.name || t('person1Label')}</option>
-                <option value="person2">{data.person2.name || t('person2Label')}</option>
-              </select>
+                <button
+                  type="button"
+                  onClick={() => setActivePersonKey('person1')}
+                  className={`px-3 py-1 rounded-full text-sm font-semibold transition ${
+                    activePersonKey === 'person1'
+                      ? (darkMode ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-white')
+                      : (darkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100')
+                  }`}
+                >
+                  {data.person1.name || t('person1Label')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePersonKey('person2')}
+                  className={`px-3 py-1 rounded-full text-sm font-semibold transition ${
+                    activePersonKey === 'person2'
+                      ? (darkMode ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-white')
+                      : (darkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100')
+                  }`}
+                >
+                  {data.person2.name || t('person2Label')}
+                </button>
+              </div>
             </div>
           )}
 
@@ -5734,12 +5861,17 @@ const App: React.FC = () => {
           {jointAccountEnabled && (
             <div className="flex justify-center">
               <div
-                className={`w-full max-w-4xl p-5 rounded-2xl ${
-                  darkMode ? 'bg-slate-900/70 border border-slate-800' : 'card-float'
+                className={`w-full max-w-4xl p-5 rounded-2xl border border-l-4 ${
+                  darkMode ? 'border-slate-800' : 'card-float'
                 }`}
+                style={{
+                  backgroundColor: jointTone.background,
+                  borderColor: jointTone.border,
+                  border: isDefaultPalette ? 'none' : undefined
+                }}
               >
                 <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className={`font-semibold ${darkMode ? 'text-slate-100' : 'text-slate-700'}`}>{t('jointAccountTitle')}</h3>
+                  <h3 className="font-semibold" style={{ color: jointTone.text }}>{t('jointAccountTitle')}</h3>
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => addJointTransaction('deposit')}
@@ -5803,16 +5935,22 @@ const App: React.FC = () => {
                             />
                           </td>
                           <td className="p-2">
-                            <select
+                            <Select
                               value={transaction.type}
-                              onChange={(e) => updateJointTransaction(transaction.id, 'type', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded font-semibold ${
-                                transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'
-                              } ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
+                              onValueChange={(value) => updateJointTransaction(transaction.id, 'type', value)}
                             >
-                              <option value="deposit">{t('depositOptionLabel')}</option>
-                              <option value="expense">{t('expenseOptionLabel')}</option>
-                            </select>
+                              <SelectTrigger
+                                className={`w-full ${transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'} ${
+                                  darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                                <SelectItem value="deposit">{t('depositOptionLabel')}</SelectItem>
+                                <SelectItem value="expense">{t('expenseOptionLabel')}</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="p-2">
                             <input
@@ -5833,14 +5971,20 @@ const App: React.FC = () => {
                             />
                           </td>
                           <td className="p-2">
-                            <select
+                            <Select
                               value={transaction.person}
-                              onChange={(e) => updateJointTransaction(transaction.id, 'person', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                              onValueChange={(value) => updateJointTransaction(transaction.id, 'person', value)}
                             >
-                              <option value={data.person1.name}>{data.person1.name}</option>
-                              <option value={data.person2.name}>{data.person2.name}</option>
-                            </select>
+                              <SelectTrigger
+                                className={`w-full ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                                <SelectItem value={data.person1.name}>{data.person1.name}</SelectItem>
+                                <SelectItem value={data.person2.name}>{data.person2.name}</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="p-2">
                             <button onClick={() => deleteJointTransaction(transaction.id)} className="text-red-500 hover:text-red-700">
@@ -5856,7 +6000,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-6 flex sm:hidden">
+          <div className="mt-6 hidden sm:flex">
             <PaletteSelector
               palettes={PALETTES}
               value={palette.id}
@@ -5875,8 +6019,15 @@ const App: React.FC = () => {
         </div>
       )}
         {expenseWizard && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
-            <div
+          <Dialog
+            open={Boolean(expenseWizard)}
+            onOpenChange={(open) => {
+              if (!open) {
+                closeExpenseWizard();
+              }
+            }}
+          >
+            <DialogContent
               className={`w-full max-w-md rounded-2xl p-6 space-y-4 shadow-lg ${
                 darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
               }`}
@@ -5922,19 +6073,25 @@ const App: React.FC = () => {
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <label className="text-sm font-medium" htmlFor="expense-category">{t('categoryLabel')}</label>
-                    <select
-                      id="expense-category"
-                      value={expenseWizard.categoryOverrideId}
-                      onChange={(e) => updateExpenseWizard({ categoryOverrideId: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                    <Select
+                      value={expenseWizard.categoryOverrideId || 'auto'}
+                      onValueChange={(value) => updateExpenseWizard({ categoryOverrideId: value === 'auto' ? '' : value })}
                     >
-                      <option value="">{t('categoryAutoLabel')}</option>
-                      {AUTO_CATEGORIES.map(category => (
-                        <option key={category.id} value={category.id}>
-                          {category.emoji} {languagePreference === 'fr' ? category.labels.fr : category.labels.en}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger
+                        id="expense-category"
+                        className={`w-full ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200 text-slate-800'}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                        <SelectItem value="auto">{t('categoryAutoLabel')}</SelectItem>
+                        {AUTO_CATEGORIES.map(category => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.emoji} {languagePreference === 'fr' ? category.labels.fr : category.labels.en}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {expenseWizard.type === 'free' && (
@@ -5944,7 +6101,7 @@ const App: React.FC = () => {
                           type="checkbox"
                           checked={expenseWizard.isRecurring}
                           onChange={(e) => updateExpenseWizard({ isRecurring: e.target.checked })}
-                          className="h-4 w-4"
+                          className="h-4 w-4 accent-emerald-500"
                         />
                         {t('installmentLabel')}
                       </label>
@@ -6018,12 +6175,20 @@ const App: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
         {deleteMonthOpen && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${darkMode ? 'bg-black/60' : 'bg-black/40'}`}>
-            <div
+          <Dialog
+            open={deleteMonthOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                setDeleteMonthOpen(false);
+                setDeleteMonthInput('');
+              }
+            }}
+          >
+            <DialogContent
               className={`w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-lg ${
                 darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
               }`}
@@ -6067,8 +6232,8 @@ const App: React.FC = () => {
                   {t('confirmDeleteLabel')}
                 </button>
               </div>
-            </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
           </main>
         </div>
