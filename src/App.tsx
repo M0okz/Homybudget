@@ -6000,14 +6000,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-6 hidden sm:flex">
-            <PaletteSelector
-              palettes={PALETTES}
-              value={palette.id}
-              onChange={setPaletteId}
-              darkMode={darkMode}
-            />
-          </div>
+          <div className="mt-6 hidden sm:flex" />
         </>
       ) : (
         <div className={`rounded-2xl border p-6 ${darkMode ? 'bg-slate-900/40 border-slate-800 text-slate-200' : 'bg-white border-slate-200 text-slate-700'}`}>
