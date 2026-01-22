@@ -5762,7 +5762,7 @@ const App: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="hidden sm:grid sm:grid-cols-2 sm:gap-6 sm:mb-6">
+            <div className="hidden sm:grid sm:grid-cols-2 sm:gap-6 sm:mb-6 w-full max-w-6xl mx-auto">
               <PersonColumnHeader
                 person={data.person1}
                 personKey="person1"
