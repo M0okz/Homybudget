@@ -2227,6 +2227,7 @@ type SettingsViewProps = {
   darkMode: boolean;
   onAuthFailure: (error: unknown) => boolean;
   onProfileUpdated: (user: AuthUser) => void;
+  onUserLabelUpdate: (userId: string, label: string) => void;
   sortByCost: boolean;
   onToggleSortByCost: (value: boolean) => void;
   languagePreference: LanguageCode;
@@ -2262,6 +2263,7 @@ const SettingsView = ({
   darkMode,
   onAuthFailure,
   onProfileUpdated,
+  onUserLabelUpdate,
   sortByCost,
   onToggleSortByCost,
   languagePreference,
@@ -2659,6 +2661,10 @@ const SettingsView = ({
       setUsers(prev => prev.map(item => (item.id === target.id ? updated : item)));
       if (target.id === currentUserId) {
         onProfileUpdated(updated);
+      }
+      const nextLabel = updated.displayName || updated.username;
+      if (nextLabel) {
+        onUserLabelUpdate(updated.id, nextLabel);
       }
       cancelDisplayNameEdit();
     } catch (error) {
@@ -4269,6 +4275,56 @@ const App: React.FC = () => {
     return profile.displayName || profile.username || null;
   };
 
+  const updateLinkedUserLabel = (userId: string, label: string) => {
+    setMonthlyBudgets(prev => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach(monthKey => {
+        const month = next[monthKey];
+        if (!month) {
+          return;
+        }
+        let updated = month;
+        let monthChanged = false;
+
+        const updatePerson = (personKey: 'person1' | 'person2') => {
+          const linkedUserId = personKey === 'person1' ? updated.person1UserId : updated.person2UserId;
+          if (linkedUserId !== userId) {
+            return;
+          }
+          const currentPerson = personKey === 'person1' ? updated.person1 : updated.person2;
+          if (currentPerson.name === label) {
+            return;
+          }
+          const previousName = currentPerson.name;
+          const nextJoint = previousName
+            ? {
+                ...updated.jointAccount,
+                transactions: updated.jointAccount.transactions.map(transaction =>
+                  transaction.person === previousName ? { ...transaction, person: label } : transaction
+                )
+              }
+            : updated.jointAccount;
+          if (personKey === 'person1') {
+            updated = { ...updated, person1: { ...updated.person1, name: label }, jointAccount: nextJoint };
+          } else {
+            updated = { ...updated, person2: { ...updated.person2, name: label }, jointAccount: nextJoint };
+          }
+          monthChanged = true;
+        };
+
+        updatePerson('person1');
+        updatePerson('person2');
+
+        if (monthChanged) {
+          next[monthKey] = updated;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  };
+
   const updatePersonMapping = (personKey: 'person1' | 'person2', profile: AuthUser | null) => {
     const userId = profile?.id ?? null;
     const label = resolveUserLabel(profile);
@@ -4354,6 +4410,35 @@ const App: React.FC = () => {
       return changed ? next : prev;
     });
   }, [authProfile, isHydrated, t]);
+
+  useEffect(() => {
+    if (!authProfile || authProfile.role !== 'admin' || !authToken || !isHydrated) {
+      return;
+    }
+    let isActive = true;
+    const syncLinkedNames = async () => {
+      try {
+        const list = await fetchUsers();
+        if (!isActive) {
+          return;
+        }
+        list.forEach(item => {
+          const label = item.displayName || item.username;
+          if (label) {
+            updateLinkedUserLabel(item.id, label);
+          }
+        });
+      } catch (error) {
+        if (isActive) {
+          console.error('Failed to sync user labels', error);
+        }
+      }
+    };
+    void syncLinkedNames();
+    return () => {
+      isActive = false;
+    };
+  }, [authProfile, authToken, isHydrated]);
 
   const addIncomeSource = (personKey: 'person1' | 'person2') => {
     const newSource: IncomeSource = {
@@ -5328,6 +5413,7 @@ const App: React.FC = () => {
             setAuthProfile(profile);
             setAuthUser(profile.username);
           }}
+          onUserLabelUpdate={updateLinkedUserLabel}
           sortByCost={sortByCost}
           onToggleSortByCost={setSortByCost}
           languagePreference={languagePreference}
