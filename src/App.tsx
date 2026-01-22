@@ -2315,6 +2315,9 @@ const SettingsView = ({
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [userActionId, setUserActionId] = useState<string | null>(null);
+  const [editDisplayNameId, setEditDisplayNameId] = useState<string | null>(null);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [resetInfo, setResetInfo] = useState<{ userId: string; token: string; expiresAt: string } | null>(null);
   const [createForm, setCreateForm] = useState({
     username: '',
@@ -2621,6 +2624,46 @@ const SettingsView = ({
     } catch (error) {
       if (!onAuthFailure(error)) {
         setUsersError(resolveErrorMessage(error, t('resetTokenError')));
+      }
+    } finally {
+      setUserActionId(null);
+    }
+  };
+
+  const startDisplayNameEdit = (target: AuthUser) => {
+    if (userActionId) {
+      return;
+    }
+    setEditDisplayNameId(target.id);
+    setDisplayNameDraft(target.displayName ?? '');
+    setDisplayNameError(null);
+  };
+
+  const cancelDisplayNameEdit = () => {
+    setEditDisplayNameId(null);
+    setDisplayNameDraft('');
+    setDisplayNameError(null);
+  };
+
+  const saveDisplayNameEdit = async (target: AuthUser) => {
+    if (userActionId) {
+      return;
+    }
+    setUserActionId(target.id);
+    setDisplayNameError(null);
+    const trimmed = displayNameDraft.trim();
+    try {
+      const updated = await updateUserRequest(target.id, {
+        displayName: trimmed ? trimmed : null
+      });
+      setUsers(prev => prev.map(item => (item.id === target.id ? updated : item)));
+      if (target.id === currentUserId) {
+        onProfileUpdated(updated);
+      }
+      cancelDisplayNameEdit();
+    } catch (error) {
+      if (!onAuthFailure(error)) {
+        setDisplayNameError(resolveErrorMessage(error, t('displayNameUpdateError')));
       }
     } finally {
       setUserActionId(null);
@@ -3088,8 +3131,74 @@ const SettingsView = ({
                             return (
                               <tr key={item.id} className={darkMode ? 'border-t border-gray-800' : 'border-t border-gray-200'}>
                                 <td className="py-2 pr-4">
-                                  <div className="font-semibold">{item.displayName || item.username}</div>
-                                  <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>{item.username}</div>
+                                  {editDisplayNameId === item.id ? (
+                                    <div className="space-y-1">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <input
+                                          type="text"
+                                          value={displayNameDraft}
+                                          onChange={(event) => setDisplayNameDraft(event.target.value)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                              event.preventDefault();
+                                              void saveDisplayNameEdit(item);
+                                            }
+                                            if (event.key === 'Escape') {
+                                              event.preventDefault();
+                                              cancelDisplayNameEdit();
+                                            }
+                                          }}
+                                          placeholder={item.username}
+                                          className={`w-full max-w-[14rem] px-2 py-1 rounded-md border text-sm ${
+                                            darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
+                                          }`}
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => void saveDisplayNameEdit(item)}
+                                          className={`p-1.5 rounded-md ${
+                                            darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                          }`}
+                                          title={t('updateButton')}
+                                        >
+                                          <Check size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={cancelDisplayNameEdit}
+                                          className={`p-1.5 rounded-md ${
+                                            darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                          }`}
+                                          title={t('cancelLabel')}
+                                        >
+                                          <X size={14} />
+                                        </button>
+                                      </div>
+                                      <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>
+                                        @{item.username}
+                                      </div>
+                                      {displayNameError && (
+                                        <div className={`text-xs ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                                          {displayNameError}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => startDisplayNameEdit(item)}
+                                      disabled={Boolean(userActionId)}
+                                      className={`text-left ${darkMode ? 'text-gray-100' : 'text-gray-800'} ${
+                                        userActionId ? 'opacity-60 cursor-not-allowed' : 'hover:underline'
+                                      }`}
+                                    >
+                                      <div className="font-semibold">{item.displayName || item.username}</div>
+                                      <div className={darkMode ? 'text-gray-500 text-xs' : 'text-gray-500 text-xs'}>
+                                        @{item.username}
+                                      </div>
+                                    </button>
+                                  )}
                                 </td>
                                 <td className="py-2 pr-4">
                                   <select
@@ -3234,6 +3343,7 @@ const App: React.FC = () => {
       : t('settingsLabel');
   const userDisplayName = authProfile?.displayName || authProfile?.username || authUser || t('accountLabel');
   const userInitial = (userDisplayName.trim()[0] || 'U').toUpperCase();
+  const userHandle = authProfile?.username || authUser || '';
   const userAvatarUrl = authProfile?.avatarUrl || null;
   const resolvedUserAvatarUrl = resolveAssetUrl(userAvatarUrl);
   const currentMonthKey = getCurrentMonthKey(currentDate);
@@ -4865,8 +4975,12 @@ const App: React.FC = () => {
             )}
           </div>
           <div className="text-left">
-            <div className="text-sm font-semibold">{t('profileMenuLabel')}</div>
-            <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{userDisplayName}</div>
+            <div className="text-sm font-semibold">{userDisplayName}</div>
+            {userHandle && (
+              <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                @{userHandle}
+              </div>
+            )}
           </div>
         </button>
         <button
