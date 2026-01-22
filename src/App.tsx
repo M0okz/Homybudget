@@ -628,6 +628,31 @@ const getCategoryById = (id?: string | null) => {
   return AUTO_CATEGORIES.find(category => category.id === id) ?? null;
 };
 
+const CATEGORY_BADGE_CLASSES: Record<string, string> = {
+  groceries: 'chip-groceries',
+  health: 'chip-health',
+  transport: 'chip-transport',
+  housing: 'chip-housing',
+  bills: 'chip-bills',
+  subscriptions: 'chip-subscriptions',
+  everyday: 'chip-everyday',
+  sport: 'chip-sport',
+  leisure: 'chip-leisure',
+  family: 'chip-family',
+  pets: 'chip-pets',
+  finance: 'chip-finance',
+  savings: 'chip-savings',
+  gifts: 'chip-gifts',
+  other: 'chip-other'
+};
+
+const getCategoryBadgeClass = (categoryId: string, darkMode: boolean) => {
+  if (darkMode) {
+    return 'category-chip bg-white/10 text-slate-200';
+  }
+  return `category-chip ${CATEGORY_BADGE_CLASSES[categoryId] ?? 'chip-other'}`;
+};
+
 const formatAmount = (value: number) => {
   const numeric = Number.isFinite(value) ? value : 0;
   return String(Math.round(numeric));
@@ -1273,7 +1298,7 @@ const PersonColumnHeader = ({
           type="text"
           value={tempName}
           onChange={(e) => setTempName(e.target.value)}
-          className={`px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+          className={`px-3 py-1.5 border rounded-lg text-sm ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
         />
         <button onClick={() => saveName(personKey)} className={darkMode ? 'text-white' : 'text-gray-800'}>
           <Check size={16} />
@@ -1284,11 +1309,11 @@ const PersonColumnHeader = ({
       </div>
     ) : (
       <div className="flex items-center gap-2">
-        <h2 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+        <h2 className={`text-2xl sm:text-3xl font-semibold ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
           {person.name}
         </h2>
         {!isLinked && (
-          <button onClick={() => startEditingName(personKey)} className={darkMode ? 'text-gray-200' : 'text-gray-700'}>
+          <button onClick={() => startEditingName(personKey)} className={darkMode ? 'text-slate-300' : 'text-slate-500'}>
             <Edit2 size={16} />
           </button>
         )}
@@ -1307,7 +1332,7 @@ const BudgetHeaderSection = ({
   deleteIncomeSource,
   updateIncomeSource
 }: BudgetHeaderSectionProps) => {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const available = calculateAvailable(person);
   const totalFixed = calculateTotalFixed(person.fixedExpenses);
   const totalCategories = calculateTotalCategories(person.categories);
@@ -1316,36 +1341,48 @@ const BudgetHeaderSection = ({
   const animatedIncome = useAnimatedNumber(totalIncome);
   const animatedExpenses = useAnimatedNumber(totalExpenses);
   const animatedAvailable = useAnimatedNumber(available);
-  const [availableColors] = palette.slots;
-  const availableBgStyle = { backgroundColor: darkMode ? availableColors.darkBg : availableColors.lightBg };
-  const availableTextStyle = { color: darkMode ? availableColors.darkText : availableColors.lightText };
+  const revenueBorderClass = darkMode ? 'border-emerald-500/60' : 'border-emerald-500';
+  const revenueHeaderClass = darkMode ? 'text-emerald-300' : 'text-emerald-700';
+  const summaryLabelClass = darkMode ? 'text-slate-400' : 'text-slate-500';
+  const summaryValueClass = darkMode ? 'text-slate-100' : 'text-slate-700';
 
   return (
-    <div className="min-w-0 rounded-lg p-4 mb-4 flex flex-col sm:h-full" style={availableBgStyle}>
+    <div
+      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border-l-4 ${
+        darkMode ? 'bg-slate-900/70 border-slate-800' : 'card-float border-emerald-100'
+      } ${revenueBorderClass}`}
+    >
       <div className="mb-3">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-semibold" style={availableTextStyle}>{t('incomeLabel')}:</span>
-          <button onClick={() => addIncomeSource(personKey)} style={availableTextStyle}>
+          <span className={`text-sm font-semibold ${revenueHeaderClass}`}>{t('incomeLabel')}:</span>
+          <button
+            type="button"
+            onClick={() => addIncomeSource(personKey)}
+            className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
+              darkMode ? 'border-emerald-400/50 text-emerald-200 bg-emerald-400/10' : 'border-emerald-200 text-emerald-700 bg-emerald-50'
+            }`}
+            aria-label={t('addLabel')}
+          >
             <Plus size={16} />
           </button>
         </div>
         <div className="space-y-2">
           {person.incomeSources.map(source => (
-            <div key={source.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-gray-800' : 'bg-white'} p-2 rounded`}>
+            <div key={source.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} p-2 rounded-lg border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
               <input
                 type="text"
                 value={source.name}
                 onChange={(e) => updateIncomeSource(personKey, source.id, 'name', e.target.value)}
-                className={`flex-1 min-w-[10rem] px-2 py-1 border rounded text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+                className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                 placeholder={t('incomePlaceholder')}
               />
               <input
                 type="number"
                 value={coerceNumber(source.amount)}
                 onChange={(e) => updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value))}
-                className={`w-24 flex-none px-2 py-1 border rounded text-right text-sm ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+                className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
               />
-              <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500">
+              <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500 hover:text-red-600">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -1353,18 +1390,18 @@ const BudgetHeaderSection = ({
         </div>
       </div>
 
-      <div className={`mt-auto space-y-1 text-sm border-t pt-2 ${darkMode ? 'border-gray-600' : ''}`}>
-        <div className="flex justify-between">
-          <span className={darkMode ? 'text-gray-300' : ''}>{t('totalIncomeLabel')}:</span>
-          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatCurrency(animatedIncome, currencyPreference)}</span>
+      <div className={`mt-auto space-y-1 text-sm border-t pt-3 ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+        <div className={`flex justify-between ${summaryLabelClass}`}>
+          <span>{t('totalIncomeLabel')}:</span>
+          <span className={`font-semibold ${summaryValueClass}`}>{formatCurrency(animatedIncome, currencyPreference)}</span>
         </div>
-        <div className="flex justify-between">
-          <span className={darkMode ? 'text-gray-300' : ''}>{t('totalExpensesLabel')}:</span>
-          <span className={`font-semibold ${darkMode ? 'text-gray-100' : ''}`}>{formatCurrency(animatedExpenses, currencyPreference)}</span>
+        <div className={`flex justify-between ${summaryLabelClass}`}>
+          <span>{t('totalExpensesLabel')}:</span>
+          <span className={`font-semibold ${summaryValueClass}`}>{formatCurrency(animatedExpenses, currencyPreference)}</span>
         </div>
-        <div className="flex justify-between font-bold" style={availableTextStyle}>
+        <div className={`flex justify-between font-semibold ${available < 0 ? 'text-red-600' : revenueHeaderClass}`}>
           <span>{t('availableLabel')}:</span>
-          <span className={available < 0 ? 'text-red-600' : ''}>{formatCurrency(animatedAvailable, currencyPreference)}</span>
+          <span>{formatCurrency(animatedAvailable, currencyPreference)}</span>
         </div>
       </div>
     </div>
@@ -1401,30 +1438,32 @@ const BudgetFixedSection = ({
   ), 0);
   const remainingFixedTotal = Math.max(0, totalFixed - paidFixedTotal);
   const hasPaidFixed = paidFixedTotal > 0;
-  const fixedColors = palette.slots[1];
-  const fixedBgStyle = { backgroundColor: darkMode ? fixedColors.darkBg : fixedColors.lightBg };
-  const fixedTextStyle = { color: darkMode ? fixedColors.darkText : fixedColors.lightText };
+  const fixedHeaderClass = darkMode ? 'text-rose-200' : 'text-rose-600';
 
   return (
-    <div className="min-w-0 rounded-lg p-4 mb-4 flex flex-col sm:h-full" style={fixedBgStyle}>
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="font-bold" style={fixedTextStyle}>{t('fixedMoneyLabel')}</h3>
+    <div
+      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border-l-4 ${
+        darkMode ? 'bg-slate-900/70 border-slate-800' : 'card-float border-rose-100'
+      } ${darkMode ? 'border-rose-400/60' : 'border-[#f27b63]'}`}
+    >
+      <div className="flex justify-between items-center mb-3">
+        <h3 className={`text-sm font-semibold ${fixedHeaderClass}`}>{t('fixedMoneyLabel')}</h3>
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'fixed')}
-          className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition hover:scale-105 ${
-            darkMode ? 'border-green-300/70 text-green-200/90 bg-transparent' : 'border-green-600/70 text-green-600 bg-transparent'
+          className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
+            darkMode ? 'border-rose-400/50 text-rose-200 bg-rose-400/10' : 'border-rose-200 text-rose-500 bg-rose-50'
           }`}
           aria-label={t('addRowLabel')}
         >
           <Plus size={16} />
         </button>
       </div>
-      <div className={`rounded-lg border ${darkMode ? 'border-gray-700/70 bg-gray-900/40 text-gray-100' : 'border-gray-200 bg-white/70 text-gray-800'}`}>
+      <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-gray-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
         {orderedExpenses.length === 0 ? (
           <div className="py-6" />
         ) : (
-          <div className={`divide-y ${darkMode ? 'divide-gray-700/70' : 'divide-gray-200'}`}>
+          <div className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
             {orderedExpenses.map((expense, index) => {
               const isFirst = index === 0;
               const isLast = index === orderedExpenses.length - 1;
@@ -1433,25 +1472,22 @@ const BudgetFixedSection = ({
                 ? getCategoryById(expense.categoryOverrideId)
                 : getAutoCategory(expense.name);
               const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
+              const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
               return (
                 <div key={expense.id} className="px-2 py-2">
-                  <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${darkMode ? 'hover:bg-gray-800/70' : 'hover:bg-gray-100'}`}>
+                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
                     <input
                       type="checkbox"
                       checked={expense.isChecked || false}
                       onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
-                      className="h-4 w-4"
+                      className="h-4 w-4 accent-[#f27b63]"
                       aria-label={t('validateExpenseLabel')}
                     />
                     <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                       {expense.name || t('newFixedExpenseLabel')}
                     </span>
-                    {resolvedCategory && (
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                          darkMode ? 'bg-white/10 text-gray-100' : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
+                    {resolvedCategory && badgeClass && (
+                      <span className={badgeClass}>
                         <span>{resolvedCategory.emoji}</span>
                         <span>{categoryLabel}</span>
                       </span>
@@ -1496,17 +1532,18 @@ const BudgetFixedSection = ({
           </div>
         )}
       </div>
-      <div className={`mt-3 pt-3 flex items-center justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
+      <div className={`mt-3 pt-3 flex items-center justify-between border-t text-base font-semibold ${darkMode ? 'border-slate-800 text-white' : 'border-slate-100 text-slate-800'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
         <div className="flex items-center gap-2">
-          <span>{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
+          <span className="tabular-nums">{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
           {hasPaidFixed && (
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 darkMode
                   ? 'bg-white/10 text-gray-200'
-                  : 'bg-gray-100 text-gray-600'
+                  : 'bg-[#fff1ec] text-[#c45b47]'
               }`}
+              title={t('remainingToPayLabel')}
             >
               {formatCurrency(remainingFixedTotal, currencyPreference)}
             </span>
@@ -1547,30 +1584,32 @@ const BudgetFreeSection = ({
   ), 0);
   const remainingCategoriesTotal = Math.max(0, totalCategories - paidCategoriesTotal);
   const hasPaidCategories = paidCategoriesTotal > 0;
-  const freeColors = palette.slots[2];
-  const freeBgStyle = { backgroundColor: darkMode ? freeColors.darkBg : freeColors.lightBg };
-  const freeTextStyle = { color: darkMode ? freeColors.darkText : freeColors.lightText };
+  const freeHeaderClass = darkMode ? 'text-rose-200' : 'text-rose-600';
 
   return (
-    <div className="min-w-0 rounded-lg p-4 mb-4 flex flex-col sm:h-full" style={freeBgStyle}>
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="font-bold" style={freeTextStyle}>{t('freeMoneyLabel')}</h3>
+    <div
+      className={`min-w-0 p-5 mb-4 flex flex-col sm:h-full rounded-2xl border-l-4 ${
+        darkMode ? 'bg-slate-900/70 border-slate-800' : 'card-float border-rose-100'
+      } ${darkMode ? 'border-rose-400/70' : 'border-[#f27b63]'}`}
+    >
+      <div className="flex justify-between items-center mb-3">
+        <h3 className={`text-sm font-semibold ${freeHeaderClass}`}>{t('freeMoneyLabel')}</h3>
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'free')}
-          className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition hover:scale-105 ${
-            darkMode ? 'border-green-300/70 text-green-200/90 bg-transparent' : 'border-green-600/70 text-green-600 bg-transparent'
+          className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
+            darkMode ? 'border-rose-400/50 text-rose-200 bg-rose-400/10' : 'border-rose-200 text-rose-500 bg-rose-50'
           }`}
           aria-label={t('addRowLabel')}
         >
           <Plus size={16} />
         </button>
       </div>
-      <div className={`rounded-lg border ${darkMode ? 'border-gray-700/70 bg-gray-900/40 text-gray-100' : 'border-gray-200 bg-white/70 text-gray-800'}`}>
+      <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-gray-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
         {orderedCategories.length === 0 ? (
           <div className="py-6" />
         ) : (
-          <div className={`divide-y ${darkMode ? 'divide-gray-700/70' : 'divide-gray-200'}`}>
+          <div className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
             {orderedCategories.map((category, index) => {
               const isFirst = index === 0;
               const isLast = index === orderedCategories.length - 1;
@@ -1580,31 +1619,28 @@ const BudgetFreeSection = ({
                 : getAutoCategory(category.name);
               const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
               const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
+              const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
               return (
                 <div key={category.id} className="px-2 py-2">
-                  <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${darkMode ? 'hover:bg-gray-800/70' : 'hover:bg-gray-100'}`}>
+                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
                     <input
                       type="checkbox"
                       checked={category.isChecked || false}
                       onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
-                      className="h-4 w-4"
+                      className="h-4 w-4 accent-[#f27b63]"
                       aria-label={t('validateExpenseLabel')}
                     />
                     <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                       {category.name || t('newCategoryLabel')}
                     </span>
-                    {resolvedCategory && (
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                          darkMode ? 'bg-white/10 text-gray-100' : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
+                    {resolvedCategory && badgeClass && (
+                      <span className={badgeClass}>
                         <span>{resolvedCategory.emoji}</span>
                         <span>{categoryLabel}</span>
                       </span>
                     )}
                     {recurringLabel && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-gray-300' : 'bg-slate-100 text-slate-600'}`}>
                         {recurringLabel}
                       </span>
                     )}
@@ -1648,17 +1684,18 @@ const BudgetFreeSection = ({
           </div>
         )}
       </div>
-      <div className={`mt-3 pt-3 flex items-center justify-between border-t text-base font-semibold ${darkMode ? 'border-gray-700 text-white' : 'border-gray-200 text-black'} sm:mt-auto`}>
+      <div className={`mt-3 pt-3 flex items-center justify-between border-t text-base font-semibold ${darkMode ? 'border-slate-800 text-white' : 'border-slate-100 text-slate-800'} sm:mt-auto`}>
         <span>{t('totalExpensesShortLabel')}:</span>
         <div className="flex items-center gap-2">
-          <span>{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
+          <span className="tabular-nums">{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
           {hasPaidCategories && (
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 darkMode
                   ? 'bg-white/10 text-gray-200'
-                  : 'bg-gray-100 text-gray-600'
+                  : 'bg-[#fff1ec] text-[#c45b47]'
               }`}
+              title={t('remainingToPayLabel')}
             >
               {formatCurrency(remainingCategoriesTotal, currencyPreference)}
             </span>
@@ -3414,7 +3451,7 @@ const App: React.FC = () => {
   const pageStyle = {
     backgroundImage: darkMode
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
-      : 'radial-gradient(1200px circle at 85% -10%, rgba(59,130,246,0.10), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(16,185,129,0.10), transparent 50%)'
+      : 'radial-gradient(1200px circle at 15% -15%, rgba(31,157,106,0.12), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(242,123,99,0.10), transparent 50%)'
   } as React.CSSProperties;
 
   const oidcLoginEnabled = Boolean(oidcLoginConfig?.enabled);
@@ -3662,7 +3699,9 @@ const App: React.FC = () => {
     }
     const root = document.body;
     const html = document.documentElement;
-    html.style.setProperty('--app-bg', darkMode ? '#020617' : '#f8fafc');
+    html.style.setProperty('--app-bg', darkMode ? '#0b1220' : '#fbf7f2');
+    html.style.setProperty('--ink', darkMode ? '#e2e8f0' : '#1f2937');
+    html.style.setProperty('--card-border', darkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(15, 23, 42, 0.08)');
     root.classList.add('theme-transition');
     const timeout = window.setTimeout(() => {
       root.classList.remove('theme-transition');
@@ -5142,7 +5181,7 @@ const App: React.FC = () => {
   return (
     <TranslationContext.Provider value={{ t, language: languagePreference }}>
       <div
-        className={`min-h-screen app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-slate-50'}`}
+        className={`min-h-screen app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-transparent'}`}
         style={pageStyle}
       >
         <div className="flex min-h-screen">
@@ -5688,66 +5727,72 @@ const App: React.FC = () => {
           {jointAccountEnabled && (
             <div className="flex justify-center">
               <div
-                className={`w-full max-w-4xl rounded-xl border p-4 shadow-sm ${
-                  darkMode ? 'bg-red-950/40 border-red-900/60' : 'bg-red-50 border-red-200'
+                className={`w-full max-w-4xl p-5 rounded-2xl ${
+                  darkMode ? 'bg-slate-900/70 border border-slate-800' : 'card-float'
                 }`}
               >
                 <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className={`font-bold ${darkMode ? 'text-red-400' : 'text-red-800'}`}>{t('jointAccountTitle')}</h3>
+                  <h3 className={`font-semibold ${darkMode ? 'text-slate-100' : 'text-slate-700'}`}>{t('jointAccountTitle')}</h3>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => addJointTransaction('deposit')} className="btn-gradient px-3 py-1 rounded flex items-center gap-1 text-xs sm:text-sm">
+                    <button
+                      onClick={() => addJointTransaction('deposit')}
+                      className="px-3 py-1.5 rounded-full flex items-center gap-1 text-xs sm:text-sm font-semibold pill-emerald"
+                    >
                       <Plus size={16} />
                       <span>{t('depositLabel')}</span>
                     </button>
-                    <button onClick={() => addJointTransaction('expense')} className="btn-gradient px-3 py-1 rounded flex items-center gap-1 text-xs sm:text-sm">
+                    <button
+                      onClick={() => addJointTransaction('expense')}
+                      className="px-3 py-1.5 rounded-full flex items-center gap-1 text-xs sm:text-sm font-semibold pill-coral"
+                    >
                       <Plus size={16} />
                       <span>{t('expenseLabel')}</span>
                     </button>
                   </div>
                 </div>
 
-                <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg p-3 mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
+                <div className={`${darkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-white/90 border-slate-100'} rounded-xl border p-4 mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{t('initialBalanceLabel')}:</span>
+                    <span className={`font-semibold ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>{t('initialBalanceLabel')}:</span>
                     <input
                       type="number"
                       value={coerceNumber(data.jointAccount.initialBalance)}
                       onChange={(e) => updateInitialBalance(parseNumberInput(e.target.value))}
-                      className={`w-full sm:w-32 px-3 py-1 border rounded text-right ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+                      className={`w-full sm:w-32 px-3 py-2 border rounded-lg text-right ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     />
-                    <span className={darkMode ? 'text-gray-300' : ''}>
+                    <span className={darkMode ? 'text-slate-300' : 'text-slate-500'}>
                       {currencyPreference === 'USD' ? '$' : '€'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{t('currentBalanceLabel')}:</span>
-                    <span className={`text-xl sm:text-2xl font-bold ${calculateJointBalance() < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <span className={`font-semibold ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>{t('currentBalanceLabel')}:</span>
+                    <span className={`text-xl sm:text-2xl font-bold ${calculateJointBalance() < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                       {formatCurrency(calculateJointBalance(), currencyPreference)}
                     </span>
                   </div>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className={`w-full ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded text-sm`}>
-                    <thead className={darkMode ? 'bg-red-900/60' : 'bg-red-200'}>
+                  <table className={`w-full ${darkMode ? 'bg-slate-900/70' : 'bg-white/90'} rounded-xl text-sm border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                    <thead className={darkMode ? 'bg-slate-900/80' : 'bg-slate-50'}>
                       <tr>
-                        <th className={`p-2 text-left ${darkMode ? 'text-gray-300' : ''}`}>{t('dateLabel')}</th>
-                        <th className={`p-2 text-left ${darkMode ? 'text-gray-300' : ''}`}>{t('typeLabel')}</th>
-                        <th className={`p-2 text-left ${darkMode ? 'text-gray-300' : ''}`}>{t('descriptionLabel')}</th>
-                        <th className={`p-2 text-right ${darkMode ? 'text-gray-300' : ''}`}>{t('amountLabel')}</th>
-                        <th className={`p-2 text-left ${darkMode ? 'text-gray-300' : ''}`}>{t('personLabel')}</th>
+                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('dateLabel')}</th>
+                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('typeLabel')}</th>
+                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('descriptionLabel')}</th>
+                        <th className={`p-2 text-right ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('amountLabel')}</th>
+                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
                         <th className="p-2"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.jointAccount.transactions.map(transaction => (
-                        <tr key={transaction.id} className={`border-t ${darkMode ? 'border-gray-700' : ''}`}>
+                        <tr key={transaction.id} className={`border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
                           <td className="p-2">
                             <input
                               type="date"
                               value={transaction.date}
                               onChange={(e) => updateJointTransaction(transaction.id, 'date', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                             />
                           </td>
                           <td className="p-2">
@@ -5755,8 +5800,8 @@ const App: React.FC = () => {
                               value={transaction.type}
                               onChange={(e) => updateJointTransaction(transaction.id, 'type', e.target.value)}
                               className={`w-full px-2 py-1 border rounded font-semibold ${
-                                transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'
-                              } ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}
+                                transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'
+                              } ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
                             >
                               <option value="deposit">{t('depositOptionLabel')}</option>
                               <option value="expense">{t('expenseOptionLabel')}</option>
@@ -5767,7 +5812,7 @@ const App: React.FC = () => {
                               type="text"
                               value={transaction.description}
                               onChange={(e) => updateJointTransaction(transaction.id, 'description', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                             />
                           </td>
                           <td className="p-2">
@@ -5776,15 +5821,15 @@ const App: React.FC = () => {
                               value={coerceNumber(transaction.amount)}
                               onChange={(e) => updateJointTransaction(transaction.id, 'amount', parseNumberInput(e.target.value))}
                               className={`w-full px-2 py-1 border rounded text-right font-semibold ${
-                                transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'
-                              } ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}
+                                transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'
+                              } ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
                             />
                           </td>
                           <td className="p-2">
                             <select
                               value={transaction.person}
                               onChange={(e) => updateJointTransaction(transaction.id, 'person', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-gray-700 text-white border-gray-600' : ''}`}
+                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                             >
                               <option value={data.person1.name}>{data.person1.name}</option>
                               <option value={data.person2.name}>{data.person2.name}</option>

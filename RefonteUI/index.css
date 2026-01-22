@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/* Homybudget Design System - Modern Finance App */
+
+@layer base {
+  :root {
+    /* Base colors - warm neutral palette */
+    --background: 40 30% 98%;
+    --foreground: 220 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 15%;
+
+    /* Primary - Deep blue */
+    --primary: 225 65% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Soft lavender */
+    --secondary: 240 20% 96%;
+    --secondary-foreground: 220 25% 25%;
+
+    --muted: 40 20% 94%;
+    --muted-foreground: 220 15% 50%;
+
+    /* Accent - Warm peach */
+    --accent: 25 80% 95%;
+    --accent-foreground: 25 80% 35%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 90%;
+    --input: 40 15% 90%;
+    --ring: 225 65% 45%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar - elegant dark */
+    --sidebar-background: 225 35% 18%;
+    --sidebar-foreground: 220 20% 85%;
+    --sidebar-primary: 225 65% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 30% 25%;
+    --sidebar-accent-foreground: 220 20% 95%;
+    --sidebar-border: 225 25% 25%;
+    --sidebar-ring: 225 65% 55%;
+
+    /* Custom semantic colors */
+    --revenue: 152 55% 45%;
+    --revenue-foreground: 0 0% 100%;
+    --revenue-light: 152 45% 95%;
+    
+    --expense: 12 75% 55%;
+    --expense-foreground: 0 0% 100%;
+    --expense-light: 12 65% 96%;
+
+    --positive: 152 55% 45%;
+    --negative: 0 72% 55%;
+
+    /* Category colors */
+    --cat-housing: 25 70% 50%;
+    --cat-transport: 340 65% 55%;
+    --cat-food: 152 50% 45%;
+    --cat-utilities: 200 65% 50%;
+    --cat-subscriptions: 260 55% 55%;
+    --cat-health: 350 65% 55%;
+    --cat-sport: 45 80% 50%;
+    --cat-savings: 170 55% 45%;
+    --cat-other: 220 25% 55%;
+  }
+
+  .dark {
+    --background: 225 30% 10%;
+    --foreground: 220 20% 95%;
+
+    --card: 225 30% 14%;
+    --card-foreground: 220 20% 95%;
+
+    --popover: 225 30% 14%;
+    --popover-foreground: 220 20% 95%;
+
+    --primary: 225 65% 60%;
+    --primary-foreground: 225 35% 10%;
+
+    --secondary: 225 25% 20%;
+    --secondary-foreground: 220 20% 90%;
+
+    --muted: 225 25% 18%;
+    --muted-foreground: 220 15% 60%;
+
+    --accent: 225 25% 22%;
+    --accent-foreground: 220 20% 95%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 225 25% 20%;
+    --input: 225 25% 20%;
+    --ring: 225 65% 60%;
+
+    --sidebar-background: 225 35% 8%;
+    --sidebar-foreground: 220 20% 85%;
+    --sidebar-primary: 225 65% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 30% 15%;
+    --sidebar-accent-foreground: 220 20% 95%;
+    --sidebar-border: 225 25% 15%;
+    --sidebar-ring: 225 65% 60%;
+
+    --revenue: 152 55% 50%;
+    --revenue-light: 152 45% 15%;
+    --expense: 12 75% 60%;
+    --expense-light: 12 65% 15%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .card-elevated {
+    @apply bg-card rounded-xl border border-border/50 shadow-sm;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  }
+
+  .card-elevated:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  }
+
+  .gradient-revenue {
+    background: linear-gradient(135deg, hsl(152 55% 45%) 0%, hsl(165 50% 50%) 100%);
+  }
+
+  .gradient-expense {
+    background: linear-gradient(135deg, hsl(12 75% 55%) 0%, hsl(25 70% 55%) 100%);
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

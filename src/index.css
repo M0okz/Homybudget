@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,7 +11,16 @@
   --homy-red: #E85D5D;
   --homy-orange: #F5915D;
   --homy-yellow: #F9B55E;
-  --app-bg: #f8fafc;
+  --app-bg: #fbf7f2;
+  --cream: #fbf7f2;
+  --card: #ffffff;
+  --card-border: rgba(15, 23, 42, 0.08);
+  --ink: #1f2937;
+  --muted: #64748b;
+  --emerald: #1f9d6a;
+  --emerald-soft: #e7f7ef;
+  --coral: #f27b63;
+  --coral-soft: #fff1ec;
 }
 
 html,
@@ -19,7 +30,17 @@ body {
 
 body {
   margin: 0;
-  font-family: 'Noyh', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--ink);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'DM Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 html {
@@ -52,11 +73,9 @@ body.theme-transition * {
 .btn-gradient {
   background: linear-gradient(
     135deg,
-    var(--homy-violet) 0%,
-    var(--homy-rose) 32%,
-    var(--homy-red) 58%,
-    var(--homy-orange) 80%,
-    var(--homy-yellow) 100%
+    #f27b63 0%,
+    #f8a06a 52%,
+    #f6c27a 100%
   );
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -71,6 +90,116 @@ body.theme-transition * {
 
 .btn-gradient:active {
   transform: translateY(1px);
+}
+
+.card-float {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.card-float:hover {
+  box-shadow:
+    0 3px 8px rgba(15, 23, 42, 0.08),
+    0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.pill-emerald {
+  background: var(--emerald-soft);
+  color: var(--emerald);
+}
+
+.pill-coral {
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chip-groceries {
+  background: #e7f6ee;
+  color: #1c8b5a;
+}
+
+.chip-health {
+  background: #ffe6ec;
+  color: #cc3c66;
+}
+
+.chip-transport {
+  background: #ffe7f3;
+  color: #c94878;
+}
+
+.chip-housing {
+  background: #fff0df;
+  color: #c46b2a;
+}
+
+.chip-bills {
+  background: #e7f1ff;
+  color: #2f6fd6;
+}
+
+.chip-subscriptions {
+  background: #efe7ff;
+  color: #6a4bd9;
+}
+
+.chip-everyday {
+  background: #eef1ff;
+  color: #4b5fd1;
+}
+
+.chip-sport {
+  background: #fff4cc;
+  color: #b57400;
+}
+
+.chip-leisure {
+  background: #e8f1ff;
+  color: #3b6fd9;
+}
+
+.chip-family {
+  background: #e9f8f2;
+  color: #1b8b63;
+}
+
+.chip-pets {
+  background: #eaf2ff;
+  color: #3d6fd1;
+}
+
+.chip-finance {
+  background: #eef2f6;
+  color: #526177;
+}
+
+.chip-savings {
+  background: #e5fbf2;
+  color: #1c8f64;
+}
+
+.chip-gifts {
+  background: #ffe9f0;
+  color: #cc3c66;
+}
+
+.chip-other {
+  background: #eef1f5;
+  color: #5c6b82;
 }
 
 .version-pill {
