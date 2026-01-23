@@ -813,6 +813,40 @@ const useAnimatedNumber = (value: number, duration = 350) => {
   return animated;
 };
 
+const useIsPwa = () => {
+  const [isPwa, setIsPwa] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const media = window.matchMedia?.('(display-mode: standalone)');
+    const check = () => {
+      const isStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone;
+      setIsPwa(Boolean(media?.matches || isStandalone));
+    };
+    check();
+    if (media) {
+      if (media.addEventListener) {
+        media.addEventListener('change', check);
+      } else {
+        media.addListener(check);
+      }
+    }
+    return () => {
+      if (media) {
+        if (media.removeEventListener) {
+          media.removeEventListener('change', check);
+        } else {
+          media.removeListener(check);
+        }
+      }
+    };
+  }, []);
+
+  return isPwa;
+};
+
 const calculateJointBalanceForData = (budget: BudgetData) => {
   const account = budget.jointAccount;
   if (!account) {
@@ -3565,6 +3599,7 @@ const App: React.FC = () => {
     }
     return localStorage.getItem('paletteId') ?? PALETTES[0].id;
   });
+  const isPwa = useIsPwa();
   const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
   const [jointWizard, setJointWizard] = useState<JointWizardState | null>(null);
   const [jointDeleteArmed, setJointDeleteArmed] = useState(false);
@@ -5502,14 +5537,16 @@ const App: React.FC = () => {
                   </div>
                   <div className="text-lg font-semibold">{t('appName')}</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(false)}
-                  className={`p-2 rounded-xl ${darkMode ? 'bg-slate-800' : 'bg-white'}`}
-                  aria-label="Close menu"
-                >
-                  <X size={18} />
-                </button>
+                {!isPwa && (
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`p-2 rounded-xl ${darkMode ? 'bg-slate-800' : 'bg-white'}`}
+                    aria-label="Close menu"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto">
                 {sidebarNav}
@@ -6046,7 +6083,9 @@ const App: React.FC = () => {
                         <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('typeLabel')}</th>
                         <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('descriptionLabel')}</th>
                         <th className={`p-2 text-right ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('amountLabel')}</th>
-                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
+                        {!isPwa && (
+                          <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
+                        )}
                         <th className="p-2"></th>
                       </tr>
                     </thead>
@@ -6079,11 +6118,13 @@ const App: React.FC = () => {
                               {formatCurrency(transaction.amount, currencyPreference)}
                             </span>
                           </td>
-                          <td className="p-2">
-                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
-                              {transaction.person}
-                            </span>
-                          </td>
+                          {!isPwa && (
+                            <td className="p-2">
+                              <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                {transaction.person}
+                              </span>
+                            </td>
+                          )}
                           <td className="p-2">
                             <div className="flex items-center justify-end gap-2">
                               <button
