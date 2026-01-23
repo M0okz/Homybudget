@@ -2011,7 +2011,7 @@ const LoginScreen = ({
 
   return (
     <div
-      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
+      className={`min-h-screen-dvh p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
       style={pageStyle}
     >
       <form
@@ -2159,7 +2159,7 @@ const OnboardingWizard = ({
 
   return (
     <div
-      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
+      className={`min-h-screen-dvh p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
       style={pageStyle}
     >
       <div
@@ -5333,10 +5333,10 @@ const App: React.FC = () => {
   return (
     <TranslationContext.Provider value={{ t, language: languagePreference }}>
       <div
-        className={`min-h-screen app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-transparent'}`}
+        className={`min-h-screen-dvh app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-transparent'}`}
         style={pageStyle}
       >
-        <div className="flex min-h-screen">
+        <div className="flex min-h-screen-dvh">
           <aside
             className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:py-6 sm:px-4 sm:border-r transition-colors sticky top-0 h-screen ${
               darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/70 border-slate-100'
@@ -5364,7 +5364,7 @@ const App: React.FC = () => {
               onClick={() => setSidebarOpen(false)}
             />
             <aside
-              className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 ${
+              className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 safe-area-inset ${
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full'
               } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white/90 text-slate-800'} backdrop-blur-lg`}
             >
@@ -5394,7 +5394,11 @@ const App: React.FC = () => {
           </div>
 
           <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
-            <div className="flex flex-col gap-4 mb-6">
+            <div
+              className={`flex flex-col gap-4 mb-6 sm:static sticky top-0 z-30 pt-2 pb-3 ${
+                darkMode ? 'bg-slate-950/80' : 'bg-[#fbf7f2]/80'
+              } backdrop-blur-lg sm:bg-transparent sm:backdrop-blur-none sm:pt-0 sm:pb-0`}
+            >
               <div className="sm:hidden flex items-center justify-between gap-2">
                 <button
                   type="button"
