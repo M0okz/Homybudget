@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, ChevronUp, ChevronDown, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, type DropResult } from 'react-beautiful-dnd';
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
@@ -456,6 +457,16 @@ const coerceNumber = (value: unknown) => {
   return 0;
 };
 
+const reorderList = <T,>(list: T[], startIndex: number, endIndex: number) => {
+  const result = [...list];
+  const [removed] = result.splice(startIndex, 1);
+  if (removed === undefined) {
+    return result;
+  }
+  result.splice(endIndex, 0, removed);
+  return result;
+};
+
 const normalizeIconLabel = (value: string) => (
   value
     .toLowerCase()
@@ -819,6 +830,33 @@ const useAnimatedNumber = (value: number, duration = 350) => {
   }, [value, duration]);
 
   return animated;
+};
+
+const useMediaQuery = (query: string) => {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener('change', update);
+    } else {
+      media.addListener(update);
+    }
+    return () => {
+      if (media.removeEventListener) {
+        media.removeEventListener('change', update);
+      } else {
+        media.removeListener(update);
+      }
+    };
+  }, [query]);
+
+  return matches;
 };
 
 const calculateJointBalanceForData = (budget: BudgetData) => {
@@ -1296,6 +1334,7 @@ type BudgetColumnProps = {
   personKey: 'person1' | 'person2';
   darkMode: boolean;
   sortByCost: boolean;
+  enableDrag: boolean;
   palette: Palette;
   currencyPreference: 'EUR' | 'USD';
   editingName: string | null;
@@ -1307,12 +1346,13 @@ type BudgetColumnProps = {
   addIncomeSource: (personKey: 'person1' | 'person2') => void;
   deleteIncomeSource: (personKey: 'person1' | 'person2', id: string) => void;
   updateIncomeSource: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount', value: string | number) => void;
+  reorderIncomeSources: (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => void;
   openExpenseWizard: (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => void;
   openExpenseWizardForEdit: (personKey: 'person1' | 'person2', type: 'fixed' | 'free', payload: FixedExpense | Category) => void;
   updateFixedExpense: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount' | 'isChecked' | 'categoryOverrideId', value: string | number | boolean) => void;
-  moveFixedExpense: (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => void;
+  reorderFixedExpenses: (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => void;
   updateCategory: (personKey: 'person1' | 'person2', id: string, field: keyof Category, value: string | number | boolean) => void;
-  moveCategory: (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => void;
+  reorderCategories: (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => void;
 };
 
 type BudgetHeaderSectionProps = Pick<
@@ -1320,11 +1360,13 @@ type BudgetHeaderSectionProps = Pick<
   | 'person'
   | 'personKey'
   | 'darkMode'
+  | 'enableDrag'
   | 'palette'
   | 'currencyPreference'
   | 'addIncomeSource'
   | 'deleteIncomeSource'
   | 'updateIncomeSource'
+  | 'reorderIncomeSources'
 >;
 
 type BudgetFixedSectionProps = Pick<
@@ -1333,12 +1375,13 @@ type BudgetFixedSectionProps = Pick<
   | 'personKey'
   | 'darkMode'
   | 'sortByCost'
+  | 'enableDrag'
   | 'palette'
   | 'currencyPreference'
   | 'openExpenseWizard'
   | 'openExpenseWizardForEdit'
   | 'updateFixedExpense'
-  | 'moveFixedExpense'
+  | 'reorderFixedExpenses'
 >;
 
 type BudgetFreeSectionProps = Pick<
@@ -1347,12 +1390,13 @@ type BudgetFreeSectionProps = Pick<
   | 'personKey'
   | 'darkMode'
   | 'sortByCost'
+  | 'enableDrag'
   | 'palette'
   | 'currencyPreference'
   | 'openExpenseWizard'
   | 'openExpenseWizardForEdit'
   | 'updateCategory'
-  | 'moveCategory'
+  | 'reorderCategories'
 >;
 
 type PersonColumnHeaderProps = Pick<
@@ -1416,11 +1460,13 @@ const BudgetHeaderSection = React.memo(({
   person,
   personKey,
   darkMode,
+  enableDrag,
   palette,
   currencyPreference,
   addIncomeSource,
   deleteIncomeSource,
-  updateIncomeSource
+  updateIncomeSource,
+  reorderIncomeSources
 }: BudgetHeaderSectionProps) => {
   const { t } = useTranslation();
   const { totalFixed, totalCategories, totalIncome, totalExpenses, available } = useMemo(() => {
@@ -1456,6 +1502,16 @@ const BudgetHeaderSection = React.memo(({
   );
   const summaryLabelClass = darkMode ? 'text-slate-400' : 'text-slate-500';
   const summaryValueClass = darkMode ? 'text-slate-100' : 'text-slate-700';
+  const canDrag = enableDrag;
+  const handleDragEnd = useCallback((result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    if (result.destination.index === result.source.index) {
+      return;
+    }
+    reorderIncomeSources(personKey, result.source.index, result.destination.index);
+  }, [personKey, reorderIncomeSources]);
 
   return (
     <div
@@ -1481,28 +1537,80 @@ const BudgetHeaderSection = React.memo(({
             <Plus size={16} />
           </button>
         </div>
-        <div className="space-y-2">
-          {person.incomeSources.map(source => (
-            <div key={source.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} p-2 rounded-lg border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
-              <input
-                type="text"
-                value={source.name}
-                onChange={(e) => updateIncomeSource(personKey, source.id, 'name', e.target.value)}
-                className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                placeholder={t('incomePlaceholder')}
-              />
-              <input
-                type="number"
-                value={coerceNumber(source.amount)}
-                onChange={(e) => updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value))}
-                className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-              />
-              <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500 hover:text-red-600">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
+        {canDrag ? (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId={`income-${personKey}`}>
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+                  {person.incomeSources.map((source, index) => (
+                    <Draggable key={source.id} draggableId={`income-${personKey}-${source.id}`} index={index}>
+                      {(dragProvided, snapshot) => (
+                        <div
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          className={`flex flex-wrap items-center gap-2 p-2 rounded-lg border ${
+                            darkMode ? 'border-slate-800' : 'border-slate-100'
+                          } ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} ${
+                            snapshot.isDragging ? (darkMode ? 'ring-1 ring-white/20' : 'ring-1 ring-slate-200') : ''
+                          }`}
+                          style={dragProvided.draggableProps.style}
+                        >
+                          <span
+                            {...dragProvided.dragHandleProps}
+                            className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                            aria-label={t('dragHandleLabel')}
+                          >
+                            <GripVertical size={14} />
+                          </span>
+                          <input
+                            type="text"
+                            value={source.name}
+                            onChange={(e) => updateIncomeSource(personKey, source.id, 'name', e.target.value)}
+                            className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                            placeholder={t('incomePlaceholder')}
+                          />
+                          <input
+                            type="number"
+                            value={coerceNumber(source.amount)}
+                            onChange={(e) => updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value))}
+                            className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                          />
+                          <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500 hover:text-red-600">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+        ) : (
+          <div className="space-y-2">
+            {person.incomeSources.map(source => (
+              <div key={source.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} p-2 rounded-lg border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                <input
+                  type="text"
+                  value={source.name}
+                  onChange={(e) => updateIncomeSource(personKey, source.id, 'name', e.target.value)}
+                  className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                  placeholder={t('incomePlaceholder')}
+                />
+                <input
+                  type="number"
+                  value={coerceNumber(source.amount)}
+                  onChange={(e) => updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value))}
+                  className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                />
+                <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500 hover:text-red-600">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={`mt-auto space-y-1 text-sm border-t pt-3 ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
@@ -1532,12 +1640,13 @@ const BudgetFixedSection = React.memo(({
   personKey,
   darkMode,
   sortByCost,
+  enableDrag,
   palette,
   currencyPreference,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateFixedExpense,
-  moveFixedExpense
+  reorderFixedExpenses
 }: BudgetFixedSectionProps) => {
   const { t, language } = useTranslation();
   const totalFixed = useMemo(() => calculateTotalFixed(person.fixedExpenses), [person.fixedExpenses]);
@@ -1586,6 +1695,16 @@ const BudgetFixedSection = React.memo(({
     }),
     [darkMode, fixedTone.text]
   );
+  const canDrag = enableDrag && !sortByCost;
+  const handleDragEnd = useCallback((result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    if (result.destination.index === result.source.index) {
+      return;
+    }
+    reorderFixedExpenses(personKey, result.source.index, result.destination.index);
+  }, [personKey, reorderFixedExpenses]);
 
   return (
     <div
@@ -1613,11 +1732,77 @@ const BudgetFixedSection = React.memo(({
       <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
         {orderedExpenses.length === 0 ? (
           <div className="py-6" />
+        ) : canDrag ? (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId={`fixed-${personKey}`}>
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps} className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {orderedExpenses.map((expense, index) => {
+                    const amountValue = coerceNumber(expense.amount);
+                    const resolvedCategory = expense.categoryOverrideId
+                      ? getCategoryById(expense.categoryOverrideId)
+                      : getAutoCategory(expense.name);
+                    const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
+                    const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+                    return (
+                      <Draggable key={expense.id} draggableId={`fixed-${personKey}-${expense.id}`} index={index}>
+                        {(dragProvided, snapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
+                            style={dragProvided.draggableProps.style}
+                          >
+                            <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                              <span
+                                {...dragProvided.dragHandleProps}
+                                className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                                aria-label={t('dragHandleLabel')}
+                              >
+                                <GripVertical size={14} />
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={expense.isChecked || false}
+                                onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
+                                className="h-4 w-4"
+                                style={{ accentColor: fixedTone.border }}
+                                aria-label={t('validateExpenseLabel')}
+                              />
+                              <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
+                                {expense.name || t('newFixedExpenseLabel')}
+                              </span>
+                              {resolvedCategory && badgeClass && (
+                                <span className={badgeClass}>
+                                  <span>{resolvedCategory.emoji}</span>
+                                  <span>{categoryLabel}</span>
+                                </span>
+                              )}
+                              <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                                {formatCurrency(amountValue, currencyPreference)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
+                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
+                                aria-label={t('editLabel')}
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         ) : (
           <div className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
-            {orderedExpenses.map((expense, index) => {
-              const isFirst = index === 0;
-              const isLast = index === orderedExpenses.length - 1;
+            {orderedExpenses.map((expense) => {
               const amountValue = coerceNumber(expense.amount);
               const resolvedCategory = expense.categoryOverrideId
                 ? getCategoryById(expense.categoryOverrideId)
@@ -1647,28 +1832,6 @@ const BudgetFixedSection = React.memo(({
                     <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
-                    {!sortByCost && (
-                      <div className="hidden sm:flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => moveFixedExpense(personKey, expense.id, 'up')}
-                          disabled={isFirst}
-                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
-                          aria-label={t('moveUpLabel')}
-                        >
-                          <ChevronUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveFixedExpense(personKey, expense.id, 'down')}
-                          disabled={isLast}
-                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
-                          aria-label={t('moveDownLabel')}
-                        >
-                          <ChevronDown size={14} />
-                        </button>
-                      </div>
-                    )}
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
@@ -1709,12 +1872,13 @@ const BudgetFreeSection = React.memo(({
   personKey,
   darkMode,
   sortByCost,
+  enableDrag,
   palette,
   currencyPreference,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateCategory,
-  moveCategory
+  reorderCategories
 }: BudgetFreeSectionProps) => {
   const { t, language } = useTranslation();
   const totalCategories = useMemo(() => calculateTotalCategories(person.categories), [person.categories]);
@@ -1763,6 +1927,16 @@ const BudgetFreeSection = React.memo(({
     }),
     [darkMode, freeTone.text]
   );
+  const canDrag = enableDrag && !sortByCost;
+  const handleDragEnd = useCallback((result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    if (result.destination.index === result.source.index) {
+      return;
+    }
+    reorderCategories(personKey, result.source.index, result.destination.index);
+  }, [personKey, reorderCategories]);
 
   return (
     <div
@@ -1790,11 +1964,83 @@ const BudgetFreeSection = React.memo(({
       <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
         {orderedCategories.length === 0 ? (
           <div className="py-6" />
+        ) : canDrag ? (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId={`free-${personKey}`}>
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps} className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {orderedCategories.map((category, index) => {
+                    const amountValue = coerceNumber(category.amount);
+                    const resolvedCategory = category.categoryOverrideId
+                      ? getCategoryById(category.categoryOverrideId)
+                      : getAutoCategory(category.name);
+                    const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
+                    const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
+                    const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+                    return (
+                      <Draggable key={category.id} draggableId={`free-${personKey}-${category.id}`} index={index}>
+                        {(dragProvided, snapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
+                            style={dragProvided.draggableProps.style}
+                          >
+                            <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                              <span
+                                {...dragProvided.dragHandleProps}
+                                className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                                aria-label={t('dragHandleLabel')}
+                              >
+                                <GripVertical size={14} />
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={category.isChecked || false}
+                                onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
+                                className="h-4 w-4"
+                                style={{ accentColor: freeTone.border }}
+                                aria-label={t('validateExpenseLabel')}
+                              />
+                              <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
+                                {category.name || t('newCategoryLabel')}
+                              </span>
+                              {resolvedCategory && badgeClass && (
+                                <span className={badgeClass}>
+                                  <span>{resolvedCategory.emoji}</span>
+                                  <span>{categoryLabel}</span>
+                                </span>
+                              )}
+                              {recurringLabel && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                                  {recurringLabel}
+                                </span>
+                              )}
+                              <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                                {formatCurrency(amountValue, currencyPreference)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
+                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
+                                aria-label={t('editLabel')}
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         ) : (
           <div className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
-            {orderedCategories.map((category, index) => {
-              const isFirst = index === 0;
-              const isLast = index === orderedCategories.length - 1;
+            {orderedCategories.map((category) => {
               const amountValue = coerceNumber(category.amount);
               const resolvedCategory = category.categoryOverrideId
                 ? getCategoryById(category.categoryOverrideId)
@@ -1823,35 +2069,13 @@ const BudgetFreeSection = React.memo(({
                       </span>
                     )}
                     {recurringLabel && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-                      {recurringLabel}
-                    </span>
-                  )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                        {recurringLabel}
+                      </span>
+                    )}
                     <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
-                    {!sortByCost && (
-                      <div className="hidden sm:flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => moveCategory(personKey, category.id, 'up')}
-                          disabled={isFirst}
-                          className={`p-1 rounded ${isFirst ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
-                          aria-label={t('moveUpLabel')}
-                        >
-                          <ChevronUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveCategory(personKey, category.id, 'down')}
-                          disabled={isLast}
-                          className={`p-1 rounded ${isLast ? 'opacity-40 cursor-not-allowed' : ''} ${darkMode ? 'text-slate-200' : 'text-slate-500'}`}
-                          aria-label={t('moveDownLabel')}
-                        >
-                          <ChevronDown size={14} />
-                        </button>
-                      </div>
-                    )}
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
@@ -1892,6 +2116,7 @@ const BudgetColumn = React.memo(({
   personKey,
   darkMode,
   sortByCost,
+  enableDrag,
   palette,
   currencyPreference,
   editingName,
@@ -1903,47 +2128,52 @@ const BudgetColumn = React.memo(({
   addIncomeSource,
   deleteIncomeSource,
   updateIncomeSource,
+  reorderIncomeSources,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateFixedExpense,
-  moveFixedExpense,
+  reorderFixedExpenses,
   updateCategory,
-  moveCategory
+  reorderCategories
 }: BudgetColumnProps) => (
   <div className="flex-1 min-w-0">
     <BudgetHeaderSection
       person={person}
       personKey={personKey}
       darkMode={darkMode}
+      enableDrag={enableDrag}
       palette={palette}
       currencyPreference={currencyPreference}
       addIncomeSource={addIncomeSource}
       deleteIncomeSource={deleteIncomeSource}
       updateIncomeSource={updateIncomeSource}
+      reorderIncomeSources={reorderIncomeSources}
     />
     <BudgetFixedSection
       person={person}
       personKey={personKey}
       darkMode={darkMode}
       sortByCost={sortByCost}
+      enableDrag={enableDrag}
       palette={palette}
       currencyPreference={currencyPreference}
       openExpenseWizard={openExpenseWizard}
       openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateFixedExpense={updateFixedExpense}
-      moveFixedExpense={moveFixedExpense}
+      reorderFixedExpenses={reorderFixedExpenses}
     />
     <BudgetFreeSection
       person={person}
       personKey={personKey}
       darkMode={darkMode}
       sortByCost={sortByCost}
+      enableDrag={enableDrag}
       palette={palette}
       currencyPreference={currencyPreference}
       openExpenseWizard={openExpenseWizard}
       openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateCategory={updateCategory}
-      moveCategory={moveCategory}
+      reorderCategories={reorderCategories}
     />
   </div>
 ));
@@ -3700,6 +3930,7 @@ const App: React.FC = () => {
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
       : 'radial-gradient(1200px circle at 15% -15%, rgba(31,157,106,0.12), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(242,123,99,0.10), transparent 50%)'
   }) as React.CSSProperties, [darkMode]);
+  const enableDrag = useMediaQuery('(min-width: 768px)');
 
   const oidcLoginEnabled = Boolean(oidcLoginConfig?.enabled);
   const oidcLoginProviderName = (oidcLoginConfig?.providerName || 'OIDC').trim() || 'OIDC';
@@ -4790,6 +5021,16 @@ const App: React.FC = () => {
     }));
   };
 
+  const reorderIncomeSources = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
+    setData(prev => ({
+      ...prev,
+      [personKey]: {
+        ...prev[personKey],
+        incomeSources: reorderList(prev[personKey].incomeSources, sourceIndex, destinationIndex)
+      }
+    }));
+  };
+
   const addFixedExpense = (personKey: 'person1' | 'person2', overrides: Partial<FixedExpense> = {}) => {
     const newExpense: FixedExpense = {
       id: Date.now().toString(),
@@ -4968,24 +5209,14 @@ const App: React.FC = () => {
     });
   };
 
-  const moveFixedExpense = (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => {
-    setData(prev => {
-      const expenses = prev[personKey].fixedExpenses;
-      const index = expenses.findIndex(expense => expense.id === id);
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (index === -1 || targetIndex < 0 || targetIndex >= expenses.length) {
-        return prev;
+  const reorderFixedExpenses = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
+    setData(prev => ({
+      ...prev,
+      [personKey]: {
+        ...prev[personKey],
+        fixedExpenses: reorderList(prev[personKey].fixedExpenses, sourceIndex, destinationIndex)
       }
-      const nextExpenses = [...expenses];
-      [nextExpenses[index], nextExpenses[targetIndex]] = [nextExpenses[targetIndex], nextExpenses[index]];
-      return {
-        ...prev,
-        [personKey]: {
-          ...prev[personKey],
-          fixedExpenses: nextExpenses
-        }
-      };
-    });
+    }));
   };
 
   const addCategory = (personKey: 'person1' | 'person2', overrides: Partial<Category> = {}) => {
@@ -5038,24 +5269,14 @@ const App: React.FC = () => {
     }));
   };
 
-  const moveCategory = (personKey: 'person1' | 'person2', id: string, direction: 'up' | 'down') => {
-    setData(prev => {
-      const categories = prev[personKey].categories;
-      const index = categories.findIndex(category => category.id === id);
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (index === -1 || targetIndex < 0 || targetIndex >= categories.length) {
-        return prev;
+  const reorderCategories = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
+    setData(prev => ({
+      ...prev,
+      [personKey]: {
+        ...prev[personKey],
+        categories: reorderList(prev[personKey].categories, sourceIndex, destinationIndex)
       }
-      const nextCategories = [...categories];
-      [nextCategories[index], nextCategories[targetIndex]] = [nextCategories[targetIndex], nextCategories[index]];
-      return {
-        ...prev,
-        [personKey]: {
-          ...prev[personKey],
-          categories: nextCategories
-        }
-      };
-    });
+    }));
   };
 
   const openExpenseWizard = (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => {
@@ -5301,6 +5522,26 @@ const App: React.FC = () => {
       }
     }));
   };
+
+  const reorderJointTransactions = (sourceIndex: number, destinationIndex: number) => {
+    setData(prev => ({
+      ...prev,
+      jointAccount: {
+        ...prev.jointAccount,
+        transactions: reorderList(prev.jointAccount.transactions, sourceIndex, destinationIndex)
+      }
+    }));
+  };
+
+  const handleJointDragEnd = useCallback((result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    if (result.destination.index === result.source.index) {
+      return;
+    }
+    reorderJointTransactions(result.source.index, result.destination.index);
+  }, [reorderJointTransactions]);
 
   const updateInitialBalance = (value: number) => {
     setData(prev => ({
@@ -5586,6 +5827,7 @@ const App: React.FC = () => {
               personKey={soloModeEnabled ? 'person1' : activePersonKey}
               darkMode={darkMode}
               sortByCost={sortByCost}
+              enableDrag={enableDrag}
               palette={palette}
               currencyPreference={currencyPreference}
               editingName={editingName}
@@ -5597,12 +5839,13 @@ const App: React.FC = () => {
               addIncomeSource={addIncomeSource}
               deleteIncomeSource={deleteIncomeSource}
               updateIncomeSource={updateIncomeSource}
+              reorderIncomeSources={reorderIncomeSources}
               openExpenseWizard={openExpenseWizard}
               openExpenseWizardForEdit={openExpenseWizardForEdit}
               updateFixedExpense={updateFixedExpense}
-              moveFixedExpense={moveFixedExpense}
+              reorderFixedExpenses={reorderFixedExpenses}
               updateCategory={updateCategory}
-              moveCategory={moveCategory}
+              reorderCategories={reorderCategories}
             />
           </div>
 
@@ -5625,35 +5868,39 @@ const App: React.FC = () => {
                   person={data.person1}
                   personKey="person1"
                   darkMode={darkMode}
+                  enableDrag={enableDrag}
                   palette={palette}
                   currencyPreference={currencyPreference}
                   addIncomeSource={addIncomeSource}
                   deleteIncomeSource={deleteIncomeSource}
                   updateIncomeSource={updateIncomeSource}
+                  reorderIncomeSources={reorderIncomeSources}
                 />
                 <BudgetFixedSection
                   person={data.person1}
                   personKey="person1"
                   darkMode={darkMode}
                   sortByCost={sortByCost}
+                  enableDrag={enableDrag}
                   palette={palette}
                   currencyPreference={currencyPreference}
                   openExpenseWizard={openExpenseWizard}
                   openExpenseWizardForEdit={openExpenseWizardForEdit}
                   updateFixedExpense={updateFixedExpense}
-                  moveFixedExpense={moveFixedExpense}
+                  reorderFixedExpenses={reorderFixedExpenses}
                 />
                 <BudgetFreeSection
                   person={data.person1}
                   personKey="person1"
                   darkMode={darkMode}
                   sortByCost={sortByCost}
+                  enableDrag={enableDrag}
                   palette={palette}
                   currencyPreference={currencyPreference}
                   openExpenseWizard={openExpenseWizard}
                   openExpenseWizardForEdit={openExpenseWizardForEdit}
                   updateCategory={updateCategory}
-                  moveCategory={moveCategory}
+                  reorderCategories={reorderCategories}
                 />
               </div>
             </div>
@@ -5687,69 +5934,77 @@ const App: React.FC = () => {
                 person={data.person1}
                 personKey="person1"
                 darkMode={darkMode}
+                enableDrag={enableDrag}
                 palette={palette}
                 currencyPreference={currencyPreference}
                 addIncomeSource={addIncomeSource}
                 deleteIncomeSource={deleteIncomeSource}
                 updateIncomeSource={updateIncomeSource}
+                reorderIncomeSources={reorderIncomeSources}
               />
               <BudgetHeaderSection
                 person={data.person2}
                 personKey="person2"
                 darkMode={darkMode}
+                enableDrag={enableDrag}
                 palette={palette}
                 currencyPreference={currencyPreference}
                 addIncomeSource={addIncomeSource}
                 deleteIncomeSource={deleteIncomeSource}
                 updateIncomeSource={updateIncomeSource}
+                reorderIncomeSources={reorderIncomeSources}
               />
               <BudgetFixedSection
                 person={data.person1}
                 personKey="person1"
                 darkMode={darkMode}
                 sortByCost={sortByCost}
+                enableDrag={enableDrag}
                 palette={palette}
                 currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateFixedExpense={updateFixedExpense}
-                moveFixedExpense={moveFixedExpense}
+                reorderFixedExpenses={reorderFixedExpenses}
               />
               <BudgetFixedSection
                 person={data.person2}
                 personKey="person2"
                 darkMode={darkMode}
                 sortByCost={sortByCost}
+                enableDrag={enableDrag}
                 palette={palette}
                 currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateFixedExpense={updateFixedExpense}
-                moveFixedExpense={moveFixedExpense}
+                reorderFixedExpenses={reorderFixedExpenses}
               />
               <BudgetFreeSection
                 person={data.person1}
                 personKey="person1"
                 darkMode={darkMode}
                 sortByCost={sortByCost}
+                enableDrag={enableDrag}
                 palette={palette}
                 currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateCategory={updateCategory}
-                moveCategory={moveCategory}
+                reorderCategories={reorderCategories}
               />
               <BudgetFreeSection
                 person={data.person2}
                 personKey="person2"
                 darkMode={darkMode}
                 sortByCost={sortByCost}
+                enableDrag={enableDrag}
                 palette={palette}
                 currencyPreference={currencyPreference}
                 openExpenseWizard={openExpenseWizard}
                 openExpenseWizardForEdit={openExpenseWizardForEdit}
                 updateCategory={updateCategory}
-                moveCategory={moveCategory}
+                reorderCategories={reorderCategories}
               />
             </div>
           )}
@@ -5808,66 +6063,156 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className={`w-full ${darkMode ? 'bg-slate-900/70' : 'bg-white/90'} rounded-xl text-sm border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
-                    <thead className={darkMode ? 'bg-slate-900/80' : 'bg-slate-50'}>
-                      <tr>
-                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('dateLabel')}</th>
-                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('typeLabel')}</th>
-                        <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('descriptionLabel')}</th>
-                        <th className={`p-2 text-right ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('amountLabel')}</th>
-                        <th className={`p-2 text-left hidden sm:table-cell ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
-                        <th className="p-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.jointAccount.transactions.map(transaction => (
-                        <tr key={transaction.id} className={`border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
-                          <td className="p-2">
-                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
-                              {transaction.date}
-                            </span>
-                          </td>
-                          <td className="p-2">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                transaction.type === 'deposit'
-                                  ? (darkMode ? 'bg-emerald-500/20 text-emerald-200' : 'bg-emerald-50 text-emerald-600')
-                                  : (darkMode ? 'bg-rose-500/20 text-rose-200' : 'bg-rose-50 text-rose-600')
-                              }`}
-                            >
-                              {transaction.type === 'deposit' ? t('depositOptionLabel') : t('expenseOptionLabel')}
-                            </span>
-                          </td>
-                          <td className="p-2">
-                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
-                              {transaction.description || (transaction.type === 'deposit' ? t('newDepositDescription') : t('newExpenseDescription'))}
-                            </span>
-                          </td>
-                          <td className="p-2 text-right">
-                            <span className={`font-semibold tabular-nums ${transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              {formatCurrency(transaction.amount, currencyPreference)}
-                            </span>
-                          </td>
-                          <td className="p-2 hidden sm:table-cell">
-                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
-                              {transaction.person}
-                            </span>
-                          </td>
-                          <td className="p-2">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => openJointWizardForEdit(transaction)}
-                                className={darkMode ? 'text-slate-200 hover:text-slate-50' : 'text-slate-500 hover:text-slate-700'}
-                                aria-label={t('editLabel')}
-                              >
-                                <Edit2 size={16} />
-                              </button>
-                            </div>
-                          </td>
+                  {enableDrag ? (
+                    <DragDropContext onDragEnd={handleJointDragEnd}>
+                      <table className={`w-full ${darkMode ? 'bg-slate-900/70' : 'bg-white/90'} rounded-xl text-sm border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                        <thead className={darkMode ? 'bg-slate-900/80' : 'bg-slate-50'}>
+                          <tr>
+                            <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('dateLabel')}</th>
+                            <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('typeLabel')}</th>
+                            <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('descriptionLabel')}</th>
+                            <th className={`p-2 text-right ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('amountLabel')}</th>
+                            <th className={`p-2 text-left hidden sm:table-cell ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
+                            <th className="p-2"></th>
+                          </tr>
+                        </thead>
+                        <Droppable droppableId="joint-transactions">
+                          {(provided) => (
+                            <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                              {data.jointAccount.transactions.map((transaction, index) => (
+                                <Draggable key={transaction.id} draggableId={`joint-${transaction.id}`} index={index}>
+                                  {(dragProvided, snapshot) => (
+                                    <tr
+                                      ref={dragProvided.innerRef}
+                                      {...dragProvided.draggableProps}
+                                      className={`border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'} ${
+                                        snapshot.isDragging ? (darkMode ? 'bg-slate-900/90' : 'bg-slate-50') : ''
+                                      }`}
+                                      style={dragProvided.draggableProps.style}
+                                    >
+                                      <td className="p-2">
+                                        <div className="flex items-center gap-2">
+                                          <span
+                                            {...dragProvided.dragHandleProps}
+                                            className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                                            aria-label={t('dragHandleLabel')}
+                                          >
+                                            <GripVertical size={14} />
+                                          </span>
+                                          <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                            {transaction.date}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="p-2">
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                            transaction.type === 'deposit'
+                                              ? (darkMode ? 'bg-emerald-500/20 text-emerald-200' : 'bg-emerald-50 text-emerald-600')
+                                              : (darkMode ? 'bg-rose-500/20 text-rose-200' : 'bg-rose-50 text-rose-600')
+                                          }`}
+                                        >
+                                          {transaction.type === 'deposit' ? t('depositOptionLabel') : t('expenseOptionLabel')}
+                                        </span>
+                                      </td>
+                                      <td className="p-2">
+                                        <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                          {transaction.description || (transaction.type === 'deposit' ? t('newDepositDescription') : t('newExpenseDescription'))}
+                                        </span>
+                                      </td>
+                                      <td className="p-2 text-right">
+                                        <span className={`font-semibold tabular-nums ${transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                          {formatCurrency(transaction.amount, currencyPreference)}
+                                        </span>
+                                      </td>
+                                      <td className="p-2 hidden sm:table-cell">
+                                        <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                          {transaction.person}
+                                        </span>
+                                      </td>
+                                      <td className="p-2">
+                                        <div className="flex items-center justify-end gap-2">
+                                          <button
+                                            onClick={() => openJointWizardForEdit(transaction)}
+                                            className={darkMode ? 'text-slate-200 hover:text-slate-50' : 'text-slate-500 hover:text-slate-700'}
+                                            aria-label={t('editLabel')}
+                                          >
+                                            <Edit2 size={16} />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
+                            </tbody>
+                          )}
+                        </Droppable>
+                      </table>
+                    </DragDropContext>
+                  ) : (
+                    <table className={`w-full ${darkMode ? 'bg-slate-900/70' : 'bg-white/90'} rounded-xl text-sm border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                      <thead className={darkMode ? 'bg-slate-900/80' : 'bg-slate-50'}>
+                        <tr>
+                          <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('dateLabel')}</th>
+                          <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('typeLabel')}</th>
+                          <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('descriptionLabel')}</th>
+                          <th className={`p-2 text-right ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('amountLabel')}</th>
+                          <th className={`p-2 text-left hidden sm:table-cell ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
+                          <th className="p-2"></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {data.jointAccount.transactions.map(transaction => (
+                          <tr key={transaction.id} className={`border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                            <td className="p-2">
+                              <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                {transaction.date}
+                              </span>
+                            </td>
+                            <td className="p-2">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                  transaction.type === 'deposit'
+                                    ? (darkMode ? 'bg-emerald-500/20 text-emerald-200' : 'bg-emerald-50 text-emerald-600')
+                                    : (darkMode ? 'bg-rose-500/20 text-rose-200' : 'bg-rose-50 text-rose-600')
+                                }`}
+                              >
+                                {transaction.type === 'deposit' ? t('depositOptionLabel') : t('expenseOptionLabel')}
+                              </span>
+                            </td>
+                            <td className="p-2">
+                              <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                {transaction.description || (transaction.type === 'deposit' ? t('newDepositDescription') : t('newExpenseDescription'))}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right">
+                              <span className={`font-semibold tabular-nums ${transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                {formatCurrency(transaction.amount, currencyPreference)}
+                              </span>
+                            </td>
+                            <td className="p-2 hidden sm:table-cell">
+                              <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                                {transaction.person}
+                              </span>
+                            </td>
+                            <td className="p-2">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => openJointWizardForEdit(transaction)}
+                                  className={darkMode ? 'text-slate-200 hover:text-slate-50' : 'text-slate-500 hover:text-slate-700'}
+                                  aria-label={t('editLabel')}
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
