@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
@@ -434,12 +434,6 @@ const calculateTotalCategories = (categories: Category[]) => {
   return categories.reduce((sum, cat) => sum + cat.amount, 0);
 };
 
-const calculateAvailable = (person: PersonBudget) => {
-  return calculateTotalIncome(person.incomeSources)
-    - calculateTotalFixed(person.fixedExpenses)
-    - calculateTotalCategories(person.categories);
-};
-
 const parseNumberInput = (rawValue: string) => {
   const trimmed = rawValue.trim();
   if (trimmed === '') {
@@ -811,40 +805,6 @@ const useAnimatedNumber = (value: number, duration = 350) => {
   }, [value, duration]);
 
   return animated;
-};
-
-const useIsPwa = () => {
-  const [isPwa, setIsPwa] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const media = window.matchMedia?.('(display-mode: standalone)');
-    const check = () => {
-      const isStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone;
-      setIsPwa(Boolean(media?.matches || isStandalone));
-    };
-    check();
-    if (media) {
-      if (media.addEventListener) {
-        media.addEventListener('change', check);
-      } else {
-        media.addListener(check);
-      }
-    }
-    return () => {
-      if (media) {
-        if (media.removeEventListener) {
-          media.removeEventListener('change', check);
-        } else {
-          media.removeListener(check);
-        }
-      }
-    };
-  }, []);
-
-  return isPwa;
 };
 
 const calculateJointBalanceForData = (budget: BudgetData) => {
@@ -1394,7 +1354,7 @@ type PersonColumnHeaderProps = Pick<
   | 'cancelEditingName'
 >;
 
-const PersonColumnHeader = ({
+const PersonColumnHeader = React.memo(({
   person,
   personKey,
   darkMode,
@@ -1435,9 +1395,10 @@ const PersonColumnHeader = ({
       </div>
     )}
   </div>
-);
+));
+PersonColumnHeader.displayName = 'PersonColumnHeader';
 
-const BudgetHeaderSection = ({
+const BudgetHeaderSection = React.memo(({
   person,
   personKey,
   darkMode,
@@ -1448,24 +1409,37 @@ const BudgetHeaderSection = ({
   updateIncomeSource
 }: BudgetHeaderSectionProps) => {
   const { t } = useTranslation();
-  const available = calculateAvailable(person);
-  const totalFixed = calculateTotalFixed(person.fixedExpenses);
-  const totalCategories = calculateTotalCategories(person.categories);
-  const totalIncome = calculateTotalIncome(person.incomeSources);
-  const totalExpenses = totalFixed + totalCategories;
+  const { totalFixed, totalCategories, totalIncome, totalExpenses, available } = useMemo(() => {
+    const totalFixedValue = calculateTotalFixed(person.fixedExpenses);
+    const totalCategoriesValue = calculateTotalCategories(person.categories);
+    const totalIncomeValue = calculateTotalIncome(person.incomeSources);
+    const totalExpensesValue = totalFixedValue + totalCategoriesValue;
+    const availableValue = totalIncomeValue - totalExpensesValue;
+    return {
+      totalFixed: totalFixedValue,
+      totalCategories: totalCategoriesValue,
+      totalIncome: totalIncomeValue,
+      totalExpenses: totalExpensesValue,
+      available: availableValue
+    };
+  }, [person.fixedExpenses, person.categories, person.incomeSources]);
   const animatedIncome = useAnimatedNumber(totalIncome);
   const animatedExpenses = useAnimatedNumber(totalExpenses);
   const animatedAvailable = useAnimatedNumber(available);
-  const revenueTone = getPaletteTone(palette, 0, darkMode);
+  const revenueTone = useMemo(() => getPaletteTone(palette, 0, darkMode), [palette, darkMode]);
   const isDefaultPalette = palette.id === 'default';
-  const revenueHeaderStyle = isDefaultPalette
-    ? { color: darkMode ? '#E2E8F0' : '#334155' }
-    : { color: revenueTone.text };
-  const revenueButtonStyle = {
-    borderColor: revenueTone.border,
-    color: revenueTone.text,
-    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
-  };
+  const revenueHeaderStyle = useMemo(
+    () => (isDefaultPalette ? { color: darkMode ? '#E2E8F0' : '#334155' } : { color: revenueTone.text }),
+    [darkMode, isDefaultPalette, revenueTone.text]
+  );
+  const revenueButtonStyle = useMemo(
+    () => ({
+      borderColor: revenueTone.border,
+      color: revenueTone.text,
+      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
+    }),
+    [darkMode, revenueTone.border, revenueTone.text]
+  );
   const summaryLabelClass = darkMode ? 'text-slate-400' : 'text-slate-500';
   const summaryValueClass = darkMode ? 'text-slate-100' : 'text-slate-700';
 
@@ -1536,9 +1510,10 @@ const BudgetHeaderSection = ({
       </div>
     </div>
   );
-};
+});
+BudgetHeaderSection.displayName = 'BudgetHeaderSection';
 
-const BudgetFixedSection = ({
+const BudgetFixedSection = React.memo(({
   person,
   personKey,
   darkMode,
@@ -1551,37 +1526,52 @@ const BudgetFixedSection = ({
   moveFixedExpense
 }: BudgetFixedSectionProps) => {
   const { t, language } = useTranslation();
-  const totalFixed = calculateTotalFixed(person.fixedExpenses);
+  const totalFixed = useMemo(() => calculateTotalFixed(person.fixedExpenses), [person.fixedExpenses]);
   const animatedTotalFixed = useAnimatedNumber(totalFixed);
-  const orderedExpenses = sortByCost
-    ? [...person.fixedExpenses].sort((a, b) => {
-        const amountDiff = coerceNumber(b.amount) - coerceNumber(a.amount);
-        if (amountDiff !== 0) {
-          return amountDiff;
-        }
-        const nameDiff = a.name.localeCompare(b.name);
-        return nameDiff !== 0 ? nameDiff : a.id.localeCompare(b.id);
-      })
-    : person.fixedExpenses;
-  const paidFixedTotal = orderedExpenses.reduce((sum, expense) => (
-    expense.isChecked ? sum + coerceNumber(expense.amount) : sum
-  ), 0);
-  const remainingFixedTotal = Math.max(0, totalFixed - paidFixedTotal);
+  const orderedExpenses = useMemo(() => {
+    if (!sortByCost) {
+      return person.fixedExpenses;
+    }
+    return [...person.fixedExpenses].sort((a, b) => {
+      const amountDiff = coerceNumber(b.amount) - coerceNumber(a.amount);
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+      const nameDiff = a.name.localeCompare(b.name);
+      return nameDiff !== 0 ? nameDiff : a.id.localeCompare(b.id);
+    });
+  }, [person.fixedExpenses, sortByCost]);
+  const paidFixedTotal = useMemo(() => (
+    orderedExpenses.reduce((sum, expense) => (
+      expense.isChecked ? sum + coerceNumber(expense.amount) : sum
+    ), 0)
+  ), [orderedExpenses]);
+  const remainingFixedTotal = useMemo(
+    () => Math.max(0, totalFixed - paidFixedTotal),
+    [totalFixed, paidFixedTotal]
+  );
   const hasPaidFixed = paidFixedTotal > 0;
-  const fixedTone = getPaletteTone(palette, 1, darkMode);
+  const fixedTone = useMemo(() => getPaletteTone(palette, 1, darkMode), [palette, darkMode]);
   const isDefaultPalette = palette.id === 'default';
-  const fixedHeaderStyle = isDefaultPalette
-    ? { color: darkMode ? '#E2E8F0' : '#334155' }
-    : { color: fixedTone.text };
-  const fixedButtonStyle = {
-    borderColor: fixedTone.border,
-    color: fixedTone.text,
-    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
-  };
-  const fixedBadgeStyle = {
-    color: fixedTone.text,
-    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
-  };
+  const fixedHeaderStyle = useMemo(
+    () => (isDefaultPalette ? { color: darkMode ? '#E2E8F0' : '#334155' } : { color: fixedTone.text }),
+    [darkMode, fixedTone.text, isDefaultPalette]
+  );
+  const fixedButtonStyle = useMemo(
+    () => ({
+      borderColor: fixedTone.border,
+      color: fixedTone.text,
+      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
+    }),
+    [darkMode, fixedTone.border, fixedTone.text]
+  );
+  const fixedBadgeStyle = useMemo(
+    () => ({
+      color: fixedTone.text,
+      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
+    }),
+    [darkMode, fixedTone.text]
+  );
 
   return (
     <div
@@ -1697,9 +1687,10 @@ const BudgetFixedSection = ({
       </div>
     </div>
   );
-};
+});
+BudgetFixedSection.displayName = 'BudgetFixedSection';
 
-const BudgetFreeSection = ({
+const BudgetFreeSection = React.memo(({
   person,
   personKey,
   darkMode,
@@ -1712,37 +1703,52 @@ const BudgetFreeSection = ({
   moveCategory
 }: BudgetFreeSectionProps) => {
   const { t, language } = useTranslation();
-  const totalCategories = calculateTotalCategories(person.categories);
+  const totalCategories = useMemo(() => calculateTotalCategories(person.categories), [person.categories]);
   const animatedTotalCategories = useAnimatedNumber(totalCategories);
-  const orderedCategories = sortByCost
-    ? [...person.categories].sort((a, b) => {
-        const amountDiff = coerceNumber(b.amount) - coerceNumber(a.amount);
-        if (amountDiff !== 0) {
-          return amountDiff;
-        }
-        const nameDiff = a.name.localeCompare(b.name);
-        return nameDiff !== 0 ? nameDiff : a.id.localeCompare(b.id);
-      })
-    : person.categories;
-  const paidCategoriesTotal = orderedCategories.reduce((sum, category) => (
-    category.isChecked ? sum + coerceNumber(category.amount) : sum
-  ), 0);
-  const remainingCategoriesTotal = Math.max(0, totalCategories - paidCategoriesTotal);
+  const orderedCategories = useMemo(() => {
+    if (!sortByCost) {
+      return person.categories;
+    }
+    return [...person.categories].sort((a, b) => {
+      const amountDiff = coerceNumber(b.amount) - coerceNumber(a.amount);
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+      const nameDiff = a.name.localeCompare(b.name);
+      return nameDiff !== 0 ? nameDiff : a.id.localeCompare(b.id);
+    });
+  }, [person.categories, sortByCost]);
+  const paidCategoriesTotal = useMemo(() => (
+    orderedCategories.reduce((sum, category) => (
+      category.isChecked ? sum + coerceNumber(category.amount) : sum
+    ), 0)
+  ), [orderedCategories]);
+  const remainingCategoriesTotal = useMemo(
+    () => Math.max(0, totalCategories - paidCategoriesTotal),
+    [totalCategories, paidCategoriesTotal]
+  );
   const hasPaidCategories = paidCategoriesTotal > 0;
-  const freeTone = getPaletteTone(palette, 2, darkMode);
+  const freeTone = useMemo(() => getPaletteTone(palette, 2, darkMode), [palette, darkMode]);
   const isDefaultPalette = palette.id === 'default';
-  const freeHeaderStyle = isDefaultPalette
-    ? { color: darkMode ? '#E2E8F0' : '#334155' }
-    : { color: freeTone.text };
-  const freeButtonStyle = {
-    borderColor: freeTone.border,
-    color: freeTone.text,
-    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
-  };
-  const freeBadgeStyle = {
-    color: freeTone.text,
-    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
-  };
+  const freeHeaderStyle = useMemo(
+    () => (isDefaultPalette ? { color: darkMode ? '#E2E8F0' : '#334155' } : { color: freeTone.text }),
+    [darkMode, freeTone.text, isDefaultPalette]
+  );
+  const freeButtonStyle = useMemo(
+    () => ({
+      borderColor: freeTone.border,
+      color: freeTone.text,
+      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)'
+    }),
+    [darkMode, freeTone.border, freeTone.text]
+  );
+  const freeBadgeStyle = useMemo(
+    () => ({
+      color: freeTone.text,
+      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
+    }),
+    [darkMode, freeTone.text]
+  );
 
   return (
     <div
@@ -1864,9 +1870,10 @@ const BudgetFreeSection = ({
       </div>
     </div>
   );
-};
+});
+BudgetFreeSection.displayName = 'BudgetFreeSection';
 
-const BudgetColumn = ({
+const BudgetColumn = React.memo(({
   person,
   personKey,
   darkMode,
@@ -1925,7 +1932,8 @@ const BudgetColumn = ({
       moveCategory={moveCategory}
     />
   </div>
-);
+));
+BudgetColumn.displayName = 'BudgetColumn';
 
 type PaletteSelectorProps = {
   palettes: Palette[];
@@ -1934,12 +1942,18 @@ type PaletteSelectorProps = {
   darkMode: boolean;
 };
 
-const PaletteSelector = ({ palettes, value, onChange, darkMode }: PaletteSelectorProps) => {
+const PaletteSelector = React.memo(({ palettes, value, onChange, darkMode }: PaletteSelectorProps) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const selectedPalette = palettes.find(palette => palette.id === value) ?? palettes[0];
-  const otherPalettes = palettes.filter(palette => palette.id !== selectedPalette?.id);
+  const selectedPalette = useMemo(
+    () => palettes.find(palette => palette.id === value) ?? palettes[0],
+    [palettes, value]
+  );
+  const otherPalettes = useMemo(
+    () => palettes.filter(palette => palette.id !== selectedPalette?.id),
+    [palettes, selectedPalette?.id]
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -1960,10 +1974,10 @@ const PaletteSelector = ({ palettes, value, onChange, darkMode }: PaletteSelecto
     };
   }, [isOpen]);
 
-  const handleSelect = (paletteId: string) => {
+  const handleSelect = useCallback((paletteId: string) => {
     onChange(paletteId);
     setIsOpen(false);
-  };
+  }, [onChange]);
 
   if (!selectedPalette) {
     return null;
@@ -2029,7 +2043,8 @@ const PaletteSelector = ({ palettes, value, onChange, darkMode }: PaletteSelecto
       )}
     </div>
   );
-};
+});
+PaletteSelector.displayName = 'PaletteSelector';
 
 type LoginScreenProps = {
   onLogin: (username: string, password: string) => Promise<void> | void;
@@ -2042,7 +2057,7 @@ type LoginScreenProps = {
   onOidcLogin: () => void;
 };
 
-const LoginScreen = ({
+const LoginScreen = React.memo(({
   onLogin,
   error,
   loading,
@@ -2132,7 +2147,8 @@ const LoginScreen = ({
       </form>
     </div>
   );
-};
+});
+LoginScreen.displayName = 'LoginScreen';
 
 type OnboardingWizardProps = {
   darkMode: boolean;
@@ -3574,7 +3590,6 @@ const App: React.FC = () => {
   const [authLoading, setAuthLoading] = useState(false);
   const [activePage, setActivePage] = useState<'dashboard' | 'budget' | 'reports' | 'settings'>('budget');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [selectorError, setSelectorError] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pendingOnboarding, setPendingOnboarding] = useState<{ person1Name: string; person2Name: string; mode: 'solo' | 'duo' } | null>(null);
@@ -3599,7 +3614,6 @@ const App: React.FC = () => {
     }
     return localStorage.getItem('paletteId') ?? PALETTES[0].id;
   });
-  const isPwa = useIsPwa();
   const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
   const [jointWizard, setJointWizard] = useState<JointWizardState | null>(null);
   const [jointDeleteArmed, setJointDeleteArmed] = useState(false);
@@ -3612,58 +3626,66 @@ const App: React.FC = () => {
   const saveTimeoutRef = useRef<number | null>(null);
   const lastSavedPayloadRef = useRef<Record<string, string>>({});
   const lastSavedSettingsRef = useRef<string | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const oidcHandledRef = useRef(false);
   const jointDeleteTimerRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
-  const palette = getPaletteById(paletteId);
-  const jointTone = getPaletteTone(palette, 3, darkMode);
+  const palette = useMemo(() => getPaletteById(paletteId), [paletteId]);
+  const jointTone = useMemo(() => getPaletteTone(palette, 3, darkMode), [palette, darkMode]);
   const isDefaultPalette = palette.id === 'default';
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
   const isBudgetView = activePage === 'budget';
   const isSettingsView = activePage === 'settings';
   const deleteConfirmToken = t('deleteMonthConfirmToken');
   const isDeleteConfirmValid = deleteMonthInput.trim().toLowerCase() === deleteConfirmToken.toLowerCase();
-  const pageLabel = activePage === 'dashboard'
-    ? t('dashboardLabel')
-    : activePage === 'reports'
-      ? t('reportsLabel')
-      : t('settingsLabel');
-  const userDisplayName = authProfile?.displayName || authProfile?.username || authUser || t('accountLabel');
-  const userInitial = (userDisplayName.trim()[0] || 'U').toUpperCase();
-  const userHandle = authProfile?.username || authUser || '';
+  const pageLabel = useMemo(() => (
+    activePage === 'dashboard'
+      ? t('dashboardLabel')
+      : activePage === 'reports'
+        ? t('reportsLabel')
+        : t('settingsLabel')
+  ), [activePage, t]);
+  const userDisplayName = useMemo(
+    () => authProfile?.displayName || authProfile?.username || authUser || t('accountLabel'),
+    [authProfile?.displayName, authProfile?.username, authUser, t]
+  );
+  const userInitial = useMemo(
+    () => (userDisplayName.trim()[0] || 'U').toUpperCase(),
+    [userDisplayName]
+  );
+  const userHandle = useMemo(() => authProfile?.username || authUser || '', [authProfile?.username, authUser]);
   const userAvatarUrl = authProfile?.avatarUrl || null;
-  const resolvedUserAvatarUrl = resolveAssetUrl(userAvatarUrl);
-  const currentMonthKey = getCurrentMonthKey(currentDate);
-  const data = monthlyBudgets[currentMonthKey] || getDefaultBudgetData();
+  const resolvedUserAvatarUrl = useMemo(() => resolveAssetUrl(userAvatarUrl), [userAvatarUrl]);
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(currentDate), [currentDate]);
+  const data = useMemo(
+    () => monthlyBudgets[currentMonthKey] || getDefaultBudgetData(),
+    [currentMonthKey, monthlyBudgets]
+  );
   const person1UserId = data.person1UserId ?? null;
   const person2UserId = data.person2UserId ?? null;
   const isPerson1Linked = Boolean(person1UserId);
   const isPerson2Linked = Boolean(person2UserId);
-  const previousMonthKey = getCurrentMonthKey(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const nextMonthKey = getCurrentMonthKey(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-  const canGoToPreviousMonth = Boolean(monthlyBudgets[previousMonthKey]);
-  const canGoToNextMonth = Boolean(monthlyBudgets[nextMonthKey]);
-  const availableMonthKeys = Object.keys(monthlyBudgets).sort();
-  const monthOptions = MONTH_LABELS[languagePreference];
-  const formatMonthKey = (monthKey: string) => {
+  const availableMonthKeys = useMemo(() => Object.keys(monthlyBudgets).sort(), [monthlyBudgets]);
+  const monthOptions = useMemo(() => MONTH_LABELS[languagePreference], [languagePreference]);
+  const formatMonthKey = useCallback((monthKey: string) => {
     const [year, month] = monthKey.split('-');
     const monthIndex = Number(month) - 1;
     const monthLabel = monthOptions[monthIndex] ?? monthKey;
     return `${monthLabel} ${year}`;
-  };
-  const breadcrumbItems = isBudgetView
-    ? [t('appName'), t('budgetLabel'), formatMonthKey(currentMonthKey)]
-    : isSettingsView
-      ? [t('appName'), t('settingsLabel'), t('profileTitle')]
-      : [t('appName'), pageLabel];
-  const pageStyle = {
+  }, [monthOptions]);
+  const breadcrumbItems = useMemo(() => (
+    isBudgetView
+      ? [t('appName'), t('budgetLabel'), formatMonthKey(currentMonthKey)]
+      : isSettingsView
+        ? [t('appName'), t('settingsLabel'), t('profileTitle')]
+        : [t('appName'), pageLabel]
+  ), [currentMonthKey, formatMonthKey, isBudgetView, isSettingsView, pageLabel, t]);
+  const pageStyle = useMemo(() => ({
     backgroundColor: darkMode ? '#0b1220' : '#fbf7f2',
     backgroundImage: darkMode
       ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
       : 'radial-gradient(1200px circle at 15% -15%, rgba(31,157,106,0.12), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(242,123,99,0.10), transparent 50%)'
-  } as React.CSSProperties;
+  }) as React.CSSProperties, [darkMode]);
 
   const oidcLoginEnabled = Boolean(oidcLoginConfig?.enabled);
   const oidcLoginProviderName = (oidcLoginConfig?.providerName || 'OIDC').trim() || 'OIDC';
@@ -4090,25 +4112,6 @@ const App: React.FC = () => {
   }, [authToken, showOnboarding, settingsLoaded]);
 
   useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const handleClick = (event: MouseEvent) => {
-      if (!menuRef.current) {
-        return;
-      }
-      if (menuRef.current.contains(event.target as Node)) {
-        return;
-      }
-      setMenuOpen(false);
-    };
-    window.addEventListener('mousedown', handleClick);
-    return () => {
-      window.removeEventListener('mousedown', handleClick);
-    };
-  }, [menuOpen]);
-
-  useEffect(() => {
     if (authToken) {
       return;
     }
@@ -4345,7 +4348,6 @@ const App: React.FC = () => {
     setAuthUser('');
     setAuthProfile(null);
     setActivePage('budget');
-    setMenuOpen(false);
     setMonthlyBudgets({});
     setIsHydrated(false);
   };
@@ -5391,17 +5393,17 @@ const App: React.FC = () => {
     );
   }
 
-  const navItems = [
+  const navItems = useMemo(() => ([
     { key: 'dashboard' as const, label: t('dashboardLabel'), icon: LayoutDashboard },
     { key: 'budget' as const, label: t('budgetLabel'), icon: Wallet },
     { key: 'reports' as const, label: t('reportsLabel'), icon: BarChart3 },
     { key: 'settings' as const, label: t('settingsLabel'), icon: Settings }
-  ];
+  ]), [t]);
 
-  const handleNavigate = (page: typeof activePage) => {
+  const handleNavigate = useCallback((page: typeof activePage) => {
     setActivePage(page);
     setSidebarOpen(false);
-  };
+  }, []);
 
   const sidebarNav = (
     <nav className="flex flex-col gap-1">
@@ -5537,16 +5539,6 @@ const App: React.FC = () => {
                   </div>
                   <div className="text-lg font-semibold">{t('appName')}</div>
                 </div>
-                {!isPwa && (
-                  <button
-                    type="button"
-                    onClick={() => setSidebarOpen(false)}
-                    className={`p-2 rounded-xl ${darkMode ? 'bg-slate-800' : 'bg-white'}`}
-                    aria-label="Close menu"
-                  >
-                    <X size={18} />
-                  </button>
-                )}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto">
                 {sidebarNav}
@@ -5585,30 +5577,16 @@ const App: React.FC = () => {
                   >
                     {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} />}
                   </button>
-                  <div ref={menuRef} className="relative">
-                    <button
-                      onClick={() => setMenuOpen(prev => !prev)}
-                      className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden shadow-sm ${
-                        darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'
-                      }`}
-                      aria-label={t('accountMenuLabel')}
-                    >
-                      {resolvedUserAvatarUrl ? (
-                        <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
-                      ) : (
-                        userInitial
-                      )}
-                    </button>
-                    {menuOpen && (
-                      <div
-                        className={`absolute right-0 mt-2 w-56 rounded-lg border shadow-lg overflow-hidden ${
-                          darkMode ? 'bg-slate-950/90 border-slate-800 text-slate-100' : 'bg-white/95 border-slate-100 text-slate-800'
-                        }`}
-                      >
-                        <div className="px-3 py-2 text-xs uppercase tracking-wide text-slate-500">
-                          {userDisplayName}
-                        </div>
-                      </div>
+                  <div
+                    className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden shadow-sm ${
+                      darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'
+                    }`}
+                    aria-label={t('accountMenuLabel')}
+                  >
+                    {resolvedUserAvatarUrl ? (
+                      <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+                    ) : (
+                      userInitial
                     )}
                   </div>
                 </div>
@@ -6083,9 +6061,7 @@ const App: React.FC = () => {
                         <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('typeLabel')}</th>
                         <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('descriptionLabel')}</th>
                         <th className={`p-2 text-right ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('amountLabel')}</th>
-                        {!isPwa && (
-                          <th className={`p-2 text-left ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
-                        )}
+                        <th className={`p-2 text-left hidden sm:table-cell ${darkMode ? 'text-slate-300' : 'text-slate-500'}`}>{t('personLabel')}</th>
                         <th className="p-2"></th>
                       </tr>
                     </thead>
@@ -6118,13 +6094,11 @@ const App: React.FC = () => {
                               {formatCurrency(transaction.amount, currencyPreference)}
                             </span>
                           </td>
-                          {!isPwa && (
-                            <td className="p-2">
-                              <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
-                                {transaction.person}
-                              </span>
-                            </td>
-                          )}
+                          <td className="p-2 hidden sm:table-cell">
+                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                              {transaction.person}
+                            </span>
+                          </td>
                           <td className="p-2">
                             <div className="flex items-center justify-end gap-2">
                               <button
