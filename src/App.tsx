@@ -96,6 +96,16 @@ type ExpenseWizardState = {
   startMonth: string;
 };
 
+type JointWizardState = {
+  mode: 'create' | 'edit';
+  targetId?: string;
+  type: 'deposit' | 'expense';
+  date: string;
+  description: string;
+  amount: string;
+  person: string;
+};
+
 const APP_VERSION = packageJson.version;
 
 const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
@@ -1414,6 +1424,9 @@ const BudgetHeaderSection = ({
   const animatedAvailable = useAnimatedNumber(available);
   const revenueTone = getPaletteTone(palette, 0, darkMode);
   const isDefaultPalette = palette.id === 'default';
+  const revenueHeaderStyle = isDefaultPalette
+    ? { color: darkMode ? '#E2E8F0' : '#334155' }
+    : { color: revenueTone.text };
   const revenueButtonStyle = {
     borderColor: revenueTone.border,
     color: revenueTone.text,
@@ -1435,7 +1448,7 @@ const BudgetHeaderSection = ({
     >
       <div className="mb-3">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-semibold" style={{ color: revenueTone.text }}>{t('incomeLabel')}:</span>
+          <span className="text-sm font-semibold" style={revenueHeaderStyle}>{t('incomeLabel')}:</span>
           <button
             type="button"
             onClick={() => addIncomeSource(personKey)}
@@ -1523,6 +1536,9 @@ const BudgetFixedSection = ({
   const hasPaidFixed = paidFixedTotal > 0;
   const fixedTone = getPaletteTone(palette, 1, darkMode);
   const isDefaultPalette = palette.id === 'default';
+  const fixedHeaderStyle = isDefaultPalette
+    ? { color: darkMode ? '#E2E8F0' : '#334155' }
+    : { color: fixedTone.text };
   const fixedButtonStyle = {
     borderColor: fixedTone.border,
     color: fixedTone.text,
@@ -1545,7 +1561,7 @@ const BudgetFixedSection = ({
       }}
     >
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-sm font-semibold" style={{ color: fixedTone.text }}>{t('fixedMoneyLabel')}</h3>
+        <h3 className="text-sm font-semibold" style={fixedHeaderStyle}>{t('fixedMoneyLabel')}</h3>
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'fixed')}
@@ -1594,7 +1610,7 @@ const BudgetFixedSection = ({
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!sortByCost && (
-                      <div className="flex items-center gap-1">
+                      <div className="hidden sm:flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => moveFixedExpense(personKey, expense.id, 'up')}
@@ -1681,6 +1697,9 @@ const BudgetFreeSection = ({
   const hasPaidCategories = paidCategoriesTotal > 0;
   const freeTone = getPaletteTone(palette, 2, darkMode);
   const isDefaultPalette = palette.id === 'default';
+  const freeHeaderStyle = isDefaultPalette
+    ? { color: darkMode ? '#E2E8F0' : '#334155' }
+    : { color: freeTone.text };
   const freeButtonStyle = {
     borderColor: freeTone.border,
     color: freeTone.text,
@@ -1703,7 +1722,7 @@ const BudgetFreeSection = ({
       }}
     >
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-sm font-semibold" style={{ color: freeTone.text }}>{t('freeMoneyLabel')}</h3>
+        <h3 className="text-sm font-semibold" style={freeHeaderStyle}>{t('freeMoneyLabel')}</h3>
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'free')}
@@ -1758,7 +1777,7 @@ const BudgetFreeSection = ({
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!sortByCost && (
-                      <div className="flex items-center gap-1">
+                      <div className="hidden sm:flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => moveCategory(personKey, category.id, 'up')}
@@ -2011,7 +2030,7 @@ const LoginScreen = ({
 
   return (
     <div
-      className={`min-h-screen-dvh p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
+      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
       style={pageStyle}
     >
       <form
@@ -2159,7 +2178,7 @@ const OnboardingWizard = ({
 
   return (
     <div
-      className={`min-h-screen-dvh p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
+      className={`min-h-screen p-6 flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-[#fbf7f2]'}`}
       style={pageStyle}
     >
       <div
@@ -3547,6 +3566,9 @@ const App: React.FC = () => {
     return localStorage.getItem('paletteId') ?? PALETTES[0].id;
   });
   const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
+  const [jointWizard, setJointWizard] = useState<JointWizardState | null>(null);
+  const [jointDeleteArmed, setJointDeleteArmed] = useState(false);
+  const [toast, setToast] = useState<{ message: string; tone?: 'success' | 'error' } | null>(null);
   const [deleteMonthOpen, setDeleteMonthOpen] = useState(false);
   const [deleteMonthInput, setDeleteMonthInput] = useState('');
 
@@ -3557,6 +3579,8 @@ const App: React.FC = () => {
   const lastSavedSettingsRef = useRef<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const oidcHandledRef = useRef(false);
+  const jointDeleteTimerRef = useRef<number | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   const palette = getPaletteById(paletteId);
   const jointTone = getPaletteTone(palette, 3, darkMode);
@@ -3673,6 +3697,17 @@ const App: React.FC = () => {
     setIsHydrated(false);
     return true;
   };
+
+  useEffect(() => {
+    return () => {
+      if (jointDeleteTimerRef.current) {
+        window.clearTimeout(jointDeleteTimerRef.current);
+      }
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleLogin = async (username: string, password: string) => {
     if (!username || !password) {
@@ -5086,14 +5121,79 @@ const App: React.FC = () => {
     return calculateJointBalanceForData(data);
   };
 
-  const addJointTransaction = (type: 'deposit' | 'expense') => {
-    const newTransaction: JointTransaction = {
-      id: Date.now().toString(),
+  const resetJointDeleteConfirm = () => {
+    setJointDeleteArmed(false);
+    if (jointDeleteTimerRef.current) {
+      window.clearTimeout(jointDeleteTimerRef.current);
+      jointDeleteTimerRef.current = null;
+    }
+  };
+
+  const closeJointWizard = () => {
+    setJointWizard(null);
+    resetJointDeleteConfirm();
+  };
+
+  const showToast = (message: string, tone: 'success' | 'error' = 'success') => {
+    setToast({ message, tone });
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2600);
+  };
+
+  const openJointWizardForCreate = (type: 'deposit' | 'expense') => {
+    resetJointDeleteConfirm();
+    setJointWizard({
+      mode: 'create',
+      type,
       date: new Date().toISOString().split('T')[0],
       description: type === 'deposit' ? t('newDepositDescription') : t('newExpenseDescription'),
-      amount: 0,
-      type: type,
+      amount: '',
       person: data.person1.name
+    });
+  };
+
+  const openJointWizardForEdit = (transaction: JointTransaction) => {
+    resetJointDeleteConfirm();
+    setJointWizard({
+      mode: 'edit',
+      targetId: transaction.id,
+      type: transaction.type,
+      date: transaction.date,
+      description: transaction.description,
+      amount: String(transaction.amount ?? ''),
+      person: transaction.person
+    });
+  };
+
+  const handleJointWizardSubmit = () => {
+    if (!jointWizard) {
+      return;
+    }
+    const description = jointWizard.description.trim()
+      || (jointWizard.type === 'deposit' ? t('newDepositDescription') : t('newExpenseDescription'));
+    const amount = parseNumberInput(jointWizard.amount);
+    const person = jointWizard.person || data.person1.name;
+    if (jointWizard.mode === 'edit' && jointWizard.targetId) {
+      updateJointTransaction(jointWizard.targetId, 'date', jointWizard.date);
+      updateJointTransaction(jointWizard.targetId, 'type', jointWizard.type);
+      updateJointTransaction(jointWizard.targetId, 'description', description);
+      updateJointTransaction(jointWizard.targetId, 'amount', amount);
+      updateJointTransaction(jointWizard.targetId, 'person', person);
+      closeJointWizard();
+      return;
+    }
+    const newTransaction: JointTransaction = {
+      id: Date.now().toString(),
+      date: jointWizard.date,
+      description,
+      amount,
+      type: jointWizard.type,
+      person
     };
     setData(prev => ({
       ...prev,
@@ -5102,6 +5202,31 @@ const App: React.FC = () => {
         transactions: [...prev.jointAccount.transactions, newTransaction]
       }
     }));
+    closeJointWizard();
+  };
+
+  const handleJointWizardDelete = () => {
+    if (!jointWizard || jointWizard.mode !== 'edit' || !jointWizard.targetId) {
+      return;
+    }
+    if (!jointDeleteArmed) {
+      setJointDeleteArmed(true);
+      if (jointDeleteTimerRef.current) {
+        window.clearTimeout(jointDeleteTimerRef.current);
+      }
+      jointDeleteTimerRef.current = window.setTimeout(() => {
+        setJointDeleteArmed(false);
+        jointDeleteTimerRef.current = null;
+      }, 3500);
+      return;
+    }
+    deleteJointTransaction(jointWizard.targetId);
+    showToast(t('jointDeleteSuccess'));
+    closeJointWizard();
+  };
+
+  const updateJointWizardField = (field: keyof JointWizardState, value: string) => {
+    setJointWizard(prev => (prev ? { ...prev, [field]: value } : prev));
   };
 
   const deleteJointTransaction = (id: string) => {
@@ -5268,7 +5393,7 @@ const App: React.FC = () => {
   );
 
   const sidebarFooter = (
-    <div className={`mt-auto pt-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+    <div className={`mt-auto pt-4 pb-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -5333,12 +5458,12 @@ const App: React.FC = () => {
   return (
     <TranslationContext.Provider value={{ t, language: languagePreference }}>
       <div
-        className={`min-h-screen-dvh app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-transparent'}`}
+        className={`min-h-screen app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-transparent'}`}
         style={pageStyle}
       >
-        <div className="flex min-h-screen-dvh">
+        <div className="flex min-h-screen">
           <aside
-            className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:py-6 sm:px-4 sm:border-r transition-colors sticky top-0 h-screen ${
+            className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:pt-6 sm:pb-0 sm:px-4 sm:border-r transition-colors sm:fixed sm:left-0 sm:top-0 sm:h-[100dvh] sm:z-40 sidebar-float ${
               darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/70 border-slate-100'
             } backdrop-blur-lg`}
           >
@@ -5352,7 +5477,7 @@ const App: React.FC = () => {
                 {t('appName')}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               {sidebarNav}
             </div>
             {sidebarFooter}
@@ -5364,7 +5489,7 @@ const App: React.FC = () => {
               onClick={() => setSidebarOpen(false)}
             />
             <aside
-              className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 safe-area-inset ${
+              className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 safe-area-inset sidebar-float ${
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full'
               } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white/90 text-slate-800'} backdrop-blur-lg`}
             >
@@ -5386,18 +5511,16 @@ const App: React.FC = () => {
                   <X size={18} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 {sidebarNav}
               </div>
               {sidebarFooter}
             </aside>
           </div>
 
-          <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
+          <main className="flex-1 p-4 sm:p-6 sm:pl-72 overflow-x-hidden">
             <div
-              className={`flex flex-col gap-4 mb-6 sm:static sticky top-0 z-30 pt-2 pb-3 ${
-                darkMode ? 'bg-slate-950/80' : 'bg-[#fbf7f2]/80'
-              } backdrop-blur-lg sm:bg-transparent sm:backdrop-blur-none sm:pt-0 sm:pb-0`}
+              className="flex flex-col gap-3 mb-4 sm:mb-6 sm:static sticky top-0 z-30 pb-2 sm:pb-0 bg-transparent"
             >
               <div className="sm:hidden flex items-center justify-between gap-2">
                 <button
@@ -5878,14 +6001,14 @@ const App: React.FC = () => {
                   <h3 className="font-semibold" style={{ color: jointTone.text }}>{t('jointAccountTitle')}</h3>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => addJointTransaction('deposit')}
+                      onClick={() => openJointWizardForCreate('deposit')}
                       className="px-3 py-1.5 rounded-full flex items-center gap-1 text-xs sm:text-sm font-semibold pill-emerald"
                     >
                       <Plus size={16} />
                       <span>{t('depositLabel')}</span>
                     </button>
                     <button
-                      onClick={() => addJointTransaction('expense')}
+                      onClick={() => openJointWizardForCreate('expense')}
                       className="px-3 py-1.5 rounded-full flex items-center gap-1 text-xs sm:text-sm font-semibold pill-coral"
                     >
                       <Plus size={16} />
@@ -5931,69 +6054,46 @@ const App: React.FC = () => {
                       {data.jointAccount.transactions.map(transaction => (
                         <tr key={transaction.id} className={`border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
                           <td className="p-2">
-                            <input
-                              type="date"
-                              value={transaction.date}
-                              onChange={(e) => updateJointTransaction(transaction.id, 'date', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                            />
+                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                              {transaction.date}
+                            </span>
                           </td>
                           <td className="p-2">
-                            <Select
-                              value={transaction.type}
-                              onValueChange={(value) => updateJointTransaction(transaction.id, 'type', value)}
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                transaction.type === 'deposit'
+                                  ? (darkMode ? 'bg-emerald-500/20 text-emerald-200' : 'bg-emerald-50 text-emerald-600')
+                                  : (darkMode ? 'bg-rose-500/20 text-rose-200' : 'bg-rose-50 text-rose-600')
+                              }`}
                             >
-                              <SelectTrigger
-                                className={`w-full ${transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'} ${
-                                  darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
-                                }`}
+                              {transaction.type === 'deposit' ? t('depositOptionLabel') : t('expenseOptionLabel')}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                              {transaction.description || (transaction.type === 'deposit' ? t('newDepositDescription') : t('newExpenseDescription'))}
+                            </span>
+                          </td>
+                          <td className="p-2 text-right">
+                            <span className={`font-semibold tabular-nums ${transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              {formatCurrency(transaction.amount, currencyPreference)}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            <span className={darkMode ? 'text-slate-100' : 'text-slate-700'}>
+                              {transaction.person}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => openJointWizardForEdit(transaction)}
+                                className={darkMode ? 'text-slate-200 hover:text-slate-50' : 'text-slate-500 hover:text-slate-700'}
+                                aria-label={t('editLabel')}
                               >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
-                                <SelectItem value="deposit">{t('depositOptionLabel')}</SelectItem>
-                                <SelectItem value="expense">{t('expenseOptionLabel')}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              value={transaction.description}
-                              onChange={(e) => updateJointTransaction(transaction.id, 'description', e.target.value)}
-                              className={`w-full px-2 py-1 border rounded ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                            />
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              value={coerceNumber(transaction.amount)}
-                              onChange={(e) => updateJointTransaction(transaction.id, 'amount', parseNumberInput(e.target.value))}
-                              className={`w-full px-2 py-1 border rounded text-right font-semibold ${
-                                transaction.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'
-                              } ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
-                            />
-                          </td>
-                          <td className="p-2">
-                            <Select
-                              value={transaction.person}
-                              onValueChange={(value) => updateJointTransaction(transaction.id, 'person', value)}
-                            >
-                              <SelectTrigger
-                                className={`w-full ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
-                              >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
-                                <SelectItem value={data.person1.name}>{data.person1.name}</SelectItem>
-                                <SelectItem value={data.person2.name}>{data.person2.name}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="p-2">
-                            <button onClick={() => deleteJointTransaction(transaction.id)} className="text-red-500 hover:text-red-700">
-                              <Trash2 size={16} />
-                            </button>
+                                <Edit2 size={16} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -6175,6 +6275,132 @@ const App: React.FC = () => {
             </DialogContent>
           </Dialog>
         )}
+        {jointWizard && (
+          <Dialog
+            open={Boolean(jointWizard)}
+            onOpenChange={(open) => {
+              if (!open) {
+                closeJointWizard();
+              }
+            }}
+          >
+            <DialogContent
+              className={`w-full max-w-md rounded-2xl p-6 space-y-4 shadow-lg ${
+                darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
+              }`}
+            >
+              <div className="space-y-1">
+                <p className="text-sm uppercase tracking-wide text-slate-500">{t('jointAccountTitle')}</p>
+                <h2 className="text-xl font-semibold">
+                  {jointWizard.mode === 'edit' ? t('jointWizardEditTitle') : t('jointWizardTitle')}
+                </h2>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium" htmlFor="joint-date">{t('dateLabel')}</label>
+                  <input
+                    id="joint-date"
+                    type="date"
+                    value={jointWizard.date}
+                    onChange={(e) => updateJointWizardField('date', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">{t('typeLabel')}</label>
+                  <Select
+                    value={jointWizard.type}
+                    onValueChange={(value) => updateJointWizardField('type', value)}
+                  >
+                    <SelectTrigger
+                      className={`w-full ${jointWizard.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'} ${
+                        darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                      <SelectItem value="deposit">{t('depositOptionLabel')}</SelectItem>
+                      <SelectItem value="expense">{t('expenseOptionLabel')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium" htmlFor="joint-description">{t('descriptionLabel')}</label>
+                  <input
+                    id="joint-description"
+                    type="text"
+                    value={jointWizard.description}
+                    onChange={(e) => updateJointWizardField('description', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium" htmlFor="joint-amount">{t('amountLabel')}</label>
+                  <input
+                    id="joint-amount"
+                    type="number"
+                    value={jointWizard.amount}
+                    onChange={(e) => updateJointWizardField('amount', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg text-right ${
+                      jointWizard.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'
+                    } ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">{t('personLabel')}</label>
+                  <Select
+                    value={jointWizard.person}
+                    onValueChange={(value) => updateJointWizardField('person', value)}
+                  >
+                    <SelectTrigger
+                      className={`w-full ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                      <SelectItem value={data.person1.name}>{data.person1.name}</SelectItem>
+                      <SelectItem value={data.person2.name}>{data.person2.name}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <div className="flex items-center gap-2">
+                  {jointWizard.mode === 'edit' && (
+                    <button
+                      type="button"
+                      onClick={handleJointWizardDelete}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                        jointDeleteArmed
+                          ? (darkMode ? 'bg-rose-500 text-white hover:bg-rose-400' : 'bg-rose-500 text-white hover:bg-rose-600')
+                          : (darkMode ? 'bg-rose-500/20 text-rose-200 hover:bg-rose-500/30' : 'bg-rose-100 text-rose-600 hover:bg-rose-200')
+                      }`}
+                    >
+                      {jointDeleteArmed ? t('confirmDeleteLabel') : t('deleteLabel')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={closeJointWizard}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {t('cancelLabel')}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleJointWizardSubmit}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold btn-gradient"
+                >
+                  {jointWizard.mode === 'edit' ? t('updateButton') : t('addLabel')}
+                </button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
         {deleteMonthOpen && (
           <Dialog
             open={deleteMonthOpen}
@@ -6231,6 +6457,23 @@ const App: React.FC = () => {
               </div>
             </DialogContent>
           </Dialog>
+        )}
+        {toast && (
+          <div
+            className="fixed bottom-4 left-4 right-4 z-[70] sm:left-auto sm:right-6 sm:bottom-6 pointer-events-none"
+            style={{ paddingBottom: 'var(--safe-bottom)' }}
+            aria-live="polite"
+          >
+            <div
+              className={`w-full sm:w-auto sm:min-w-[220px] rounded-xl px-4 py-2 text-sm font-semibold shadow-lg ${
+                toast.tone === 'error'
+                  ? (darkMode ? 'bg-rose-600 text-white' : 'bg-rose-500 text-white')
+                  : (darkMode ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-white')
+              }`}
+            >
+              {toast.message}
+            </div>
+          </div>
         )}
           </main>
         </div>
