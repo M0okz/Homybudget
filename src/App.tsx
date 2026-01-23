@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Moon, Sun, ChevronRight, ChevronUp, ChevronDown, Home, LayoutDashboard, Wallet, BarChart3, Settings, Menu, LogOut, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, ChevronUp, ChevronDown, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins } from 'lucide-react';
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
+import Sidebar from './components/layout/Sidebar';
+import HeaderBar from './components/layout/HeaderBar';
 import packageJson from '../package.json';
 
 interface Category {
@@ -671,27 +673,39 @@ const AUTO_CATEGORIES: AutoCategory[] = [
   }
 ];
 
+const AUTO_CATEGORY_KEYWORDS = AUTO_CATEGORIES.map(entry => ({
+  entry,
+  keywords: entry.keywords.map(normalizeIconLabel).filter(Boolean)
+}));
+const AUTO_CATEGORY_BY_ID = new Map(AUTO_CATEGORIES.map(entry => [entry.id, entry]));
+const autoCategoryCache = new Map<string, AutoCategory | null>();
+
 const getAutoCategory = (label: string) => {
   const normalized = normalizeIconLabel(label);
   if (!normalized || normalized === 'nouvelle categorie' || normalized === 'new category' || normalized === 'nouvelle depense') {
     return null;
   }
-  for (const entry of AUTO_CATEGORIES) {
+  if (autoCategoryCache.has(normalized)) {
+    return autoCategoryCache.get(normalized) ?? null;
+  }
+  for (const entry of AUTO_CATEGORY_KEYWORDS) {
     for (const keyword of entry.keywords) {
-      const normalizedKeyword = normalizeIconLabel(keyword);
-      if (normalizedKeyword && normalized.includes(normalizedKeyword)) {
-        return entry;
+      if (keyword && normalized.includes(keyword)) {
+        autoCategoryCache.set(normalized, entry.entry);
+        return entry.entry;
       }
     }
   }
-  return AUTO_CATEGORIES[AUTO_CATEGORIES.length - 1];
+  const fallback = AUTO_CATEGORIES[AUTO_CATEGORIES.length - 1] ?? null;
+  autoCategoryCache.set(normalized, fallback);
+  return fallback;
 };
 
 const getCategoryById = (id?: string | null) => {
   if (!id) {
     return null;
   }
-  return AUTO_CATEGORIES.find(category => category.id === id) ?? null;
+  return AUTO_CATEGORY_BY_ID.get(id) ?? null;
 };
 
 const CATEGORY_BADGE_CLASSES: Record<string, string> = {
@@ -5405,93 +5419,6 @@ const App: React.FC = () => {
     setSidebarOpen(false);
   }, []);
 
-  const sidebarNav = (
-    <nav className="flex flex-col gap-1">
-      {navItems.map(item => {
-        const Icon = item.icon;
-        const isActive = activePage === item.key;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => handleNavigate(item.key)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              isActive
-                ? (darkMode ? 'bg-slate-800 text-emerald-200' : 'bg-emerald-50 text-emerald-700 shadow-sm')
-                : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
-            }`}
-          >
-            <Icon size={18} />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
-    </nav>
-  );
-
-  const sidebarFooter = (
-    <div className={`mt-auto pt-4 pb-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => handleNavigate('settings')}
-          className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${
-            darkMode ? 'hover:bg-slate-900/70 text-slate-200' : 'hover:bg-white/80 text-slate-700'
-          }`}
-        >
-          <div className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
-            darkMode ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {resolvedUserAvatarUrl ? (
-              <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
-            ) : (
-              userInitial
-            )}
-          </div>
-          <div className="text-left">
-            <div className="text-sm font-semibold">{userDisplayName}</div>
-            {userHandle && (
-              <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                @{userHandle}
-              </div>
-            )}
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className={`h-9 w-9 flex items-center justify-center rounded-xl transition-all ${
-            darkMode ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white text-slate-500 hover:bg-slate-100'
-          }`}
-          aria-label={t('logoutLabel')}
-          title={t('logoutLabel')}
-        >
-          <LogOut size={16} />
-        </button>
-      </div>
-      <button
-        type="button"
-        onClick={toggleDarkMode}
-        className={`mt-3 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all ${
-          darkMode ? 'hover:bg-slate-900/70 text-slate-200' : 'hover:bg-white/80 text-slate-700'
-        }`}
-        aria-label={t('themeToggleLabel')}
-      >
-        {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} />}
-        <span>{t('themeToggleLabel')}</span>
-        <span className={`ml-auto text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-          {darkMode ? t('darkLabel') : t('lightLabel')}
-        </span>
-      </button>
-      <div className={`mt-3 flex items-center justify-center gap-2 text-xs uppercase tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-        <span>V{APP_VERSION}</span>
-        {updateAvailable && latestVersion && (
-          <span className="version-pill version-breathing">{latestVersion}</span>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <TranslationContext.Provider value={{ t, language: languagePreference }}>
       <div
@@ -5499,235 +5426,62 @@ const App: React.FC = () => {
         style={pageStyle}
       >
         <div className="flex min-h-screen">
-          <aside
-            className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:pt-6 sm:pb-0 sm:px-4 sm:border-r transition-colors sm:fixed sm:left-0 sm:top-0 sm:h-[100dvh] sm:z-40 sidebar-float ${
-              darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/70 border-slate-100'
-            } backdrop-blur-lg`}
-          >
-            <div className="flex items-center gap-3 px-2 mb-6">
-              <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
-              }`}>
-                HB
-              </div>
-              <div className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                {t('appName')}
-              </div>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {sidebarNav}
-            </div>
-            {sidebarFooter}
-          </aside>
-
-          <div className={`fixed inset-0 z-40 sm:hidden transition-opacity ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            <div
-              className="absolute inset-0 bg-black/40"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <aside
-              className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 safe-area-inset sidebar-float ${
-                sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-              } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white/90 text-slate-800'} backdrop-blur-lg`}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                    darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
-                  }`}>
-                    HB
-                  </div>
-                  <div className="text-lg font-semibold">{t('appName')}</div>
-                </div>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {sidebarNav}
-              </div>
-              {sidebarFooter}
-            </aside>
-          </div>
+          <Sidebar
+            darkMode={darkMode}
+            navItems={navItems}
+            activePage={activePage}
+            sidebarOpen={sidebarOpen}
+            onNavigate={handleNavigate}
+            onCloseMobile={() => setSidebarOpen(false)}
+            onToggleTheme={toggleDarkMode}
+            onLogout={handleLogout}
+            appName={t('appName')}
+            userDisplayName={userDisplayName}
+            userHandle={userHandle}
+            userInitial={userInitial}
+            userAvatarUrl={resolvedUserAvatarUrl}
+            themeLabel={t('themeToggleLabel')}
+            darkLabel={t('darkLabel')}
+            lightLabel={t('lightLabel')}
+            logoutLabel={t('logoutLabel')}
+            appVersion={APP_VERSION}
+            updateAvailable={updateAvailable}
+            latestVersion={latestVersion}
+          />
 
           <main className="flex-1 p-4 sm:p-6 sm:pl-72 overflow-x-hidden">
-            <div
-              className="flex flex-col gap-3 mb-4 sm:mb-6 sm:static sticky top-0 z-30 pb-2 sm:pb-0 bg-transparent"
-            >
-              <div className="sm:hidden flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(true)}
-                  className={`p-2 rounded-full shadow-sm ${darkMode ? 'bg-slate-900 text-white' : 'bg-white/90 text-slate-700'}`}
-                  aria-label="Open menu"
-                >
-                  <Menu size={20} />
-                </button>
-                <div className="flex items-center gap-2">
-                  <PaletteSelector
-                    palettes={PALETTES}
-                    value={palette.id}
-                    onChange={setPaletteId}
-                    darkMode={darkMode}
-                  />
-                  <button
-                    type="button"
-                    onClick={toggleDarkMode}
-                    className={`h-9 w-9 rounded-full flex items-center justify-center shadow-sm ${
-                      darkMode ? 'bg-slate-900 text-slate-100' : 'bg-white text-slate-600'
-                    }`}
-                    aria-label={t('themeToggleLabel')}
-                  >
-                    {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} />}
-                  </button>
-                  <div
-                    className={`h-9 w-9 rounded-full flex items-center justify-center font-semibold overflow-hidden shadow-sm ${
-                      darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'
-                    }`}
-                    aria-label={t('accountMenuLabel')}
-                  >
-                    {resolvedUserAvatarUrl ? (
-                      <img src={resolvedUserAvatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
-                    ) : (
-                      userInitial
-                    )}
-                  </div>
-                </div>
-              </div>
-              {isSettingsView ? (
-                <div className="sm:hidden flex flex-col items-start gap-2">
-                  <button
-                    onClick={() => setActivePage('budget')}
-                    className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                      darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-white text-slate-700 hover:bg-slate-50'
-                    } transition-all`}
-                  >
-                    {t('backLabel')}
-                  </button>
-                  <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                    {t('settingsLabel')}
-                  </h1>
-                </div>
-              ) : isBudgetView ? (
-                <div className="sm:hidden flex items-center justify-end">
-                  <h1 className={`text-2xl font-bold flex items-center gap-2 min-w-0 text-right leading-snug ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                    <Select
-                      value={currentMonthKey}
-                      onValueChange={(value) => trySelectMonthKey(value)}
-                      disabled={!isHydrated}
-                    >
-                      <SelectTrigger
-                        aria-label={t('monthSelectLabel')}
-                        className={`month-live h-10 min-w-0 border-none bg-transparent px-0 py-0 text-2xl font-bold shadow-none [&_svg]:hidden ${
-                          darkMode
-                            ? 'text-white hover:bg-white/5 focus:ring-white/30'
-                            : 'text-slate-800 hover:bg-slate-900/5 focus:ring-slate-300/40'
-                        }`}
-                      >
-                        <SelectValue className="truncate" />
-                      </SelectTrigger>
-                      <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
-                        {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
-                          <SelectItem key={monthKey} value={monthKey}>
-                            {formatMonthKey(monthKey)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </h1>
-                </div>
-              ) : (
-                <h1 className={`sm:hidden text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                  {pageLabel}
-                </h1>
+            <HeaderBar
+              darkMode={darkMode}
+              isSettingsView={isSettingsView}
+              isBudgetView={isBudgetView}
+              pageLabel={pageLabel}
+              currentMonthKey={currentMonthKey}
+              availableMonthKeys={availableMonthKeys}
+              formatMonthKey={formatMonthKey}
+              onSelectMonth={trySelectMonthKey}
+              isHydrated={isHydrated}
+              onBackToBudget={() => setActivePage('budget')}
+              backLabel={t('backLabel')}
+              settingsLabel={t('settingsLabel')}
+              monthSelectLabel={t('monthSelectLabel')}
+              deleteMonthLabel={t('deleteMonth')}
+              onRequestDeleteMonth={requestDeleteCurrentMonth}
+              renderPaletteSelector={() => (
+                <PaletteSelector
+                  palettes={PALETTES}
+                  value={palette.id}
+                  onChange={setPaletteId}
+                  darkMode={darkMode}
+                />
               )}
-              <div className="hidden sm:flex items-center gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  {isSettingsView ? (
-                    <div className="flex flex-col items-start gap-2">
-                      <button
-                        onClick={() => setActivePage('budget')}
-                        className={`px-3 py-2 rounded-full text-sm font-semibold shadow-sm ${
-                          darkMode ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-white text-slate-700 hover:bg-slate-50'
-                        } transition-all`}
-                      >
-                        {t('backLabel')}
-                      </button>
-                      <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                        {t('settingsLabel')}
-                      </h1>
-                    </div>
-                  ) : isBudgetView ? (
-                    <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                      <Select
-                        value={currentMonthKey}
-                        onValueChange={(value) => trySelectMonthKey(value)}
-                        disabled={!isHydrated}
-                      >
-                        <SelectTrigger
-                          aria-label={t('monthSelectLabel')}
-                          className={`month-live h-auto border-none bg-transparent px-0 py-0 text-2xl sm:text-3xl font-bold leading-none shadow-none [&_svg]:hidden ${
-                            darkMode
-                              ? 'text-white hover:bg-white/5 focus:ring-white/30'
-                              : 'text-slate-800 hover:bg-slate-900/5 focus:ring-slate-300/40'
-                          }`}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
-                          {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
-                            <SelectItem key={monthKey} value={monthKey}>
-                              {formatMonthKey(monthKey)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </h1>
-                  ) : (
-                    <h1 className={`text-2xl sm:text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                      {pageLabel}
-                    </h1>
-                  )}
-                </div>
-                <div className="ml-auto hidden sm:flex items-center gap-3">
-                  <div className={`flex items-center gap-2 rounded-full px-3 py-1 border ${
-                    darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-white/80 border-slate-100'
-                  }`}
-                  >
-                    {isBudgetView && (
-                      <button
-                        onClick={requestDeleteCurrentMonth}
-                        className="hidden sm:inline-flex px-3 py-1.5 rounded-full text-sm font-semibold pill-coral transition-all"
-                      >
-                        {t('deleteMonth')}
-                      </button>
-                    )}
-                    <div className="hidden sm:flex">
-                      <PaletteSelector
-                        palettes={PALETTES}
-                        value={palette.id}
-                        onChange={setPaletteId}
-                        darkMode={darkMode}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <nav
-                aria-label="breadcrumb"
-                className={`hidden sm:flex items-center gap-2 text-xs sm:text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
-              >
-                <Home size={14} className={darkMode ? 'text-slate-300' : 'text-slate-400'} />
-                {breadcrumbItems.map((item, index) => (
-                  <span key={`${item}-${index}`} className="flex items-center gap-2">
-                    <ChevronRight size={12} className={darkMode ? 'text-slate-500' : 'text-slate-400'} />
-                    <span className={index === breadcrumbItems.length - 1 ? (darkMode ? 'text-slate-200' : 'text-slate-700') : ''}>
-                      {item}
-                    </span>
-                  </span>
-                ))}
-              </nav>
-              {isBudgetView && (
-                <div className="flex items-center justify-end sm:hidden" />
-              )}
-            </div>
+              onOpenSidebar={() => setSidebarOpen(true)}
+              onToggleTheme={toggleDarkMode}
+              themeLabel={t('themeToggleLabel')}
+              userInitial={userInitial}
+              userDisplayName={userDisplayName}
+              userAvatarUrl={resolvedUserAvatarUrl}
+              breadcrumbItems={breadcrumbItems}
+            />
 
       {isBudgetView && selectorError && (
         <div className={`mb-4 text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
