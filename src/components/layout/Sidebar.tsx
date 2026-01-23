@@ -1,4 +1,5 @@
 import React from 'react';
+import { LayoutGroup, motion } from 'framer-motion';
 import { Moon, Sun, LogOut, type LucideIcon } from 'lucide-react';
 
 type NavItem = {
@@ -52,28 +53,70 @@ const Sidebar = React.memo(({
   updateAvailable,
   latestVersion
 }: SidebarProps) => {
+  const [hoveredKey, setHoveredKey] = React.useState<NavItem['key'] | null>(null);
+  const [isNavHovering, setIsNavHovering] = React.useState(false);
+
   const sidebarNav = (
-    <nav className="flex flex-col gap-1">
-      {navItems.map(item => {
-        const Icon = item.icon;
-        const isActive = activePage === item.key;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => onNavigate(item.key)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              isActive
-                ? (darkMode ? 'bg-slate-800 text-emerald-200' : 'bg-emerald-50 text-emerald-700 shadow-sm')
-                : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
-            }`}
-          >
-            <Icon size={18} />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
-    </nav>
+    <LayoutGroup>
+      <nav
+        className="flex flex-col gap-1"
+        onMouseEnter={() => setIsNavHovering(true)}
+        onMouseLeave={() => {
+          setIsNavHovering(false);
+          setHoveredKey(null);
+        }}
+      >
+        {navItems.map(item => {
+          const Icon = item.icon;
+          const isActive = activePage === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setHoveredKey(null);
+                onNavigate(item.key);
+              }}
+              onMouseEnter={() => setHoveredKey(item.key)}
+              onMouseLeave={() => setHoveredKey(null)}
+              onFocus={() => setHoveredKey(item.key)}
+              onBlur={() => setHoveredKey(null)}
+              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                isActive
+                  ? (darkMode ? 'text-emerald-200' : 'text-emerald-700')
+                  : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
+              }`}
+            >
+              {isNavHovering && hoveredKey === item.key && !isActive && (
+                <motion.span
+                  layoutId="sidebar-hover"
+                  className={`absolute inset-0 rounded-xl ${
+                    darkMode ? 'bg-slate-900/70' : 'bg-slate-100/80'
+                  }`}
+                  transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                />
+              )}
+              {isActive && (
+                <motion.span
+                  layoutId="sidebar-active"
+                  className={`absolute inset-0 rounded-xl ${
+                    darkMode ? 'bg-slate-800/90' : 'bg-emerald-50 shadow-sm'
+                  }`}
+                  transition={{ type: 'spring', stiffness: 240, damping: 24, mass: 0.6 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-3">
+                <Icon size={18} />
+                <span>{item.label}</span>
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+    </LayoutGroup>
   );
 
   const sidebarFooter = (

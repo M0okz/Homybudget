@@ -70,6 +70,28 @@ textarea,
   touch-action: manipulation;
 }
 
+:where(button, [role='button'], [role='switch']):not(.no-anim) {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(button, [role='button'], [role='switch']):not(:disabled):not(.no-anim):hover {
+    transform: translateY(-1px);
+    filter: brightness(1.02);
+  }
+}
+
+:where(button, [role='button'], [role='switch']):not(:disabled):not(.no-anim):active {
+  transform: translateY(0) scale(0.98);
+}
+
 @media (pointer: coarse) and (max-width: 640px) {
   input,
   select,
@@ -296,6 +318,41 @@ body.theme-transition * {
 }
 
 .chip-other {
+  background: #eef1f5;
+  color: #5c6b82;
+}
+
+.chip-income-salary {
+  background: #e7f6ee;
+  color: #1c8b5a;
+}
+
+.chip-income-bonus {
+  background: #ffe9f4;
+  color: #c04b7a;
+}
+
+.chip-income-freelance {
+  background: #e8f1ff;
+  color: #3b6fd9;
+}
+
+.chip-income-rent {
+  background: #fff0df;
+  color: #c46b2a;
+}
+
+.chip-income-investment {
+  background: #e6f7ff;
+  color: #2b7ea6;
+}
+
+.chip-income-benefit {
+  background: #eef1ff;
+  color: #4b5fd1;
+}
+
+.chip-income-other {
   background: #eef1f5;
   color: #5c6b82;
 }

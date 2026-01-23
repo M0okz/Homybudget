@@ -16,8 +16,9 @@ type HeaderBarProps = {
   backLabel: string;
   settingsLabel: string;
   monthSelectLabel: string;
-  deleteMonthLabel: string;
-  onRequestDeleteMonth: () => void;
+  showNextMonth: boolean;
+  nextMonthAvailable: boolean;
+  onToggleNextMonth: () => void;
   renderPaletteSelector: () => React.ReactNode;
   onOpenSidebar: () => void;
   onToggleTheme: () => void;
@@ -42,8 +43,9 @@ const HeaderBar = React.memo(({
   backLabel,
   settingsLabel,
   monthSelectLabel,
-  deleteMonthLabel,
-  onRequestDeleteMonth,
+  showNextMonth,
+  nextMonthAvailable,
+  onToggleNextMonth,
   renderPaletteSelector,
   onOpenSidebar,
   onToggleTheme,
@@ -191,10 +193,16 @@ const HeaderBar = React.memo(({
         >
           {isBudgetView && (
             <button
-              onClick={onRequestDeleteMonth}
-              className="hidden sm:inline-flex px-3 py-1.5 rounded-full text-sm font-semibold pill-coral transition-all"
+              onClick={onToggleNextMonth}
+              disabled={!isHydrated || !nextMonthAvailable}
+              aria-pressed={showNextMonth}
+              className={`hidden sm:inline-flex items-center justify-center px-4 py-1.5 rounded-full text-sm font-semibold transition-all border ${
+                showNextMonth
+                  ? 'bg-emerald-500 text-white border-emerald-500 shadow-[0_10px_24px_rgba(16,185,129,0.25)]'
+                  : (darkMode ? 'bg-slate-900/70 text-slate-200 border-slate-700' : 'bg-white/80 text-slate-600 border-slate-200')
+              } ${isHydrated && nextMonthAvailable ? '' : 'opacity-60 cursor-not-allowed'}`}
             >
-              {deleteMonthLabel}
+              Split
             </button>
           )}
           <div className="hidden sm:flex">

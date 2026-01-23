@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^16.6.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-select": "^2.2.6",
     "bcryptjs": "^2.4.3",
@@ -19,13 +20,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "framer-motion": "^11.18.2",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.452.0",
     "multer": "^1.4.5-lts.1",
     "openid-client": "^5.6.5",
     "pg": "^8.13.0",
     "react": "^18.3.1",
-    "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0"
   },

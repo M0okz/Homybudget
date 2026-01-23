@@ -1,6 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical } from 'lucide-react';
-import { DragDropContext, Droppable, Draggable, type DropResult } from 'react-beautiful-dnd';
+import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical, Eye, EyeOff, Link2, Link2Off } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
+  type DroppableProvided
+} from '@hello-pangea/dnd';
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
@@ -33,6 +42,9 @@ interface IncomeSource {
   id: string;
   name: string;
   amount: number;
+  templateId?: string;
+  categoryOverrideId?: string;
+  propagate?: boolean;
 }
 
 interface PersonBudget {
@@ -500,6 +512,16 @@ const shouldPropagateFixedExpense = (name: string) => {
   return Boolean(normalized) && !DEFAULT_FIXED_EXPENSE_LABELS.includes(normalized);
 };
 
+const DEFAULT_INCOME_SOURCE_LABELS = [
+  normalizeIconLabel(TRANSLATIONS.fr.newIncomeSourceLabel),
+  normalizeIconLabel(TRANSLATIONS.en.newIncomeSourceLabel)
+];
+
+const shouldPropagateIncomeSource = (name: string) => {
+  const normalized = normalizeIconLabel(name);
+  return Boolean(normalized) && !DEFAULT_INCOME_SOURCE_LABELS.includes(normalized);
+};
+
 const createTemplateId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
@@ -691,6 +713,65 @@ const AUTO_CATEGORY_KEYWORDS = AUTO_CATEGORIES.map(entry => ({
 const AUTO_CATEGORY_BY_ID = new Map(AUTO_CATEGORIES.map(entry => [entry.id, entry]));
 const autoCategoryCache = new Map<string, AutoCategory | null>();
 
+type IncomeCategory = {
+  id: string;
+  emoji: string;
+  labels: { fr: string; en: string };
+  keywords: string[];
+};
+
+const INCOME_CATEGORIES: IncomeCategory[] = [
+  {
+    id: 'salary',
+    emoji: '💼',
+    labels: { fr: 'Salaire', en: 'Salary' },
+    keywords: ['salaire', 'paie', 'paye', 'payroll', 'salary', 'wage']
+  },
+  {
+    id: 'bonus',
+    emoji: '✨',
+    labels: { fr: 'Prime', en: 'Bonus' },
+    keywords: ['prime', 'bonus', 'gratification', 'reward']
+  },
+  {
+    id: 'freelance',
+    emoji: '🧑‍💻',
+    labels: { fr: 'Freelance', en: 'Freelance' },
+    keywords: ['freelance', 'mission', 'prestation', 'facture', 'invoice', 'contract']
+  },
+  {
+    id: 'rent',
+    emoji: '🏠',
+    labels: { fr: 'Loyer', en: 'Rent' },
+    keywords: ['loyer', 'rent', 'rental', 'locatif']
+  },
+  {
+    id: 'investment',
+    emoji: '📈',
+    labels: { fr: 'Investissements', en: 'Investments' },
+    keywords: ['dividende', 'dividendes', 'interest', 'interet', 'intérêts', 'invest', 'placement']
+  },
+  {
+    id: 'benefit',
+    emoji: '🤝',
+    labels: { fr: 'Aides', en: 'Benefits' },
+    keywords: ['caf', 'aide', 'aides', 'allocation', 'allocations', 'benefit', 'benefits']
+  },
+  {
+    id: 'other',
+    emoji: '📦',
+    labels: { fr: 'Autres', en: 'Other' },
+    keywords: ['autre', 'autres', 'divers', 'other', 'misc']
+  }
+];
+
+const INCOME_CATEGORY_KEYWORDS = INCOME_CATEGORIES.map(entry => ({
+  entry,
+  keywords: entry.keywords.map(normalizeIconLabel).filter(Boolean)
+}));
+const INCOME_CATEGORY_BY_ID = new Map(INCOME_CATEGORIES.map(entry => [entry.id, entry]));
+const autoIncomeCategoryCache = new Map<string, IncomeCategory | null>();
+
 const getAutoCategory = (label: string) => {
   const normalized = normalizeIconLabel(label);
   if (!normalized || normalized === 'nouvelle categorie' || normalized === 'new category' || normalized === 'nouvelle depense') {
@@ -712,11 +793,39 @@ const getAutoCategory = (label: string) => {
   return fallback;
 };
 
+const getAutoIncomeCategory = (label: string) => {
+  const normalized = normalizeIconLabel(label);
+  if (!normalized || normalized === 'nouvelle source' || normalized === 'new source') {
+    return null;
+  }
+  if (autoIncomeCategoryCache.has(normalized)) {
+    return autoIncomeCategoryCache.get(normalized) ?? null;
+  }
+  for (const entry of INCOME_CATEGORY_KEYWORDS) {
+    for (const keyword of entry.keywords) {
+      if (keyword && normalized.includes(keyword)) {
+        autoIncomeCategoryCache.set(normalized, entry.entry);
+        return entry.entry;
+      }
+    }
+  }
+  const fallback = INCOME_CATEGORIES[INCOME_CATEGORIES.length - 1] ?? null;
+  autoIncomeCategoryCache.set(normalized, fallback);
+  return fallback;
+};
+
 const getCategoryById = (id?: string | null) => {
   if (!id) {
     return null;
   }
   return AUTO_CATEGORY_BY_ID.get(id) ?? null;
+};
+
+const getIncomeCategoryById = (id?: string | null) => {
+  if (!id) {
+    return null;
+  }
+  return INCOME_CATEGORY_BY_ID.get(id) ?? null;
 };
 
 const CATEGORY_BADGE_CLASSES: Record<string, string> = {
@@ -742,6 +851,23 @@ const getCategoryBadgeClass = (categoryId: string, darkMode: boolean) => {
     return 'category-chip bg-white/10 text-slate-200';
   }
   return `category-chip ${CATEGORY_BADGE_CLASSES[categoryId] ?? 'chip-other'}`;
+};
+
+const INCOME_CATEGORY_BADGE_CLASSES: Record<string, string> = {
+  salary: 'chip-income-salary',
+  bonus: 'chip-income-bonus',
+  freelance: 'chip-income-freelance',
+  rent: 'chip-income-rent',
+  investment: 'chip-income-investment',
+  benefit: 'chip-income-benefit',
+  other: 'chip-income-other'
+};
+
+const getIncomeCategoryBadgeClass = (categoryId: string, darkMode: boolean) => {
+  if (darkMode) {
+    return 'category-chip bg-white/10 text-slate-200';
+  }
+  return `category-chip ${INCOME_CATEGORY_BADGE_CLASSES[categoryId] ?? 'chip-income-other'}`;
 };
 
 const formatAmount = (value: number) => {
@@ -879,7 +1005,8 @@ const normalizeBudgetData = (data: BudgetData): BudgetData => ({
     ...data.person1,
     incomeSources: (data.person1?.incomeSources ?? []).map(source => ({
       ...source,
-      amount: coerceNumber(source.amount)
+      amount: coerceNumber(source.amount),
+      propagate: source.propagate !== false
     })),
     fixedExpenses: (data.person1?.fixedExpenses ?? []).map(expense => ({
       ...expense,
@@ -896,7 +1023,8 @@ const normalizeBudgetData = (data: BudgetData): BudgetData => ({
     ...data.person2,
     incomeSources: (data.person2?.incomeSources ?? []).map(source => ({
       ...source,
-      amount: coerceNumber(source.amount)
+      amount: coerceNumber(source.amount),
+      propagate: source.propagate !== false
     })),
     fixedExpenses: (data.person2?.fixedExpenses ?? []).map(expense => ({
       ...expense,
@@ -1332,6 +1460,7 @@ const changePasswordRequest = async (currentPassword: string, newPassword: strin
 type BudgetColumnProps = {
   person: PersonBudget;
   personKey: 'person1' | 'person2';
+  readOnly: boolean;
   darkMode: boolean;
   sortByCost: boolean;
   enableDrag: boolean;
@@ -1345,7 +1474,12 @@ type BudgetColumnProps = {
   cancelEditingName: () => void;
   addIncomeSource: (personKey: 'person1' | 'person2') => void;
   deleteIncomeSource: (personKey: 'person1' | 'person2', id: string) => void;
-  updateIncomeSource: (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount', value: string | number) => void;
+  updateIncomeSource: (
+    personKey: 'person1' | 'person2',
+    id: string,
+    field: 'name' | 'amount' | 'categoryOverrideId' | 'propagate',
+    value: string | number | boolean
+  ) => void;
   reorderIncomeSources: (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => void;
   openExpenseWizard: (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => void;
   openExpenseWizardForEdit: (personKey: 'person1' | 'person2', type: 'fixed' | 'free', payload: FixedExpense | Category) => void;
@@ -1359,6 +1493,7 @@ type BudgetHeaderSectionProps = Pick<
   BudgetColumnProps,
   | 'person'
   | 'personKey'
+  | 'readOnly'
   | 'darkMode'
   | 'enableDrag'
   | 'palette'
@@ -1373,6 +1508,7 @@ type BudgetFixedSectionProps = Pick<
   BudgetColumnProps,
   | 'person'
   | 'personKey'
+  | 'readOnly'
   | 'darkMode'
   | 'sortByCost'
   | 'enableDrag'
@@ -1388,6 +1524,7 @@ type BudgetFreeSectionProps = Pick<
   BudgetColumnProps,
   | 'person'
   | 'personKey'
+  | 'readOnly'
   | 'darkMode'
   | 'sortByCost'
   | 'enableDrag'
@@ -1403,6 +1540,7 @@ type PersonColumnHeaderProps = Pick<
   BudgetColumnProps,
   | 'person'
   | 'personKey'
+  | 'readOnly'
   | 'darkMode'
   | 'editingName'
   | 'tempName'
@@ -1415,6 +1553,7 @@ type PersonColumnHeaderProps = Pick<
 const PersonColumnHeader = React.memo(({
   person,
   personKey,
+  readOnly,
   darkMode,
   editingName,
   tempName,
@@ -1425,7 +1564,7 @@ const PersonColumnHeader = React.memo(({
   isLinked
 }: PersonColumnHeaderProps & { isLinked: boolean }) => (
   <div className="flex items-center justify-between sm:justify-center">
-    {editingName === personKey && !isLinked ? (
+    {editingName === personKey && !isLinked && !readOnly ? (
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -1445,7 +1584,7 @@ const PersonColumnHeader = React.memo(({
         <h2 className={`text-2xl sm:text-3xl font-semibold ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
           {person.name}
         </h2>
-        {!isLinked && (
+        {!isLinked && !readOnly && (
           <button onClick={() => startEditingName(personKey)} className={darkMode ? 'text-slate-300' : 'text-slate-500'}>
             <Edit2 size={16} />
           </button>
@@ -1459,6 +1598,7 @@ PersonColumnHeader.displayName = 'PersonColumnHeader';
 const BudgetHeaderSection = React.memo(({
   person,
   personKey,
+  readOnly,
   darkMode,
   enableDrag,
   palette,
@@ -1468,7 +1608,7 @@ const BudgetHeaderSection = React.memo(({
   updateIncomeSource,
   reorderIncomeSources
 }: BudgetHeaderSectionProps) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { totalFixed, totalCategories, totalIncome, totalExpenses, available } = useMemo(() => {
     const totalFixedValue = calculateTotalFixed(person.fixedExpenses);
     const totalCategoriesValue = calculateTotalCategories(person.categories);
@@ -1502,7 +1642,7 @@ const BudgetHeaderSection = React.memo(({
   );
   const summaryLabelClass = darkMode ? 'text-slate-400' : 'text-slate-500';
   const summaryValueClass = darkMode ? 'text-slate-100' : 'text-slate-700';
-  const canDrag = enableDrag;
+  const canDrag = enableDrag && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) {
       return;
@@ -1530,7 +1670,10 @@ const BudgetHeaderSection = React.memo(({
           <button
             type="button"
             onClick={() => addIncomeSource(personKey)}
-            className="h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105"
+            disabled={readOnly}
+            className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
+              readOnly ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
             style={revenueButtonStyle}
             aria-label={t('addLabel')}
           >
@@ -1540,48 +1683,124 @@ const BudgetHeaderSection = React.memo(({
         {canDrag ? (
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId={`income-${personKey}`}>
-              {(provided) => (
+              {(provided: DroppableProvided) => (
                 <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
-                  {person.incomeSources.map((source, index) => (
-                    <Draggable key={source.id} draggableId={`income-${personKey}-${source.id}`} index={index}>
-                      {(dragProvided, snapshot) => (
-                        <div
-                          ref={dragProvided.innerRef}
-                          {...dragProvided.draggableProps}
-                          className={`flex flex-wrap items-center gap-2 p-2 rounded-lg border ${
-                            darkMode ? 'border-slate-800' : 'border-slate-100'
-                          } ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} ${
-                            snapshot.isDragging ? (darkMode ? 'ring-1 ring-white/20' : 'ring-1 ring-slate-200') : ''
-                          }`}
-                          style={dragProvided.draggableProps.style}
-                        >
-                          <span
-                            {...dragProvided.dragHandleProps}
-                            className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
-                            aria-label={t('dragHandleLabel')}
+                  {person.incomeSources.map((source, index) => {
+                    const resolvedCategory = source.categoryOverrideId
+                      ? getIncomeCategoryById(source.categoryOverrideId)
+                      : getAutoIncomeCategory(source.name);
+                    const categoryLabel = resolvedCategory
+                      ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en)
+                      : t('incomeCategoryLabel');
+                    const badgeClass = resolvedCategory
+                      ? getIncomeCategoryBadgeClass(resolvedCategory.id, darkMode)
+                      : null;
+                    const chipClass = badgeClass ?? (darkMode ? 'category-chip bg-white/10 text-slate-200' : 'category-chip chip-income-other');
+                    const categoryValue = source.categoryOverrideId || 'auto';
+                    const autoLabel = resolvedCategory
+                      ? `${t('autoLabel')} · ${resolvedCategory.emoji} ${categoryLabel}`
+                      : `${t('autoLabel')} · ${t('incomeCategoryLabel')}`;
+                    const triggerLabel = resolvedCategory
+                      ? `${resolvedCategory.emoji} ${categoryLabel}`
+                      : t('incomeCategoryLabel');
+                    const isLinked = source.propagate !== false;
+
+                    return (
+                      <Draggable key={source.id} draggableId={`income-${personKey}-${source.id}`} index={index}>
+                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className={`flex flex-wrap items-center gap-2 p-2 rounded-lg border ${
+                              darkMode ? 'border-slate-800' : 'border-slate-100'
+                            } ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} ${
+                              snapshot.isDragging ? (darkMode ? 'ring-1 ring-white/20' : 'ring-1 ring-slate-200') : ''
+                            }`}
+                            style={dragProvided.draggableProps.style}
                           >
-                            <GripVertical size={14} />
-                          </span>
-                          <input
-                            type="text"
-                            value={source.name}
-                            onChange={(e) => updateIncomeSource(personKey, source.id, 'name', e.target.value)}
-                            className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                            placeholder={t('incomePlaceholder')}
-                          />
-                          <input
-                            type="number"
-                            value={coerceNumber(source.amount)}
-                            onChange={(e) => updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value))}
-                            className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                          />
-                          <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500 hover:text-red-600">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
+                            <span
+                              {...dragProvided.dragHandleProps}
+                              className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                              aria-label={t('dragHandleLabel')}
+                            >
+                              <GripVertical size={14} />
+                            </span>
+                            <input
+                              type="text"
+                              value={source.name}
+                              onChange={(e) => {
+                                if (readOnly) {
+                                  return;
+                                }
+                                updateIncomeSource(personKey, source.id, 'name', e.target.value);
+                              }}
+                              readOnly={readOnly}
+                              className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                              placeholder={t('incomePlaceholder')}
+                            />
+                            <Select
+                              value={categoryValue}
+                              onValueChange={(value) => {
+                                if (readOnly) {
+                                  return;
+                                }
+                                updateIncomeSource(personKey, source.id, 'categoryOverrideId', value === 'auto' ? '' : value);
+                              }}
+                            >
+                              <SelectTrigger
+                                disabled={readOnly}
+                                aria-label={t('incomeCategoryLabel')}
+                                className={`${chipClass} h-auto w-auto border-none shadow-none [&_svg]:hidden ${
+                                  readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'
+                                }`}
+                              >
+                                <span className="inline-flex items-center gap-1">{triggerLabel}</span>
+                              </SelectTrigger>
+                              <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                                <SelectItem value="auto">{autoLabel}</SelectItem>
+                                {INCOME_CATEGORIES.map(category => (
+                                  <SelectItem key={category.id} value={category.id}>
+                                    {category.emoji} {language === 'fr' ? category.labels.fr : category.labels.en}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <input
+                              type="number"
+                              value={coerceNumber(source.amount)}
+                              onChange={(e) => {
+                                if (readOnly) {
+                                  return;
+                                }
+                                updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value));
+                              }}
+                              readOnly={readOnly}
+                              className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateIncomeSource(personKey, source.id, 'propagate', !isLinked)}
+                              disabled={readOnly}
+                              className={`p-1 rounded-full border ${
+                                darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                              } ${readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                              aria-label={isLinked ? t('incomeSyncOnLabel') : t('incomeSyncOffLabel')}
+                              title={isLinked ? t('incomeSyncOnLabel') : t('incomeSyncOffLabel')}
+                            >
+                              {isLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
+                            </button>
+                            <button
+                              onClick={() => deleteIncomeSource(personKey, source.id)}
+                              disabled={readOnly}
+                              className={`text-red-500 hover:text-red-600 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
                   {provided.placeholder}
                 </div>
               )}
@@ -1589,26 +1808,102 @@ const BudgetHeaderSection = React.memo(({
           </DragDropContext>
         ) : (
           <div className="space-y-2">
-            {person.incomeSources.map(source => (
-              <div key={source.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} p-2 rounded-lg border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
-                <input
-                  type="text"
-                  value={source.name}
-                  onChange={(e) => updateIncomeSource(personKey, source.id, 'name', e.target.value)}
-                  className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                  placeholder={t('incomePlaceholder')}
-                />
-                <input
-                  type="number"
-                  value={coerceNumber(source.amount)}
-                  onChange={(e) => updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value))}
-                  className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
-                />
-                <button onClick={() => deleteIncomeSource(personKey, source.id)} className="text-red-500 hover:text-red-600">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+            {person.incomeSources.map(source => {
+              const resolvedCategory = source.categoryOverrideId
+                ? getIncomeCategoryById(source.categoryOverrideId)
+                : getAutoIncomeCategory(source.name);
+              const categoryLabel = resolvedCategory
+                ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en)
+                : t('incomeCategoryLabel');
+              const badgeClass = resolvedCategory
+                ? getIncomeCategoryBadgeClass(resolvedCategory.id, darkMode)
+                : null;
+              const chipClass = badgeClass ?? (darkMode ? 'category-chip bg-white/10 text-slate-200' : 'category-chip chip-income-other');
+              const categoryValue = source.categoryOverrideId || 'auto';
+              const autoLabel = resolvedCategory
+                ? `${t('autoLabel')} · ${resolvedCategory.emoji} ${categoryLabel}`
+                : `${t('autoLabel')} · ${t('incomeCategoryLabel')}`;
+              const triggerLabel = resolvedCategory
+                ? `${resolvedCategory.emoji} ${categoryLabel}`
+                : t('incomeCategoryLabel');
+              const isLinked = source.propagate !== false;
+
+              return (
+                <div key={source.id} className={`flex flex-wrap items-center gap-2 ${darkMode ? 'bg-slate-900/60' : 'bg-white/90'} p-2 rounded-lg border ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                  <input
+                    type="text"
+                    value={source.name}
+                    onChange={(e) => {
+                      if (readOnly) {
+                        return;
+                      }
+                      updateIncomeSource(personKey, source.id, 'name', e.target.value);
+                    }}
+                    readOnly={readOnly}
+                    className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                    placeholder={t('incomePlaceholder')}
+                  />
+                  <Select
+                    value={categoryValue}
+                    onValueChange={(value) => {
+                      if (readOnly) {
+                        return;
+                      }
+                      updateIncomeSource(personKey, source.id, 'categoryOverrideId', value === 'auto' ? '' : value);
+                    }}
+                  >
+                    <SelectTrigger
+                      disabled={readOnly}
+                      aria-label={t('incomeCategoryLabel')}
+                      className={`${chipClass} h-auto w-auto border-none shadow-none [&_svg]:hidden ${
+                        readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-1">{triggerLabel}</span>
+                    </SelectTrigger>
+                    <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                      <SelectItem value="auto">{autoLabel}</SelectItem>
+                      {INCOME_CATEGORIES.map(category => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.emoji} {language === 'fr' ? category.labels.fr : category.labels.en}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <input
+                    type="number"
+                    value={coerceNumber(source.amount)}
+                    onChange={(e) => {
+                      if (readOnly) {
+                        return;
+                      }
+                      updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value));
+                    }}
+                    readOnly={readOnly}
+                    className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateIncomeSource(personKey, source.id, 'propagate', !isLinked)}
+                    disabled={readOnly}
+                    className={`p-1 rounded-full border ${
+                      darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                    } ${readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                    aria-label={isLinked ? t('incomeSyncOnLabel') : t('incomeSyncOffLabel')}
+                    title={isLinked ? t('incomeSyncOnLabel') : t('incomeSyncOffLabel')}
+                  >
+                    {isLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
+                  </button>
+                  <button
+                    onClick={() => deleteIncomeSource(personKey, source.id)}
+                    disabled={readOnly}
+                    className={`text-red-500 hover:text-red-600 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1638,6 +1933,7 @@ BudgetHeaderSection.displayName = 'BudgetHeaderSection';
 const BudgetFixedSection = React.memo(({
   person,
   personKey,
+  readOnly,
   darkMode,
   sortByCost,
   enableDrag,
@@ -1695,7 +1991,7 @@ const BudgetFixedSection = React.memo(({
     }),
     [darkMode, fixedTone.text]
   );
-  const canDrag = enableDrag && !sortByCost;
+  const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) {
       return;
@@ -1722,7 +2018,10 @@ const BudgetFixedSection = React.memo(({
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'fixed')}
-          className="h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105"
+          disabled={readOnly}
+          className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
+            readOnly ? 'opacity-60 cursor-not-allowed' : ''
+          }`}
           style={fixedButtonStyle}
           aria-label={t('addRowLabel')}
         >
@@ -1735,7 +2034,7 @@ const BudgetFixedSection = React.memo(({
         ) : canDrag ? (
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId={`fixed-${personKey}`}>
-              {(provided) => (
+              {(provided: DroppableProvided) => (
                 <div ref={provided.innerRef} {...provided.droppableProps} className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
                   {orderedExpenses.map((expense, index) => {
                     const amountValue = coerceNumber(expense.amount);
@@ -1746,7 +2045,7 @@ const BudgetFixedSection = React.memo(({
                     const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
                     return (
                       <Draggable key={expense.id} draggableId={`fixed-${personKey}-${expense.id}`} index={index}>
-                        {(dragProvided, snapshot) => (
+                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                           <div
                             ref={dragProvided.innerRef}
                             {...dragProvided.draggableProps}
@@ -1764,7 +2063,13 @@ const BudgetFixedSection = React.memo(({
                               <input
                                 type="checkbox"
                                 checked={expense.isChecked || false}
-                                onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
+                                onChange={(e) => {
+                                  if (readOnly) {
+                                    return;
+                                  }
+                                  updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked);
+                                }}
+                                disabled={readOnly}
                                 className="h-4 w-4"
                                 style={{ accentColor: fixedTone.border }}
                                 aria-label={t('validateExpenseLabel')}
@@ -1784,7 +2089,10 @@ const BudgetFixedSection = React.memo(({
                               <button
                                 type="button"
                                 onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
-                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
+                                disabled={readOnly}
+                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                                  readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                                 aria-label={t('editLabel')}
                               >
                                 <Edit2 size={14} />
@@ -1815,7 +2123,13 @@ const BudgetFixedSection = React.memo(({
                     <input
                       type="checkbox"
                       checked={expense.isChecked || false}
-                      onChange={(e) => updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked)}
+                      onChange={(e) => {
+                        if (readOnly) {
+                          return;
+                        }
+                        updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked);
+                      }}
+                      disabled={readOnly}
                       className="h-4 w-4"
                       style={{ accentColor: fixedTone.border }}
                       aria-label={t('validateExpenseLabel')}
@@ -1835,7 +2149,10 @@ const BudgetFixedSection = React.memo(({
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
-                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
+                      disabled={readOnly}
+                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                        readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                       aria-label={t('editLabel')}
                     >
                       <Edit2 size={14} />
@@ -1870,6 +2187,7 @@ BudgetFixedSection.displayName = 'BudgetFixedSection';
 const BudgetFreeSection = React.memo(({
   person,
   personKey,
+  readOnly,
   darkMode,
   sortByCost,
   enableDrag,
@@ -1927,7 +2245,7 @@ const BudgetFreeSection = React.memo(({
     }),
     [darkMode, freeTone.text]
   );
-  const canDrag = enableDrag && !sortByCost;
+  const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) {
       return;
@@ -1954,7 +2272,10 @@ const BudgetFreeSection = React.memo(({
         <button
           type="button"
           onClick={() => openExpenseWizard(personKey, 'free')}
-          className="h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105"
+          disabled={readOnly}
+          className={`h-8 w-8 rounded-full border flex items-center justify-center transition hover:scale-105 ${
+            readOnly ? 'opacity-60 cursor-not-allowed' : ''
+          }`}
           style={freeButtonStyle}
           aria-label={t('addRowLabel')}
         >
@@ -1967,7 +2288,7 @@ const BudgetFreeSection = React.memo(({
         ) : canDrag ? (
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId={`free-${personKey}`}>
-              {(provided) => (
+              {(provided: DroppableProvided) => (
                 <div ref={provided.innerRef} {...provided.droppableProps} className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
                   {orderedCategories.map((category, index) => {
                     const amountValue = coerceNumber(category.amount);
@@ -1979,7 +2300,7 @@ const BudgetFreeSection = React.memo(({
                     const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
                     return (
                       <Draggable key={category.id} draggableId={`free-${personKey}-${category.id}`} index={index}>
-                        {(dragProvided, snapshot) => (
+                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                           <div
                             ref={dragProvided.innerRef}
                             {...dragProvided.draggableProps}
@@ -1997,7 +2318,13 @@ const BudgetFreeSection = React.memo(({
                               <input
                                 type="checkbox"
                                 checked={category.isChecked || false}
-                                onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
+                                onChange={(e) => {
+                                  if (readOnly) {
+                                    return;
+                                  }
+                                  updateCategory(personKey, category.id, 'isChecked', e.target.checked);
+                                }}
+                                disabled={readOnly}
                                 className="h-4 w-4"
                                 style={{ accentColor: freeTone.border }}
                                 aria-label={t('validateExpenseLabel')}
@@ -2022,7 +2349,10 @@ const BudgetFreeSection = React.memo(({
                               <button
                                 type="button"
                                 onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
-                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
+                                disabled={readOnly}
+                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                                  readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                                 aria-label={t('editLabel')}
                               >
                                 <Edit2 size={14} />
@@ -2054,7 +2384,13 @@ const BudgetFreeSection = React.memo(({
                     <input
                       type="checkbox"
                       checked={category.isChecked || false}
-                      onChange={(e) => updateCategory(personKey, category.id, 'isChecked', e.target.checked)}
+                      onChange={(e) => {
+                        if (readOnly) {
+                          return;
+                        }
+                        updateCategory(personKey, category.id, 'isChecked', e.target.checked);
+                      }}
+                      disabled={readOnly}
                       className="h-4 w-4"
                       style={{ accentColor: freeTone.border }}
                       aria-label={t('validateExpenseLabel')}
@@ -2079,7 +2415,10 @@ const BudgetFreeSection = React.memo(({
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
-                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80`}
+                      disabled={readOnly}
+                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                        readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                       aria-label={t('editLabel')}
                     >
                       <Edit2 size={14} />
@@ -2114,6 +2453,7 @@ BudgetFreeSection.displayName = 'BudgetFreeSection';
 const BudgetColumn = React.memo(({
   person,
   personKey,
+  readOnly,
   darkMode,
   sortByCost,
   enableDrag,
@@ -2140,6 +2480,7 @@ const BudgetColumn = React.memo(({
     <BudgetHeaderSection
       person={person}
       personKey={personKey}
+      readOnly={readOnly}
       darkMode={darkMode}
       enableDrag={enableDrag}
       palette={palette}
@@ -2152,6 +2493,7 @@ const BudgetColumn = React.memo(({
     <BudgetFixedSection
       person={person}
       personKey={personKey}
+      readOnly={readOnly}
       darkMode={darkMode}
       sortByCost={sortByCost}
       enableDrag={enableDrag}
@@ -2165,6 +2507,7 @@ const BudgetColumn = React.memo(({
     <BudgetFreeSection
       person={person}
       personKey={personKey}
+      readOnly={readOnly}
       darkMode={darkMode}
       sortByCost={sortByCost}
       enableDrag={enableDrag}
@@ -2314,6 +2657,8 @@ const LoginScreen = React.memo(({
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [waveKey, setWaveKey] = useState(0);
   const resolvedProviderName = oidcProviderName.trim() || 'OIDC';
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -2352,15 +2697,65 @@ const LoginScreen = React.memo(({
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium" htmlFor="login-password">{t('loginPasswordLabel')}</label>
-            <input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
-              placeholder="********"
-            />
+            <div className="relative overflow-hidden rounded-lg">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`relative z-10 w-full px-3 py-2 pr-11 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                placeholder="********"
+              />
+              <AnimatePresence>
+                {waveKey > 0 && (
+                  <motion.span
+                    key={waveKey}
+                    className="pointer-events-none absolute inset-0 z-20"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <motion.span
+                      className={`absolute inset-y-0 w-1/2 ${
+                        darkMode
+                          ? 'bg-gradient-to-r from-transparent via-white/15 to-transparent'
+                          : 'bg-gradient-to-r from-transparent via-slate-200/60 to-transparent'
+                      }`}
+                      initial={{ x: '-60%', opacity: 0 }}
+                      animate={{ x: '160%', opacity: 0.6 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.45, ease: 'easeOut' }}
+                    />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+              <motion.button
+                type="button"
+                onClick={() => {
+                  setShowPassword((prev) => !prev);
+                  setWaveKey((prev) => prev + 1);
+                }}
+                className={`absolute right-2 inset-y-0 z-30 flex items-center justify-center h-full w-9 rounded-full ${
+                  darkMode ? 'text-slate-300 hover:text-white' : 'text-slate-500 hover:text-slate-700'
+                }`}
+                whileTap={{ scale: 0.9 }}
+                aria-label={showPassword ? t('hidePasswordLabel') : t('showPasswordLabel')}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={showPassword ? 'hide' : 'show'}
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.7 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-center justify-center"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.button>
+            </div>
           </div>
         </div>
 
@@ -2708,6 +3103,143 @@ const OnboardingWizard = ({
   );
 };
 
+type AnimatedSwitchProps = {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  id?: string;
+  darkMode: boolean;
+};
+
+const AnimatedSwitch = React.memo(({
+  checked,
+  onChange,
+  disabled = false,
+  id,
+  darkMode
+}: AnimatedSwitchProps) => {
+  const backgroundColor = checked
+    ? '#10B981'
+    : (darkMode ? '#334155' : '#E2E8F0');
+
+  return (
+    <motion.button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+      }`}
+      style={{ backgroundColor }}
+      whileTap={disabled ? undefined : { scale: 0.96 }}
+    >
+      <motion.span
+        className="inline-block h-5 w-5 rounded-full bg-white shadow"
+        animate={{ x: checked ? 20 : 4 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      />
+    </motion.button>
+  );
+});
+AnimatedSwitch.displayName = 'AnimatedSwitch';
+
+type ToggleRowProps = {
+  icon: React.ComponentType<{ size?: number | string }>;
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  darkMode: boolean;
+};
+
+const ToggleRow = React.memo(({
+  icon: Icon,
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled = false,
+  darkMode
+}: ToggleRowProps) => (
+  <div
+    className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+      darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
+    } ${disabled ? 'opacity-60' : ''}`}
+  >
+    <div className="flex items-center gap-3">
+      <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
+        darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
+      }`}>
+        <Icon size={18} />
+      </span>
+      <div>
+        <div className="font-semibold">{label}</div>
+        {hint && (
+          <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
+            {hint}
+          </div>
+        )}
+      </div>
+    </div>
+    <AnimatedSwitch checked={checked} onChange={onChange} disabled={disabled} darkMode={darkMode} />
+  </div>
+));
+ToggleRow.displayName = 'ToggleRow';
+
+type SelectRowProps = {
+  icon: React.ComponentType<{ size?: number | string }>;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  options: Array<{ value: string; label: string }>;
+  darkMode: boolean;
+};
+
+const SelectRow = React.memo(({
+  icon: Icon,
+  label,
+  value,
+  onChange,
+  options,
+  darkMode
+}: SelectRowProps) => (
+  <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
+    <div className="flex items-center gap-3">
+      <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
+        darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
+      }`}>
+        <Icon size={18} />
+      </span>
+      <div className="font-semibold">{label}</div>
+    </div>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger
+        className={`min-w-[10rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent
+        className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}
+      >
+        {options.map((option) => (
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'focus:bg-emerald-50 focus:text-emerald-700'}
+          >
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+));
+SelectRow.displayName = 'SelectRow';
+
 type SettingsViewProps = {
   user: AuthUser | null;
   fallbackUsername: string;
@@ -2787,17 +3319,15 @@ const SettingsView = ({
   const profileInitial = (displayName.trim()[0] || 'U').toUpperCase();
   const resolvedOidcLinkName = oidcLinkProviderName.trim() || 'OIDC';
   const usernameLabel = user?.username || fallbackUsername || '';
-  const activeToggleClass = 'bg-emerald-500';
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [avatarInput, setAvatarInput] = useState(user?.avatarUrl ?? '');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
-  const [avatarLoading, setAvatarLoading] = useState(false);
   const [avatarUploadLoading, setAvatarUploadLoading] = useState(false);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const [oidcLinkLoading, setOidcLinkLoading] = useState(false);
   const [oidcLinkError, setOidcLinkError] = useState<string | null>(null);
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -2820,108 +3350,8 @@ const SettingsView = ({
   const [createLoading, setCreateLoading] = useState(false);
   const makeUserLabel = (item: AuthUser) => item.displayName || item.username;
 
-  const ToggleRow = ({
-    icon: Icon,
-    label,
-    hint,
-    checked,
-    onChange,
-    disabled = false
-  }: {
-    icon: React.ComponentType<{ size?: number | string }>;
-    label: string;
-    hint?: string;
-    checked: boolean;
-    onChange: (next: boolean) => void;
-    disabled?: boolean;
-  }) => (
-    <div
-      className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
-        darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
-      } ${disabled ? 'opacity-60' : ''}`}
-    >
-      <div className="flex items-center gap-3">
-        <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
-          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
-        }`}>
-          <Icon size={18} />
-        </span>
-        <div>
-          <div className="font-semibold">{label}</div>
-          {hint && (
-            <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
-              {hint}
-            </div>
-          )}
-        </div>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        disabled={disabled}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          checked ? activeToggleClass : (darkMode ? 'bg-slate-700' : 'bg-slate-200')
-        } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-      >
-        <span
-          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-            checked ? 'translate-x-5' : 'translate-x-1'
-          }`}
-        />
-      </button>
-    </div>
-  );
-
-  const SelectRow = ({
-    icon: Icon,
-    label,
-    value,
-    onChange,
-    options
-  }: {
-    icon: React.ComponentType<{ size?: number | string }>;
-    label: string;
-    value: string;
-    onChange: (next: string) => void;
-    options: Array<{ value: string; label: string }>;
-  }) => (
-    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
-      <div className="flex items-center gap-3">
-        <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
-          darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
-        }`}>
-          <Icon size={18} />
-        </span>
-        <div className="font-semibold">{label}</div>
-      </div>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger
-          className={`min-w-[10rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent
-          className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}
-        >
-          {options.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'focus:bg-emerald-50 focus:text-emerald-700'}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-
   useEffect(() => {
     setAvatarInput(user?.avatarUrl ?? '');
-    setAvatarFile(null);
   }, [user?.avatarUrl]);
 
   const formatTimestamp = (value: string | null) => {
@@ -2942,29 +3372,9 @@ const SettingsView = ({
     return fallback;
   };
 
-  const handleAvatarUpdate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setAvatarError(null);
-    setAvatarSuccess(null);
-    setAvatarLoading(true);
-    try {
-      const trimmed = avatarInput.trim();
-      const updated = await updateProfileRequest({
-        avatarUrl: trimmed ? trimmed : null
-      });
-      onProfileUpdated(updated);
-      setAvatarSuccess(t('profileImageUpdated'));
-    } catch (error) {
-      if (!onAuthFailure(error)) {
-        setAvatarError(resolveErrorMessage(error, t('profileImageError')));
-      }
-    } finally {
-      setAvatarLoading(false);
-    }
-  };
-
-  const handleAvatarUpload = async () => {
-    if (!avatarFile) {
+  const handleAvatarUpload = async (file?: File) => {
+    const fileToUpload = file;
+    if (!fileToUpload) {
       setAvatarError(t('profileImageUploadError'));
       return;
     }
@@ -2972,10 +3382,12 @@ const SettingsView = ({
     setAvatarSuccess(null);
     setAvatarUploadLoading(true);
     try {
-      const updated = await uploadProfileImageRequest(avatarFile);
+      const updated = await uploadProfileImageRequest(fileToUpload);
       onProfileUpdated(updated);
       setAvatarInput(updated.avatarUrl ?? '');
-      setAvatarFile(null);
+      if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = '';
+      }
       setAvatarSuccess(t('profileImageUploadSuccess'));
     } catch (error) {
       if (!onAuthFailure(error)) {
@@ -2984,6 +3396,21 @@ const SettingsView = ({
     } finally {
       setAvatarUploadLoading(false);
     }
+  };
+
+  const handleAvatarFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    void handleAvatarUpload(file);
+  };
+
+  const openAvatarFilePicker = () => {
+    if (avatarUploadLoading) {
+      return;
+    }
+    avatarFileInputRef.current?.click();
   };
 
   const handleOidcLink = async () => {
@@ -3188,13 +3615,27 @@ const SettingsView = ({
             <h3 className="text-lg font-semibold">{t('profileTitle')}</h3>
             <div className="space-y-3">
             <div className={`flex flex-wrap items-center gap-4 rounded-xl border px-4 py-3 ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
-              <div className={`h-12 w-12 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
+              <button
+                type="button"
+                onClick={openAvatarFilePicker}
+                disabled={avatarUploadLoading}
+                className={`group relative h-12 w-12 rounded-full flex items-center justify-center overflow-hidden ${
+                  darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
+                } ${avatarUploadLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                aria-label={t('profileImageUploadButton')}
+                title={t('profileImageUploadButton')}
+              >
                 {avatarInput.trim() ? (
                   <img src={resolveAssetUrl(avatarInput.trim()) ?? ''} alt={displayName} className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-lg font-semibold">{profileInitial}</span>
                 )}
-              </div>
+                <span className={`absolute inset-0 flex items-center justify-center text-xs font-semibold opacity-0 transition-opacity ${
+                  darkMode ? 'bg-slate-900/60 text-white' : 'bg-white/70 text-slate-700'
+                } ${avatarUploadLoading ? '' : 'group-hover:opacity-100'}`}>
+                  <Edit2 size={14} />
+                </span>
+              </button>
               <div className="flex-1 min-w-[10rem]">
                 <div className="text-lg font-semibold">{displayName}</div>
                 {usernameLabel && (
@@ -3232,58 +3673,15 @@ const SettingsView = ({
                   {oidcLinkError}
                 </div>
               )}
-              <form onSubmit={handleAvatarUpdate} className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden ${darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
-                    {avatarInput.trim() ? (
-                      <img src={resolveAssetUrl(avatarInput.trim()) ?? ''} alt={displayName} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-lg font-semibold">{profileInitial}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-[12rem] space-y-1">
-                    <label className={darkMode ? 'text-slate-300' : 'text-slate-600'}>{t('profileImageLabel')}</label>
-                    <input
-                      type="url"
-                      value={avatarInput}
-                      onChange={(event) => setAvatarInput(event.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
-                      placeholder={t('profileImageUrlPlaceholder')}
-                    />
-                    <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
-                      {t('profileImageHint')}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-3">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => setAvatarFile(event.target.files?.[0] ?? null)}
-                        className={`text-xs ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAvatarUpload}
-                        disabled={avatarUploadLoading || !avatarFile}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold pill-emerald ${avatarUploadLoading || !avatarFile ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      >
-                        {avatarUploadLoading ? t('profileImageUploadLoading') : t('profileImageUploadButton')}
-                      </button>
-                      {avatarFile && (
-                        <span className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
-                          {avatarFile.name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    type="submit"
-                    disabled={avatarLoading}
-                    className={`px-4 py-2 rounded-full font-semibold pill-emerald ${avatarLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  >
-                    {avatarLoading ? t('profileImageSaving') : t('profileImageSaveButton')}
-                  </button>
+              <input
+                ref={avatarFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFileChange}
+                className="hidden"
+              />
+              {(avatarSuccess || avatarError) && (
+                <div className="mt-2 space-y-1">
                   {avatarSuccess && (
                     <div className={`text-sm ${darkMode ? 'text-emerald-300' : 'text-emerald-600'}`}>
                       {avatarSuccess}
@@ -3295,7 +3693,7 @@ const SettingsView = ({
                     </div>
                   )}
                 </div>
-              </form>
+              )}
             </div>
           </section>
 
@@ -3362,6 +3760,7 @@ const SettingsView = ({
                 hint={t('fixedFreeLabel')}
                 checked={sortByCost}
                 onChange={onToggleSortByCost}
+                darkMode={darkMode}
               />
               <ToggleRow
                 icon={Users}
@@ -3369,6 +3768,7 @@ const SettingsView = ({
                 hint={t('jointAccountSettingHint')}
                 checked={jointAccountEnabled}
                 onChange={onToggleJointAccountEnabled}
+                darkMode={darkMode}
               />
               <ToggleRow
                 icon={User}
@@ -3376,6 +3776,7 @@ const SettingsView = ({
                 hint={t('soloModeSettingHint')}
                 checked={soloModeEnabled}
                 onChange={onToggleSoloModeEnabled}
+                darkMode={darkMode}
               />
               <SelectRow
                 icon={Globe2}
@@ -3386,6 +3787,7 @@ const SettingsView = ({
                   { value: 'fr', label: t('frenchLabel') },
                   { value: 'en', label: t('englishLabel') }
                 ]}
+                darkMode={darkMode}
               />
               <SelectRow
                 icon={Coins}
@@ -3396,6 +3798,7 @@ const SettingsView = ({
                   { value: 'EUR', label: t('currencyEuroLabel') },
                   { value: 'USD', label: t('currencyDollarLabel') }
                 ]}
+                darkMode={darkMode}
               />
               {isAdmin && (
                 <>
@@ -3404,6 +3807,7 @@ const SettingsView = ({
                     label={t('oidcSectionTitle')}
                     checked={oidcEnabled}
                     onChange={onOidcEnabledChange}
+                    darkMode={darkMode}
                   />
                   {oidcEnabled && (
                     <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
@@ -3864,6 +4268,7 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; tone?: 'success' | 'error' } | null>(null);
   const [deleteMonthOpen, setDeleteMonthOpen] = useState(false);
   const [deleteMonthInput, setDeleteMonthInput] = useState('');
+  const [showNextMonth, setShowNextMonth] = useState(false);
 
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget>({});
   const [isHydrated, setIsHydrated] = useState(false);
@@ -3901,14 +4306,27 @@ const App: React.FC = () => {
   const userAvatarUrl = authProfile?.avatarUrl || null;
   const resolvedUserAvatarUrl = useMemo(() => resolveAssetUrl(userAvatarUrl), [userAvatarUrl]);
   const currentMonthKey = useMemo(() => getCurrentMonthKey(currentDate), [currentDate]);
+  const nextMonthKey = useMemo(() => {
+    const nextDate = new Date(currentDate);
+    nextDate.setMonth(nextDate.getMonth() + 1);
+    return getCurrentMonthKey(nextDate);
+  }, [currentDate]);
   const data = useMemo(
     () => monthlyBudgets[currentMonthKey] || getDefaultBudgetData(),
     [currentMonthKey, monthlyBudgets]
   );
+  const nextMonthData = useMemo(
+    () => monthlyBudgets[nextMonthKey] || null,
+    [monthlyBudgets, nextMonthKey]
+  );
+  const nextMonthAvailable = Boolean(nextMonthData);
+  const showNextMonthPanel = showNextMonth && nextMonthAvailable;
   const person1UserId = data.person1UserId ?? null;
   const person2UserId = data.person2UserId ?? null;
   const isPerson1Linked = Boolean(person1UserId);
   const isPerson2Linked = Boolean(person2UserId);
+  const nextPerson1Linked = Boolean(nextMonthData?.person1UserId);
+  const nextPerson2Linked = Boolean(nextMonthData?.person2UserId);
   const availableMonthKeys = useMemo(() => Object.keys(monthlyBudgets).sort(), [monthlyBudgets]);
   const monthOptions = useMemo(() => MONTH_LABELS[languagePreference], [languagePreference]);
   const formatMonthKey = useCallback((monthKey: string) => {
@@ -4655,11 +5073,15 @@ const App: React.FC = () => {
 
     newData.person1.incomeSources = previousData.person1.incomeSources.map(src => ({
       ...src,
-      id: Date.now().toString() + Math.random()
+      id: Date.now().toString() + Math.random(),
+      templateId: src.templateId ?? createTemplateId(),
+      propagate: src.propagate !== false
     }));
     newData.person2.incomeSources = previousData.person2.incomeSources.map(src => ({
       ...src,
-      id: Date.now().toString() + Math.random()
+      id: Date.now().toString() + Math.random(),
+      templateId: src.templateId ?? createTemplateId(),
+      propagate: src.propagate !== false
     }));
 
     return newData;
@@ -4771,6 +5193,12 @@ const App: React.FC = () => {
   const [editingName, setEditingName] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
   const [activePersonKey, setActivePersonKey] = useState<'person1' | 'person2'>('person1');
+
+  useEffect(() => {
+    if (showNextMonth && !nextMonthAvailable) {
+      setShowNextMonth(false);
+    }
+  }, [nextMonthAvailable, showNextMonth]);
 
   useEffect(() => {
     if (soloModeEnabled && activePersonKey !== 'person1') {
@@ -4988,37 +5416,223 @@ const App: React.FC = () => {
     const newSource: IncomeSource = {
       id: Date.now().toString(),
       name: t('newIncomeSourceLabel'),
-      amount: 0
+      amount: 0,
+      templateId: createTemplateId(),
+      categoryOverrideId: '',
+      propagate: true
     };
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        incomeSources: [...prev[personKey].incomeSources, newSource]
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const normalizedName = normalizeIconLabel(newSource.name);
+      const templateId = newSource.templateId ?? createTemplateId();
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            incomeSources: [...currentData[personKey].incomeSources, { ...newSource, templateId }]
+          }
+        }
+      };
+
+      if (newSource.propagate !== false && normalizedName && shouldPropagateIncomeSource(newSource.name)) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            const alreadyExists = monthData[personKey].incomeSources.some(source => (
+              source.templateId === templateId
+              || (!source.templateId && normalizeIconLabel(source.name) === normalizedName)
+            ));
+            if (alreadyExists) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                incomeSources: [
+                  ...monthData[personKey].incomeSources,
+                  { ...newSource, id: `${Date.now()}-${Math.random()}`, templateId }
+                ]
+              }
+            };
+          });
       }
-    }));
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const deleteIncomeSource = (personKey: 'person1' | 'person2', id: string) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        incomeSources: prev[personKey].incomeSources.filter(source => source.id !== id)
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const targetSource = currentData[personKey].incomeSources.find(source => source.id === id);
+      if (!targetSource) {
+        return prev;
       }
-    }));
+      const normalizedName = normalizeIconLabel(targetSource.name);
+      const templateId = targetSource.templateId;
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            incomeSources: currentData[personKey].incomeSources.filter(source => source.id !== id)
+          }
+        }
+      };
+
+      if (targetSource.propagate !== false && normalizedName && shouldPropagateIncomeSource(targetSource.name)) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            const nextSources = monthData[personKey].incomeSources.filter(source => (
+              source.propagate === false
+                ? true
+                : (templateId ? source.templateId !== templateId : normalizeIconLabel(source.name) !== normalizedName)
+            ));
+            if (nextSources.length === monthData[personKey].incomeSources.length) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                incomeSources: nextSources
+              }
+            };
+          });
+      }
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
-  const updateIncomeSource = (personKey: 'person1' | 'person2', id: string, field: 'name' | 'amount', value: string | number) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        incomeSources: prev[personKey].incomeSources.map(source =>
-          source.id === id ? { ...source, [field]: value } : source
-        )
+  const updateIncomeSource = (
+    personKey: 'person1' | 'person2',
+    id: string,
+    field: 'name' | 'amount' | 'categoryOverrideId' | 'propagate',
+    value: string | number | boolean
+  ) => {
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const currentSources = currentData[personKey].incomeSources;
+      const targetSource = currentSources.find(source => source.id === id);
+      if (!targetSource) {
+        return prev;
       }
-    }));
+      const nextName = field === 'name' ? String(value) : targetSource.name;
+      const nextPropagate = field === 'propagate'
+        ? Boolean(value)
+        : targetSource.propagate !== false;
+      const shouldPropagate = nextPropagate && shouldPropagateIncomeSource(nextName);
+      const templateId = targetSource.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+      const updatedSources = currentSources.map(source =>
+        source.id === id
+          ? {
+              ...source,
+              [field]: value,
+              ...(templateId ? { templateId } : {}),
+              ...(field === 'propagate' ? { propagate: nextPropagate } : {})
+            }
+          : source
+      );
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            incomeSources: updatedSources
+          }
+        }
+      };
+
+      const normalizedName = normalizeIconLabel(targetSource.name);
+      if (normalizedName) {
+        if (field === 'propagate') {
+          Object.keys(updated)
+            .filter(monthKey => monthKey > currentMonthKey)
+            .forEach(monthKey => {
+              const monthData = updated[monthKey];
+              if (!monthData) {
+                return;
+              }
+              let changed = false;
+              const nextSources = monthData[personKey].incomeSources.map(source => {
+                const matchesTemplate = templateId && source.templateId === templateId;
+                const matchesName = !matchesTemplate && normalizeIconLabel(source.name) === normalizedName;
+                if (!matchesTemplate && !matchesName) {
+                  return source;
+                }
+                changed = true;
+                const base = templateId ? { ...source, templateId } : { ...source };
+                return {
+                  ...base,
+                  propagate: nextPropagate
+                };
+              });
+              if (!changed) {
+                return;
+              }
+              updated[monthKey] = {
+                ...monthData,
+                [personKey]: {
+                  ...monthData[personKey],
+                  incomeSources: nextSources
+                }
+              };
+            });
+        } else if (shouldPropagate) {
+          Object.keys(updated)
+            .filter(monthKey => monthKey > currentMonthKey)
+            .forEach(monthKey => {
+              const monthData = updated[monthKey];
+              if (!monthData) {
+                return;
+              }
+              let changed = false;
+              const nextSources = monthData[personKey].incomeSources.map(source => {
+                if (source.propagate === false) {
+                  return source;
+                }
+                const matchesTemplate = templateId && source.templateId === templateId;
+                const matchesName = !matchesTemplate && normalizeIconLabel(source.name) === normalizedName;
+                if (!matchesTemplate && !matchesName) {
+                  return source;
+                }
+                changed = true;
+                const base = templateId ? { ...source, templateId } : { ...source };
+                return field === 'name'
+                  ? { ...base, name: nextName }
+                  : { ...base, [field]: value };
+              });
+              if (!changed) {
+                return;
+              }
+              updated[monthKey] = {
+                ...monthData,
+                [personKey]: {
+                  ...monthData[personKey],
+                  incomeSources: nextSources
+                }
+              };
+            });
+        }
+      }
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const reorderIncomeSources = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
@@ -5705,8 +6319,9 @@ const App: React.FC = () => {
               backLabel={t('backLabel')}
               settingsLabel={t('settingsLabel')}
               monthSelectLabel={t('monthSelectLabel')}
-              deleteMonthLabel={t('deleteMonth')}
-              onRequestDeleteMonth={requestDeleteCurrentMonth}
+              showNextMonth={showNextMonth}
+              nextMonthAvailable={nextMonthAvailable}
+              onToggleNextMonth={() => setShowNextMonth(prev => !prev)}
               renderPaletteSelector={() => (
                 <PaletteSelector
                   palettes={PALETTES}
@@ -5812,6 +6427,7 @@ const App: React.FC = () => {
               <PersonColumnHeader
                 person={soloModeEnabled || activePersonKey === 'person1' ? data.person1 : data.person2}
                 personKey={soloModeEnabled ? 'person1' : activePersonKey}
+                readOnly={false}
                 darkMode={darkMode}
                 editingName={editingName}
                 tempName={tempName}
@@ -5825,6 +6441,7 @@ const App: React.FC = () => {
             <BudgetColumn
               person={soloModeEnabled || activePersonKey === 'person1' ? data.person1 : data.person2}
               personKey={soloModeEnabled ? 'person1' : activePersonKey}
+              readOnly={false}
               darkMode={darkMode}
               sortByCost={sortByCost}
               enableDrag={enableDrag}
@@ -5850,11 +6467,246 @@ const App: React.FC = () => {
           </div>
 
           {soloModeEnabled ? (
-            <div className="hidden sm:block sm:mb-6">
-              <div className="max-w-2xl mx-auto">
+            <AnimatePresence mode="wait" initial={false}>
+              {showNextMonthPanel && nextMonthData ? (
+                <motion.div
+                  key="solo-compare"
+                  className="hidden sm:block sm:mb-6"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                >
+                  <div className="w-full max-w-screen-2xl mx-auto">
+                  <div className="relative grid grid-cols-2 gap-8">
+                    <div
+                      className="pointer-events-none absolute left-1/2 top-6 bottom-6 w-[4px] rounded-full"
+                      style={{
+                        backgroundImage: darkMode
+                          ? 'linear-gradient(180deg, rgba(148, 163, 184, 0) 0%, rgba(148, 163, 184, 0.65) 50%, rgba(148, 163, 184, 0) 100%)'
+                          : 'linear-gradient(180deg, rgba(15, 23, 42, 0) 0%, rgba(94, 113, 148, 0.35) 50%, rgba(15, 23, 42, 0) 100%)',
+                        boxShadow: darkMode
+                          ? '0 0 12px rgba(148, 163, 184, 0.35)'
+                          : '0 0 14px rgba(94, 113, 148, 0.25)'
+                      }}
+                    />
+                    <div className={`text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {formatMonthKey(currentMonthKey)}
+                    </div>
+                    <div className={`text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {formatMonthKey(nextMonthKey)}
+                    </div>
+                    <PersonColumnHeader
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      editingName={editingName}
+                      tempName={tempName}
+                      setTempName={setTempName}
+                      startEditingName={startEditingName}
+                      saveName={saveName}
+                      cancelEditingName={cancelEditingName}
+                      isLinked={isPerson1Linked}
+                    />
+                    <PersonColumnHeader
+                      person={nextMonthData.person1}
+                      personKey="person1"
+                      readOnly
+                      darkMode={darkMode}
+                      editingName={editingName}
+                      tempName={tempName}
+                      setTempName={setTempName}
+                      startEditingName={startEditingName}
+                      saveName={saveName}
+                      cancelEditingName={cancelEditingName}
+                      isLinked={nextPerson1Linked}
+                    />
+                    <BudgetHeaderSection
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      addIncomeSource={addIncomeSource}
+                      deleteIncomeSource={deleteIncomeSource}
+                      updateIncomeSource={updateIncomeSource}
+                      reorderIncomeSources={reorderIncomeSources}
+                    />
+                    <BudgetHeaderSection
+                      person={nextMonthData.person1}
+                      personKey="person1"
+                      readOnly
+                      darkMode={darkMode}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      addIncomeSource={addIncomeSource}
+                      deleteIncomeSource={deleteIncomeSource}
+                      updateIncomeSource={updateIncomeSource}
+                      reorderIncomeSources={reorderIncomeSources}
+                    />
+                    <BudgetFixedSection
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      sortByCost={sortByCost}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      openExpenseWizard={openExpenseWizard}
+                      openExpenseWizardForEdit={openExpenseWizardForEdit}
+                      updateFixedExpense={updateFixedExpense}
+                      reorderFixedExpenses={reorderFixedExpenses}
+                    />
+                    <BudgetFixedSection
+                      person={nextMonthData.person1}
+                      personKey="person1"
+                      readOnly
+                      darkMode={darkMode}
+                      sortByCost={sortByCost}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      openExpenseWizard={openExpenseWizard}
+                      openExpenseWizardForEdit={openExpenseWizardForEdit}
+                      updateFixedExpense={updateFixedExpense}
+                      reorderFixedExpenses={reorderFixedExpenses}
+                    />
+                    <BudgetFreeSection
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      sortByCost={sortByCost}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      openExpenseWizard={openExpenseWizard}
+                      openExpenseWizardForEdit={openExpenseWizardForEdit}
+                      updateCategory={updateCategory}
+                      reorderCategories={reorderCategories}
+                    />
+                    <BudgetFreeSection
+                      person={nextMonthData.person1}
+                      personKey="person1"
+                      readOnly
+                      darkMode={darkMode}
+                      sortByCost={sortByCost}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      openExpenseWizard={openExpenseWizard}
+                      openExpenseWizardForEdit={openExpenseWizardForEdit}
+                      updateCategory={updateCategory}
+                      reorderCategories={reorderCategories}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="solo-single"
+                className="hidden sm:block sm:mb-6"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <div className="max-w-2xl mx-auto">
+                  <PersonColumnHeader
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    editingName={editingName}
+                    tempName={tempName}
+                    setTempName={setTempName}
+                    startEditingName={startEditingName}
+                    saveName={saveName}
+                    cancelEditingName={cancelEditingName}
+                    isLinked={isPerson1Linked}
+                  />
+                  <BudgetHeaderSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    addIncomeSource={addIncomeSource}
+                    deleteIncomeSource={deleteIncomeSource}
+                    updateIncomeSource={updateIncomeSource}
+                    reorderIncomeSources={reorderIncomeSources}
+                  />
+                  <BudgetFixedSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                  />
+                  <BudgetFreeSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                  />
+                </div>
+              </motion.div>
+            )}
+            </AnimatePresence>
+          ) : (
+            <AnimatePresence mode="wait" initial={false}>
+              {showNextMonthPanel && nextMonthData ? (
+                <motion.div
+                  key="duo-compare"
+                  className="hidden sm:grid sm:grid-cols-4 sm:gap-8 sm:mb-6 w-full max-w-screen-2xl mx-auto relative"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                >
+                <div
+                  className="pointer-events-none absolute left-1/2 top-6 bottom-6 w-[4px] rounded-full"
+                  style={{
+                    backgroundImage: darkMode
+                      ? 'linear-gradient(180deg, rgba(148, 163, 184, 0) 0%, rgba(148, 163, 184, 0.65) 50%, rgba(148, 163, 184, 0) 100%)'
+                      : 'linear-gradient(180deg, rgba(15, 23, 42, 0) 0%, rgba(94, 113, 148, 0.35) 50%, rgba(15, 23, 42, 0) 100%)',
+                    boxShadow: darkMode
+                      ? '0 0 12px rgba(148, 163, 184, 0.35)'
+                      : '0 0 14px rgba(94, 113, 148, 0.25)'
+                  }}
+                />
+                <div className={`col-span-2 text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {formatMonthKey(currentMonthKey)}
+                </div>
+                <div className={`col-span-2 text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {formatMonthKey(nextMonthKey)}
+                </div>
                 <PersonColumnHeader
                   person={data.person1}
                   personKey="person1"
+                  readOnly={false}
                   darkMode={darkMode}
                   editingName={editingName}
                   tempName={tempName}
@@ -5864,9 +6716,88 @@ const App: React.FC = () => {
                   cancelEditingName={cancelEditingName}
                   isLinked={isPerson1Linked}
                 />
+                <PersonColumnHeader
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  editingName={editingName}
+                  tempName={tempName}
+                  setTempName={setTempName}
+                  startEditingName={startEditingName}
+                  saveName={saveName}
+                  cancelEditingName={cancelEditingName}
+                  isLinked={isPerson2Linked}
+                />
+                <PersonColumnHeader
+                  person={nextMonthData.person1}
+                  personKey="person1"
+                  readOnly
+                  darkMode={darkMode}
+                  editingName={editingName}
+                  tempName={tempName}
+                  setTempName={setTempName}
+                  startEditingName={startEditingName}
+                  saveName={saveName}
+                  cancelEditingName={cancelEditingName}
+                  isLinked={nextPerson1Linked}
+                />
+                <PersonColumnHeader
+                  person={nextMonthData.person2}
+                  personKey="person2"
+                  readOnly
+                  darkMode={darkMode}
+                  editingName={editingName}
+                  tempName={tempName}
+                  setTempName={setTempName}
+                  startEditingName={startEditingName}
+                  saveName={saveName}
+                  cancelEditingName={cancelEditingName}
+                  isLinked={nextPerson2Linked}
+                />
                 <BudgetHeaderSection
                   person={data.person1}
                   personKey="person1"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  addIncomeSource={addIncomeSource}
+                  deleteIncomeSource={deleteIncomeSource}
+                  updateIncomeSource={updateIncomeSource}
+                  reorderIncomeSources={reorderIncomeSources}
+                />
+                <BudgetHeaderSection
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  addIncomeSource={addIncomeSource}
+                  deleteIncomeSource={deleteIncomeSource}
+                  updateIncomeSource={updateIncomeSource}
+                  reorderIncomeSources={reorderIncomeSources}
+                />
+                <BudgetHeaderSection
+                  person={nextMonthData.person1}
+                  personKey="person1"
+                  readOnly
+                  darkMode={darkMode}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  addIncomeSource={addIncomeSource}
+                  deleteIncomeSource={deleteIncomeSource}
+                  updateIncomeSource={updateIncomeSource}
+                  reorderIncomeSources={reorderIncomeSources}
+                />
+                <BudgetHeaderSection
+                  person={nextMonthData.person2}
+                  personKey="person2"
+                  readOnly
                   darkMode={darkMode}
                   enableDrag={enableDrag}
                   palette={palette}
@@ -5879,6 +6810,49 @@ const App: React.FC = () => {
                 <BudgetFixedSection
                   person={data.person1}
                   personKey="person1"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateFixedExpense={updateFixedExpense}
+                  reorderFixedExpenses={reorderFixedExpenses}
+                />
+                <BudgetFixedSection
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateFixedExpense={updateFixedExpense}
+                  reorderFixedExpenses={reorderFixedExpenses}
+                />
+                <BudgetFixedSection
+                  person={nextMonthData.person1}
+                  personKey="person1"
+                  readOnly
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateFixedExpense={updateFixedExpense}
+                  reorderFixedExpenses={reorderFixedExpenses}
+                />
+                <BudgetFixedSection
+                  person={nextMonthData.person2}
+                  personKey="person2"
+                  readOnly
                   darkMode={darkMode}
                   sortByCost={sortByCost}
                   enableDrag={enableDrag}
@@ -5892,6 +6866,7 @@ const App: React.FC = () => {
                 <BudgetFreeSection
                   person={data.person1}
                   personKey="person1"
+                  readOnly={false}
                   darkMode={darkMode}
                   sortByCost={sortByCost}
                   enableDrag={enableDrag}
@@ -5902,111 +6877,169 @@ const App: React.FC = () => {
                   updateCategory={updateCategory}
                   reorderCategories={reorderCategories}
                 />
-              </div>
-            </div>
-          ) : (
-            <div className="hidden sm:grid sm:grid-cols-2 sm:gap-6 sm:mb-6 w-full max-w-6xl mx-auto">
-              <PersonColumnHeader
-                person={data.person1}
-                personKey="person1"
-                darkMode={darkMode}
-                editingName={editingName}
-                tempName={tempName}
-                setTempName={setTempName}
-                startEditingName={startEditingName}
-                saveName={saveName}
-                cancelEditingName={cancelEditingName}
-                isLinked={isPerson1Linked}
-              />
-              <PersonColumnHeader
-                person={data.person2}
-                personKey="person2"
-                darkMode={darkMode}
-                editingName={editingName}
-                tempName={tempName}
-                setTempName={setTempName}
-                startEditingName={startEditingName}
-                saveName={saveName}
-                cancelEditingName={cancelEditingName}
-                isLinked={isPerson2Linked}
-              />
-              <BudgetHeaderSection
-                person={data.person1}
-                personKey="person1"
-                darkMode={darkMode}
-                enableDrag={enableDrag}
-                palette={palette}
-                currencyPreference={currencyPreference}
-                addIncomeSource={addIncomeSource}
-                deleteIncomeSource={deleteIncomeSource}
-                updateIncomeSource={updateIncomeSource}
-                reorderIncomeSources={reorderIncomeSources}
-              />
-              <BudgetHeaderSection
-                person={data.person2}
-                personKey="person2"
-                darkMode={darkMode}
-                enableDrag={enableDrag}
-                palette={palette}
-                currencyPreference={currencyPreference}
-                addIncomeSource={addIncomeSource}
-                deleteIncomeSource={deleteIncomeSource}
-                updateIncomeSource={updateIncomeSource}
-                reorderIncomeSources={reorderIncomeSources}
-              />
-              <BudgetFixedSection
-                person={data.person1}
-                personKey="person1"
-                darkMode={darkMode}
-                sortByCost={sortByCost}
-                enableDrag={enableDrag}
-                palette={palette}
-                currencyPreference={currencyPreference}
-                openExpenseWizard={openExpenseWizard}
-                openExpenseWizardForEdit={openExpenseWizardForEdit}
-                updateFixedExpense={updateFixedExpense}
-                reorderFixedExpenses={reorderFixedExpenses}
-              />
-              <BudgetFixedSection
-                person={data.person2}
-                personKey="person2"
-                darkMode={darkMode}
-                sortByCost={sortByCost}
-                enableDrag={enableDrag}
-                palette={palette}
-                currencyPreference={currencyPreference}
-                openExpenseWizard={openExpenseWizard}
-                openExpenseWizardForEdit={openExpenseWizardForEdit}
-                updateFixedExpense={updateFixedExpense}
-                reorderFixedExpenses={reorderFixedExpenses}
-              />
-              <BudgetFreeSection
-                person={data.person1}
-                personKey="person1"
-                darkMode={darkMode}
-                sortByCost={sortByCost}
-                enableDrag={enableDrag}
-                palette={palette}
-                currencyPreference={currencyPreference}
-                openExpenseWizard={openExpenseWizard}
-                openExpenseWizardForEdit={openExpenseWizardForEdit}
-                updateCategory={updateCategory}
-                reorderCategories={reorderCategories}
-              />
-              <BudgetFreeSection
-                person={data.person2}
-                personKey="person2"
-                darkMode={darkMode}
-                sortByCost={sortByCost}
-                enableDrag={enableDrag}
-                palette={palette}
-                currencyPreference={currencyPreference}
-                openExpenseWizard={openExpenseWizard}
-                openExpenseWizardForEdit={openExpenseWizardForEdit}
-                updateCategory={updateCategory}
-                reorderCategories={reorderCategories}
-              />
-            </div>
+                <BudgetFreeSection
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateCategory={updateCategory}
+                  reorderCategories={reorderCategories}
+                />
+                <BudgetFreeSection
+                  person={nextMonthData.person1}
+                  personKey="person1"
+                  readOnly
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateCategory={updateCategory}
+                  reorderCategories={reorderCategories}
+                />
+                <BudgetFreeSection
+                  person={nextMonthData.person2}
+                  personKey="person2"
+                  readOnly
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateCategory={updateCategory}
+                  reorderCategories={reorderCategories}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="duo-single"
+                className="hidden sm:grid sm:grid-cols-2 sm:gap-6 sm:mb-6 w-full max-w-6xl mx-auto"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <PersonColumnHeader
+                  person={data.person1}
+                  personKey="person1"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  editingName={editingName}
+                  tempName={tempName}
+                  setTempName={setTempName}
+                  startEditingName={startEditingName}
+                  saveName={saveName}
+                  cancelEditingName={cancelEditingName}
+                  isLinked={isPerson1Linked}
+                />
+                <PersonColumnHeader
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  editingName={editingName}
+                  tempName={tempName}
+                  setTempName={setTempName}
+                  startEditingName={startEditingName}
+                  saveName={saveName}
+                  cancelEditingName={cancelEditingName}
+                  isLinked={isPerson2Linked}
+                />
+                <BudgetHeaderSection
+                  person={data.person1}
+                  personKey="person1"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  addIncomeSource={addIncomeSource}
+                  deleteIncomeSource={deleteIncomeSource}
+                  updateIncomeSource={updateIncomeSource}
+                  reorderIncomeSources={reorderIncomeSources}
+                />
+                <BudgetHeaderSection
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  addIncomeSource={addIncomeSource}
+                  deleteIncomeSource={deleteIncomeSource}
+                  updateIncomeSource={updateIncomeSource}
+                  reorderIncomeSources={reorderIncomeSources}
+                />
+                <BudgetFixedSection
+                  person={data.person1}
+                  personKey="person1"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateFixedExpense={updateFixedExpense}
+                  reorderFixedExpenses={reorderFixedExpenses}
+                />
+                <BudgetFixedSection
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateFixedExpense={updateFixedExpense}
+                  reorderFixedExpenses={reorderFixedExpenses}
+                />
+                <BudgetFreeSection
+                  person={data.person1}
+                  personKey="person1"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateCategory={updateCategory}
+                  reorderCategories={reorderCategories}
+                />
+                <BudgetFreeSection
+                  person={data.person2}
+                  personKey="person2"
+                  readOnly={false}
+                  darkMode={darkMode}
+                  sortByCost={sortByCost}
+                  enableDrag={enableDrag}
+                  palette={palette}
+                  currencyPreference={currencyPreference}
+                  openExpenseWizard={openExpenseWizard}
+                  openExpenseWizardForEdit={openExpenseWizardForEdit}
+                  updateCategory={updateCategory}
+                  reorderCategories={reorderCategories}
+                />
+              </motion.div>
+            )}
+            </AnimatePresence>
           )}
 
           {jointAccountEnabled && (
@@ -6077,11 +7110,11 @@ const App: React.FC = () => {
                           </tr>
                         </thead>
                         <Droppable droppableId="joint-transactions">
-                          {(provided) => (
+                          {(provided: DroppableProvided) => (
                             <tbody ref={provided.innerRef} {...provided.droppableProps}>
                               {data.jointAccount.transactions.map((transaction, index) => (
                                 <Draggable key={transaction.id} draggableId={`joint-${transaction.id}`} index={index}>
-                                  {(dragProvided, snapshot) => (
+                                  {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                                     <tr
                                       ref={dragProvided.innerRef}
                                       {...dragProvided.draggableProps}
