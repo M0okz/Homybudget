@@ -83,7 +83,7 @@ const Sidebar = React.memo(({
               onBlur={() => setHoveredKey(null)}
               className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
                 isActive
-                  ? (darkMode ? 'text-emerald-200' : 'text-emerald-700')
+                  ? (darkMode ? 'text-[color:var(--brand-accent-3)]' : 'text-[color:var(--brand-primary)]')
                   : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
               }`}
             >
@@ -102,9 +102,10 @@ const Sidebar = React.memo(({
               {isActive && (
                 <motion.span
                   layoutId="sidebar-active"
-                  className={`absolute inset-0 rounded-xl ${
-                    darkMode ? 'bg-slate-800/90' : 'bg-emerald-50 shadow-sm'
-                  }`}
+                  className="absolute inset-0 rounded-xl shadow-sm"
+                  style={{
+                    backgroundColor: darkMode ? 'rgba(58, 63, 143, 0.28)' : 'var(--brand-primary-soft)'
+                  }}
                   transition={{ type: 'spring', stiffness: 240, damping: 24, mass: 0.6 }}
                 />
               )}
@@ -191,7 +192,7 @@ const Sidebar = React.memo(({
       >
         <div className="flex items-center gap-3 px-2 mb-6">
           <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-            darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
+            darkMode ? 'bg-slate-800 text-white' : 'bg-[var(--brand-primary-soft)] text-[color:var(--brand-primary)]'
           }`}>
             HB
           </div>
@@ -218,7 +219,7 @@ const Sidebar = React.memo(({
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                darkMode ? 'bg-slate-800 text-white' : 'bg-emerald-50 text-emerald-700'
+                darkMode ? 'bg-slate-800 text-white' : 'bg-[var(--brand-primary-soft)] text-[color:var(--brand-primary)]'
               }`}>
                 HB
               </div>

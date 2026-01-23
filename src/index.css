@@ -6,21 +6,31 @@
 
 :root {
   color-scheme: light;
-  --homy-violet: #5B4B8A;
-  --homy-rose: #D14B7E;
-  --homy-red: #E85D5D;
-  --homy-orange: #F5915D;
-  --homy-yellow: #F9B55E;
+  --brand-primary: #3A3F8F;
+  --brand-secondary: #7A4C9F;
+  --brand-accent-1: #D24A6A;
+  --brand-accent-2: #F28C38;
+  --brand-accent-3: #F5C04E;
+  --brand-primary-soft: #EEF0FB;
+  --brand-secondary-soft: #F1E8F7;
+  --brand-accent-1-soft: #FDE9EF;
+  --brand-accent-2-soft: #FFF0E4;
+  --brand-accent-3-soft: #FFF6DB;
+  --homy-violet: var(--brand-primary);
+  --homy-rose: var(--brand-secondary);
+  --homy-red: var(--brand-accent-1);
+  --homy-orange: var(--brand-accent-2);
+  --homy-yellow: var(--brand-accent-3);
   --app-bg: #fbf7f2;
   --cream: #fbf7f2;
   --card: #ffffff;
   --card-border: rgba(15, 23, 42, 0.08);
   --ink: #1f2937;
   --muted: #64748b;
-  --emerald: #1f9d6a;
-  --emerald-soft: #e7f7ef;
-  --coral: #f27b63;
-  --coral-soft: #fff1ec;
+  --emerald: var(--brand-primary);
+  --emerald-soft: var(--brand-primary-soft);
+  --coral: var(--brand-accent-1);
+  --coral-soft: var(--brand-accent-1-soft);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -193,9 +203,9 @@ body.theme-transition * {
 .btn-gradient {
   background: linear-gradient(
     135deg,
-    #f27b63 0%,
-    #f8a06a 52%,
-    #f6c27a 100%
+    var(--brand-accent-1) 0%,
+    var(--brand-accent-2) 52%,
+    var(--brand-accent-3) 100%
   );
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -228,13 +238,23 @@ body.theme-transition * {
 }
 
 .pill-emerald {
-  background: var(--emerald-soft);
-  color: var(--emerald);
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
 }
 
 .pill-coral {
-  background: var(--coral-soft);
-  color: var(--coral);
+  background: var(--brand-accent-1-soft);
+  color: #B6405C;
+}
+
+.brand-icon {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+}
+
+.brand-focus:focus {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
 }
 
 .category-chip {
@@ -273,8 +293,8 @@ body.theme-transition * {
 }
 
 .chip-subscriptions {
-  background: #efe7ff;
-  color: #6a4bd9;
+  background: #e6f7f6;
+  color: #2b8a86;
 }
 
 .chip-everyday {
@@ -363,9 +383,9 @@ body.theme-transition * {
   justify-content: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(34, 197, 94, 0.18);
-  border: 1px solid rgba(34, 197, 94, 0.45);
-  color: #16a34a;
+  background: rgba(58, 63, 143, 0.16);
+  border: 1px solid rgba(58, 63, 143, 0.45);
+  color: var(--brand-primary);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }

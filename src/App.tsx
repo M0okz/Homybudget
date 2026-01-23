@@ -1918,8 +1918,12 @@ const BudgetHeaderSection = React.memo(({
           <span className={`font-semibold ${summaryValueClass}`}>{formatCurrency(animatedExpenses, currencyPreference)}</span>
         </div>
         <div
-          className={`flex justify-between font-semibold ${available < 0 ? 'text-red-600' : ''}`}
-          style={available < 0 ? undefined : { color: revenueTone.text }}
+          className="flex justify-between font-semibold"
+          style={{
+            color: available < 0
+              ? (darkMode ? '#F59AA8' : '#E85D5D')
+              : (darkMode ? '#8BE3C0' : '#6BB88E')
+          }}
         >
           <span>{t('availableLabel')}:</span>
           <span>{formatCurrency(animatedAvailable, currencyPreference)}</span>
@@ -3119,7 +3123,7 @@ const AnimatedSwitch = React.memo(({
   darkMode
 }: AnimatedSwitchProps) => {
   const backgroundColor = checked
-    ? '#10B981'
+    ? 'var(--brand-primary)'
     : (darkMode ? '#334155' : '#E2E8F0');
 
   return (
@@ -3172,7 +3176,7 @@ const ToggleRow = React.memo(({
   >
     <div className="flex items-center gap-3">
       <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
-        darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
+        darkMode ? 'bg-slate-800 text-slate-100' : 'brand-icon'
       }`}>
         <Icon size={18} />
       </span>
@@ -3210,7 +3214,7 @@ const SelectRow = React.memo(({
   <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
     <div className="flex items-center gap-3">
       <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
-        darkMode ? 'bg-slate-800 text-slate-100' : 'bg-emerald-50 text-emerald-700'
+        darkMode ? 'bg-slate-800 text-slate-100' : 'brand-icon'
       }`}>
         <Icon size={18} />
       </span>
@@ -3229,7 +3233,7 @@ const SelectRow = React.memo(({
           <SelectItem
             key={option.value}
             value={option.value}
-            className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'focus:bg-emerald-50 focus:text-emerald-700'}
+            className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'brand-focus'}
           >
             {option.label}
           </SelectItem>
@@ -4158,16 +4162,17 @@ const SettingsView = ({
                                   </Select>
                                 </td>
                                 <td className="py-2 pr-4">
-                                  <label className="inline-flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
+                                  <div className="inline-flex items-center gap-2">
+                                    <AnimatedSwitch
                                       checked={item.isActive}
+                                      onChange={(next) => handleActiveChange(item.id, next)}
                                       disabled={Boolean(userActionId) || isSelf}
-                                      onChange={(event) => handleActiveChange(item.id, event.target.checked)}
-                                      className="h-4 w-4 accent-emerald-500"
+                                      darkMode={darkMode}
                                     />
-                                    <span>{item.isActive ? t('activeLabel') : t('blockedLabel')}</span>
-                                  </label>
+                                    <span className={darkMode ? 'text-slate-200' : 'text-slate-600'}>
+                                      {item.isActive ? t('activeLabel') : t('blockedLabel')}
+                                    </span>
+                                  </div>
                                 </td>
                                 <td className="py-2 pr-4">{formatTimestamp(item.lastLoginAt)}</td>
                                 <td className="py-2">
@@ -4345,8 +4350,8 @@ const App: React.FC = () => {
   const pageStyle = useMemo(() => ({
     backgroundColor: darkMode ? '#0b1220' : '#fbf7f2',
     backgroundImage: darkMode
-      ? 'radial-gradient(1200px circle at 85% -10%, rgba(255,255,255,0.08), transparent 45%), radial-gradient(900px circle at 0% 100%, rgba(255,255,255,0.06), transparent 50%)'
-      : 'radial-gradient(1200px circle at 15% -15%, rgba(31,157,106,0.12), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(242,123,99,0.10), transparent 50%)'
+      ? 'radial-gradient(1100px circle at 0% 0%, rgba(58,63,143,0.22), transparent 45%), radial-gradient(1100px circle at 100% 0%, rgba(122,76,159,0.2), transparent 45%), radial-gradient(1100px circle at 0% 100%, rgba(210,74,106,0.16), transparent 48%), radial-gradient(1100px circle at 100% 100%, rgba(58,63,143,0.18), transparent 50%)'
+      : 'radial-gradient(1200px circle at 12% -18%, rgba(58,63,143,0.14), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(210,74,106,0.12), transparent 50%), radial-gradient(700px circle at 45% 115%, rgba(242,140,56,0.10), transparent 55%), radial-gradient(900px circle at 0% 100%, rgba(122,76,159,0.12), transparent 55%)'
   }) as React.CSSProperties, [darkMode]);
   const enableDrag = useMediaQuery('(min-width: 768px)');
 
@@ -4609,6 +4614,8 @@ const App: React.FC = () => {
     html.style.setProperty('--app-bg', darkMode ? '#0b1220' : '#fbf7f2');
     html.style.setProperty('--ink', darkMode ? '#e2e8f0' : '#1f2937');
     html.style.setProperty('--card-border', darkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(15, 23, 42, 0.08)');
+    html.style.setProperty('--brand-primary', darkMode ? '#F28C38' : '#3A3F8F');
+    html.style.setProperty('--brand-primary-soft', darkMode ? 'rgba(242, 140, 56, 0.2)' : '#EEF0FB');
     root.classList.add('theme-transition');
     const timeout = window.setTimeout(() => {
       root.classList.remove('theme-transition');
