@@ -70,6 +70,7 @@ const defaultSettings = {
   soloModeEnabled: false,
   jointAccountEnabled: true,
   sortByCost: false,
+  showSidebarMonths: true,
   currencyPreference: 'EUR',
   oidcEnabled: false,
   oidcProviderName: '',

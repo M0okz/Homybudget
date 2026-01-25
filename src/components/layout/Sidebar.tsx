@@ -29,6 +29,11 @@ type SidebarProps = {
   appVersion: string;
   updateAvailable: boolean;
   latestVersion: string | null;
+  showMonthList: boolean;
+  monthItems: { key: string; label: string; isAvailable: boolean }[];
+  activeMonthKey: string;
+  monthListLabel: string;
+  onSelectMonth: (monthKey: string) => void;
 };
 
 const Sidebar = React.memo(({
@@ -51,7 +56,12 @@ const Sidebar = React.memo(({
   logoutLabel,
   appVersion,
   updateAvailable,
-  latestVersion
+  latestVersion,
+  showMonthList,
+  monthItems,
+  activeMonthKey,
+  monthListLabel,
+  onSelectMonth
 }: SidebarProps) => {
   const [hoveredKey, setHoveredKey] = React.useState<NavItem['key'] | null>(null);
   const [isNavHovering, setIsNavHovering] = React.useState(false);
@@ -183,6 +193,38 @@ const Sidebar = React.memo(({
     </div>
   );
 
+  const sidebarMonths = showMonthList && monthItems.length > 0 ? (
+    <div className="mt-6">
+      <div className={`text-xs uppercase tracking-wide font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+        {monthListLabel}
+      </div>
+      <div className="mt-2 space-y-1">
+        {monthItems.map((month) => {
+          const isActive = month.key === activeMonthKey;
+          const isDisabled = !month.isAvailable;
+          return (
+            <button
+              key={month.key}
+              type="button"
+              onClick={() => onSelectMonth(month.key)}
+              disabled={isDisabled}
+              aria-current={isActive ? 'page' : undefined}
+              className={`w-full flex items-center px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                isActive
+                  ? (darkMode ? 'text-[color:var(--brand-accent-3)] bg-slate-900/70' : 'text-[color:var(--brand-primary)] bg-slate-100/80')
+                  : isDisabled
+                    ? (darkMode ? 'text-slate-600' : 'text-slate-400')
+                    : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
+              } ${isDisabled ? 'cursor-not-allowed' : ''}`}
+            >
+              <span className="truncate">{month.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <>
       <aside
@@ -202,6 +244,7 @@ const Sidebar = React.memo(({
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
           {sidebarNav}
+          {sidebarMonths}
         </div>
         {sidebarFooter}
       </aside>

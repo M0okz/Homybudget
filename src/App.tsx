@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical, Eye, EyeOff, Link2, Link2Off } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical, Eye, EyeOff, Link2, Link2Off, CalendarDays } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DragDropContext,
@@ -89,6 +89,7 @@ type AppSettings = {
   soloModeEnabled: boolean;
   jointAccountEnabled: boolean;
   sortByCost: boolean;
+  showSidebarMonths: boolean;
   currencyPreference: 'EUR' | 'USD';
   oidcEnabled: boolean;
   oidcProviderName: string;
@@ -224,6 +225,13 @@ const getInitialSoloModeEnabled = (): boolean => {
     return false;
   }
   return localStorage.getItem('soloModeEnabled') === 'true';
+};
+
+const getInitialSidebarMonths = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  return localStorage.getItem('showSidebarMonths') !== 'false';
 };
 
 const getInitialLanguagePreference = (): LanguageCode => {
@@ -488,6 +496,37 @@ const normalizeIconLabel = (value: string) => (
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+);
+
+const getOrderKey = (item: { templateId?: string; name: string }) => (
+  item.templateId || normalizeIconLabel(item.name)
+);
+
+const buildOrderKeys = <T extends { templateId?: string; name: string }>(items: T[]) => (
+  items.map(getOrderKey).filter(Boolean)
+);
+
+const reorderListByKeys = <T extends { templateId?: string; name: string }>(items: T[], orderKeys: string[]) => {
+  if (orderKeys.length === 0) {
+    return items;
+  }
+  const orderMap = new Map(orderKeys.map((key, index) => [key, index]));
+  const withRank: Array<{ item: T; rank: number }> = [];
+  const withoutRank: T[] = [];
+  items.forEach(item => {
+    const key = getOrderKey(item);
+    if (key && orderMap.has(key)) {
+      withRank.push({ item, rank: orderMap.get(key)! });
+    } else {
+      withoutRank.push(item);
+    }
+  });
+  withRank.sort((a, b) => a.rank - b.rank);
+  return [...withRank.map(entry => entry.item), ...withoutRank];
+};
+
+const hasSameOrder = <T extends { id: string }>(a: T[], b: T[]) => (
+  a.length === b.length && a.every((item, index) => item.id === b[index]?.id)
 );
 
 const titleizeLabel = (value: string) => (
@@ -3302,6 +3341,8 @@ type SettingsViewProps = {
   onUserLabelUpdate: (userId: string, label: string) => void;
   sortByCost: boolean;
   onToggleSortByCost: (value: boolean) => void;
+  showSidebarMonths: boolean;
+  onToggleShowSidebarMonths: (value: boolean) => void;
   languagePreference: LanguageCode;
   onLanguagePreferenceChange: (value: LanguageCode) => void;
   jointAccountEnabled: boolean;
@@ -3338,6 +3379,8 @@ const SettingsView = ({
   onUserLabelUpdate,
   sortByCost,
   onToggleSortByCost,
+  showSidebarMonths,
+  onToggleShowSidebarMonths,
   languagePreference,
   onLanguagePreferenceChange,
   jointAccountEnabled,
@@ -3813,6 +3856,14 @@ const SettingsView = ({
                 hint={t('fixedFreeLabel')}
                 checked={sortByCost}
                 onChange={onToggleSortByCost}
+                darkMode={darkMode}
+              />
+              <ToggleRow
+                icon={CalendarDays}
+                label={t('sidebarMonthsSettingLabel')}
+                hint={t('sidebarMonthsSettingHint')}
+                checked={showSidebarMonths}
+                onChange={onToggleShowSidebarMonths}
                 darkMode={darkMode}
               />
               <ToggleRow
@@ -4300,6 +4351,7 @@ const App: React.FC = () => {
   const [languagePreference, setLanguagePreference] = useState<LanguageCode>(() => getInitialLanguagePreference());
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
+  const [showSidebarMonths, setShowSidebarMonths] = useState<boolean>(() => getInitialSidebarMonths());
   const [currencyPreference, setCurrencyPreference] = useState<'EUR' | 'USD'>(() => getInitialCurrencyPreference());
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcProviderName, setOidcProviderName] = useState('');
@@ -4389,6 +4441,21 @@ const App: React.FC = () => {
     const monthLabel = monthOptions[monthIndex] ?? monthKey;
     return `${monthLabel} ${year}`;
   }, [monthOptions]);
+  const sidebarMonthItems = useMemo(() => {
+    const [yearValue] = currentMonthKey.split('-');
+    const year = Number(yearValue);
+    if (!Number.isFinite(year) || year <= 0) {
+      return [];
+    }
+    return Array.from({ length: 12 }, (_, index) => {
+      const monthKey = `${year}-${String(index + 1).padStart(2, '0')}`;
+      return {
+        key: monthKey,
+        label: formatMonthKey(monthKey),
+        isAvailable: Boolean(monthlyBudgets[monthKey])
+      };
+    });
+  }, [currentMonthKey, formatMonthKey, monthlyBudgets]);
   const breadcrumbItems = useMemo(() => (
     isBudgetView
       ? [t('appName'), t('budgetLabel'), formatMonthKey(currentMonthKey)]
@@ -4416,6 +4483,7 @@ const App: React.FC = () => {
     soloModeEnabled,
     jointAccountEnabled,
     sortByCost,
+    showSidebarMonths,
     currencyPreference,
     oidcEnabled,
     oidcProviderName,
@@ -4611,6 +4679,13 @@ const App: React.FC = () => {
     if (typeof window === 'undefined') {
       return;
     }
+    localStorage.setItem('showSidebarMonths', showSidebarMonths ? 'true' : 'false');
+  }, [showSidebarMonths]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     localStorage.setItem('languagePreference', languagePreference);
   }, [languagePreference]);
 
@@ -4648,6 +4723,7 @@ const App: React.FC = () => {
     soloModeEnabled,
     jointAccountEnabled,
     sortByCost,
+    showSidebarMonths,
     currencyPreference,
     oidcEnabled,
     oidcProviderName,
@@ -4809,6 +4885,7 @@ const App: React.FC = () => {
         setSortByCost(settings.sortByCost);
         setJointAccountEnabled(settings.jointAccountEnabled);
         setSoloModeEnabled(settings.soloModeEnabled);
+        setShowSidebarMonths(settings.showSidebarMonths ?? true);
         setLanguagePreference(settings.languagePreference);
         setCurrencyPreference(settings.currencyPreference ?? 'EUR');
         setOidcEnabled(settings.oidcEnabled ?? false);
@@ -6025,14 +6102,85 @@ const App: React.FC = () => {
     });
   };
 
+  const syncFutureOrder = (
+    budgets: MonthlyBudget,
+    personKey: 'person1' | 'person2',
+    order: { fixed?: string[]; categories?: string[] }
+  ) => {
+    const fixedOrder = order.fixed ?? [];
+    const categoryOrder = order.categories ?? [];
+    if (fixedOrder.length === 0 && categoryOrder.length === 0) {
+      return budgets;
+    }
+    let updated = budgets;
+    Object.keys(updated)
+      .filter(monthKey => monthKey > currentMonthKey)
+      .forEach(monthKey => {
+        const monthData = updated[monthKey];
+        if (!monthData) {
+          return;
+        }
+        let nextFixed = monthData[personKey].fixedExpenses;
+        let nextCategories = monthData[personKey].categories;
+        let changed = false;
+
+        if (fixedOrder.length > 0) {
+          const reordered = reorderListByKeys(nextFixed, fixedOrder);
+          if (!hasSameOrder(nextFixed, reordered)) {
+            nextFixed = reordered;
+            changed = true;
+          }
+        }
+
+        if (categoryOrder.length > 0) {
+          const reordered = reorderListByKeys(nextCategories, categoryOrder);
+          if (!hasSameOrder(nextCategories, reordered)) {
+            nextCategories = reordered;
+            changed = true;
+          }
+        }
+
+        if (!changed) {
+          return;
+        }
+        updated = {
+          ...updated,
+          [monthKey]: {
+            ...monthData,
+            [personKey]: {
+              ...monthData[personKey],
+              fixedExpenses: nextFixed,
+              categories: nextCategories
+            }
+          }
+        };
+      });
+    return updated;
+  };
+
   const reorderFixedExpenses = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        fixedExpenses: reorderList(prev[personKey].fixedExpenses, sourceIndex, destinationIndex)
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const nextFixedExpenses = reorderList(
+        currentData[personKey].fixedExpenses,
+        sourceIndex,
+        destinationIndex
+      );
+      let updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: nextFixedExpenses
+          }
+        }
+      };
+      if (!sortByCost) {
+        updated = syncFutureOrder(updated, personKey, { fixed: buildOrderKeys(nextFixedExpenses) });
       }
-    }));
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const addCategory = (personKey: 'person1' | 'person2', overrides: Partial<Category> = {}) => {
@@ -6414,13 +6562,28 @@ const App: React.FC = () => {
   };
 
   const reorderCategories = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        categories: reorderList(prev[personKey].categories, sourceIndex, destinationIndex)
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const nextCategories = reorderList(
+        currentData[personKey].categories,
+        sourceIndex,
+        destinationIndex
+      );
+      let updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            categories: nextCategories
+          }
+        }
+      };
+      if (!sortByCost) {
+        updated = syncFutureOrder(updated, personKey, { categories: buildOrderKeys(nextCategories) });
       }
-    }));
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const moveFixedExpenseToCategory = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
@@ -6434,6 +6597,7 @@ const App: React.FC = () => {
       }
       const nextFixedExpenses = fixedExpenses.filter((_, index) => index !== sourceIndex);
       const templateId = movedExpense.templateId ?? createTemplateId();
+      const normalizedName = normalizeIconLabel(movedExpense.name);
       const newCategory: Category = {
         id: Date.now().toString(),
         name: movedExpense.name,
@@ -6446,7 +6610,7 @@ const App: React.FC = () => {
       const nextCategories = [...categories];
       const insertIndex = Math.min(Math.max(destinationIndex, 0), nextCategories.length);
       nextCategories.splice(insertIndex, 0, newCategory);
-      const updated: MonthlyBudget = {
+      let updated: MonthlyBudget = {
         ...prev,
         [currentMonthKey]: {
           ...currentData,
@@ -6457,6 +6621,92 @@ const App: React.FC = () => {
           }
         }
       };
+      Object.keys(updated)
+        .filter(monthKey => monthKey > currentMonthKey)
+        .forEach(monthKey => {
+          const monthData = updated[monthKey];
+          if (!monthData) {
+            return;
+          }
+          const monthFixed = monthData[personKey].fixedExpenses;
+          const monthCategories = monthData[personKey].categories;
+          const matchesFixed = (expense: FixedExpense) => {
+            const matchesTemplate = templateId && expense.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(expense.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          };
+          const matchesCategory = (category: Category) => {
+            const matchesTemplate = templateId && category.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(category.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          };
+          const fixedIndex = monthFixed.findIndex(matchesFixed);
+          const categoryIndex = monthCategories.findIndex(matchesCategory);
+          if (fixedIndex === -1 && categoryIndex === -1) {
+            return;
+          }
+          const matchedFixed = fixedIndex !== -1 ? monthFixed[fixedIndex] : null;
+          let nextMonthFixed = monthFixed;
+          let nextMonthCategories = monthCategories;
+          let changed = false;
+
+          if (fixedIndex !== -1) {
+            nextMonthFixed = monthFixed.filter((_, index) => index !== fixedIndex);
+            changed = true;
+          }
+
+          if (categoryIndex !== -1) {
+            const existingCategory = monthCategories[categoryIndex];
+            const updatedCategory: Category = {
+              ...existingCategory,
+              name: movedExpense.name,
+              amount: coerceNumber(movedExpense.amount),
+              categoryOverrideId: movedExpense.categoryOverrideId ?? '',
+              templateId,
+              isChecked: matchedFixed?.isChecked ?? existingCategory.isChecked
+            };
+            nextMonthCategories = monthCategories.map((category, index) => (
+              index === categoryIndex ? updatedCategory : category
+            ));
+            changed = true;
+          } else {
+            const insertedCategory: Category = {
+              id: `${Date.now()}-${Math.random()}`,
+              name: movedExpense.name,
+              amount: coerceNumber(movedExpense.amount),
+              templateId,
+              categoryOverrideId: movedExpense.categoryOverrideId ?? '',
+              isChecked: Boolean(matchedFixed?.isChecked),
+              isRecurring: false
+            };
+            nextMonthCategories = [...monthCategories];
+            const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthCategories.length);
+            nextMonthCategories.splice(targetIndex, 0, insertedCategory);
+            changed = true;
+          }
+
+          if (!changed) {
+            return;
+          }
+          updated = {
+            ...updated,
+            [monthKey]: {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                fixedExpenses: nextMonthFixed,
+                categories: nextMonthCategories
+              }
+            }
+          };
+        });
+
+      if (!sortByCost) {
+        updated = syncFutureOrder(updated, personKey, {
+          fixed: buildOrderKeys(nextFixedExpenses),
+          categories: buildOrderKeys(nextCategories)
+        });
+      }
       return applyJointBalanceCarryover(updated, currentMonthKey);
     });
   };
@@ -6472,6 +6722,7 @@ const App: React.FC = () => {
       }
       const nextCategories = categories.filter((_, index) => index !== sourceIndex);
       const templateId = movedCategory.templateId ?? createTemplateId();
+      const normalizedName = normalizeIconLabel(movedCategory.name);
       const newExpense: FixedExpense = {
         id: Date.now().toString(),
         name: movedCategory.name,
@@ -6483,7 +6734,7 @@ const App: React.FC = () => {
       const nextFixedExpenses = [...fixedExpenses];
       const insertIndex = Math.min(Math.max(destinationIndex, 0), nextFixedExpenses.length);
       nextFixedExpenses.splice(insertIndex, 0, newExpense);
-      const updated: MonthlyBudget = {
+      let updated: MonthlyBudget = {
         ...prev,
         [currentMonthKey]: {
           ...currentData,
@@ -6494,6 +6745,90 @@ const App: React.FC = () => {
           }
         }
       };
+      Object.keys(updated)
+        .filter(monthKey => monthKey > currentMonthKey)
+        .forEach(monthKey => {
+          const monthData = updated[monthKey];
+          if (!monthData) {
+            return;
+          }
+          const monthFixed = monthData[personKey].fixedExpenses;
+          const monthCategories = monthData[personKey].categories;
+          const matchesFixed = (expense: FixedExpense) => {
+            const matchesTemplate = templateId && expense.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(expense.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          };
+          const matchesCategory = (category: Category) => {
+            const matchesTemplate = templateId && category.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(category.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          };
+          const fixedIndex = monthFixed.findIndex(matchesFixed);
+          const categoryIndex = monthCategories.findIndex(matchesCategory);
+          if (fixedIndex === -1 && categoryIndex === -1) {
+            return;
+          }
+          const matchedCategory = categoryIndex !== -1 ? monthCategories[categoryIndex] : null;
+          let nextMonthFixed = monthFixed;
+          let nextMonthCategories = monthCategories;
+          let changed = false;
+
+          if (categoryIndex !== -1) {
+            nextMonthCategories = monthCategories.filter((_, index) => index !== categoryIndex);
+            changed = true;
+          }
+
+          if (fixedIndex !== -1) {
+            const existingExpense = monthFixed[fixedIndex];
+            const updatedExpense: FixedExpense = {
+              ...existingExpense,
+              name: movedCategory.name,
+              amount: coerceNumber(movedCategory.amount),
+              categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+              templateId
+            };
+            nextMonthFixed = monthFixed.map((expense, index) => (
+              index === fixedIndex ? updatedExpense : expense
+            ));
+            changed = true;
+          } else {
+            const insertedExpense: FixedExpense = {
+              id: `${Date.now()}-${Math.random()}`,
+              name: movedCategory.name,
+              amount: coerceNumber(movedCategory.amount),
+              templateId,
+              categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+              isChecked: Boolean(matchedCategory?.isChecked)
+            };
+            nextMonthFixed = [...monthFixed];
+            const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthFixed.length);
+            nextMonthFixed.splice(targetIndex, 0, insertedExpense);
+            changed = true;
+          }
+
+          if (!changed) {
+            return;
+          }
+          updated = {
+            ...updated,
+            [monthKey]: {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                fixedExpenses: nextMonthFixed,
+                categories: nextMonthCategories
+              }
+            }
+          };
+        });
+
+      if (!sortByCost) {
+        updated = syncFutureOrder(updated, personKey, {
+          fixed: buildOrderKeys(nextFixedExpenses),
+          categories: buildOrderKeys(nextCategories)
+        });
+      }
       return applyJointBalanceCarryover(updated, currentMonthKey);
     });
   };
@@ -6870,6 +7205,7 @@ const App: React.FC = () => {
                 setSortByCost(settings.sortByCost);
                 setJointAccountEnabled(settings.jointAccountEnabled);
                 setSoloModeEnabled(settings.soloModeEnabled);
+                setShowSidebarMonths(settings.showSidebarMonths ?? true);
                 setLanguagePreference(settings.languagePreference);
               })
               .catch((error) => {
@@ -6949,6 +7285,14 @@ const App: React.FC = () => {
             appVersion={APP_VERSION}
             updateAvailable={updateAvailable}
             latestVersion={latestVersion}
+            showMonthList={showSidebarMonths}
+            monthItems={sidebarMonthItems}
+            activeMonthKey={currentMonthKey}
+            monthListLabel={t('monthSelectLabel')}
+            onSelectMonth={(monthKey) => {
+              setActivePage('budget');
+              trySelectMonthKey(monthKey);
+            }}
           />
 
           <main className="flex-1 p-4 sm:p-6 sm:pl-72 overflow-x-hidden">
@@ -7005,6 +7349,8 @@ const App: React.FC = () => {
           onUserLabelUpdate={updateLinkedUserLabel}
           sortByCost={sortByCost}
           onToggleSortByCost={setSortByCost}
+          showSidebarMonths={showSidebarMonths}
+          onToggleShowSidebarMonths={setShowSidebarMonths}
           languagePreference={languagePreference}
           onLanguagePreferenceChange={setLanguagePreference}
           currencyPreference={currencyPreference}
