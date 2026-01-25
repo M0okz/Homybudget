@@ -4417,6 +4417,9 @@ const App: React.FC = () => {
     setAuthUser('');
     setAuthProfile(null);
     setAuthError(t('sessionExpiredError'));
+    setAuthLoading(false);
+    setShowOnboarding(false);
+    setSidebarOpen(false);
     setActivePage('budget');
     setMonthlyBudgets({});
     setIsHydrated(false);
@@ -6195,9 +6198,23 @@ const App: React.FC = () => {
     setTempName('');
   };
 
+  const navItems = useMemo(() => ([
+    { key: 'dashboard' as const, label: t('dashboardLabel'), icon: LayoutDashboard },
+    { key: 'budget' as const, label: t('budgetLabel'), icon: Wallet },
+    { key: 'reports' as const, label: t('reportsLabel'), icon: BarChart3 },
+    { key: 'settings' as const, label: t('settingsLabel'), icon: Settings }
+  ]), [t]);
+
+  const handleNavigate = useCallback((page: typeof activePage) => {
+    setActivePage(page);
+    setSidebarOpen(false);
+  }, []);
+
+  const authViewKey = authToken ? 'auth' : showOnboarding ? 'onboarding' : 'guest';
+
   if (showOnboarding) {
     return (
-      <TranslationContext.Provider value={{ t, language: languagePreference }}>
+      <TranslationContext.Provider key={authViewKey} value={{ t, language: languagePreference }}>
         <OnboardingWizard
           darkMode={darkMode}
           pageStyle={pageStyle}
@@ -6254,7 +6271,7 @@ const App: React.FC = () => {
 
   if (!authToken) {
     return (
-      <TranslationContext.Provider value={{ t, language: languagePreference }}>
+      <TranslationContext.Provider key={authViewKey} value={{ t, language: languagePreference }}>
         <LoginScreen
           onLogin={handleLogin}
           error={authError}
@@ -6269,20 +6286,8 @@ const App: React.FC = () => {
     );
   }
 
-  const navItems = useMemo(() => ([
-    { key: 'dashboard' as const, label: t('dashboardLabel'), icon: LayoutDashboard },
-    { key: 'budget' as const, label: t('budgetLabel'), icon: Wallet },
-    { key: 'reports' as const, label: t('reportsLabel'), icon: BarChart3 },
-    { key: 'settings' as const, label: t('settingsLabel'), icon: Settings }
-  ]), [t]);
-
-  const handleNavigate = useCallback((page: typeof activePage) => {
-    setActivePage(page);
-    setSidebarOpen(false);
-  }, []);
-
   return (
-    <TranslationContext.Provider value={{ t, language: languagePreference }}>
+    <TranslationContext.Provider key={authViewKey} value={{ t, language: languagePreference }}>
       <div
         className={`min-h-screen app-fade safe-area ${darkMode ? 'bg-slate-950' : 'bg-transparent'}`}
         style={pageStyle}
