@@ -7,10 +7,15 @@ Budget tracker with a React + Vite frontend and a Node/Express + PostgreSQL API.
 
 ## Features
 - 👥 Two-person budgets with income, fixed expenses, and free categories.
+- 🧲 Drag and drop to reorder and move expenses between fixed and variable (when cost sorting is off).
 - 🔁 Installments that carry over month to month.
+- 📅 Expense dates with a compact indicator and a monthly calendar widget (desktop).
+- 🔄 Sync edits across future months with a confirmation prompt when differences are detected.
 - 🧾 Joint account with deposits, expenses, and live balance.
 - 🗓️ Month navigation with manual create/delete.
+- 🧭 Optional desktop sidebar month list (toggle in settings).
 - 💾 Autosave to PostgreSQL (debounced).
+- 🌓 Light/dark mode toggle.
 - 🔐 JWT login with user accounts and password resets.
 - 🖼️ Profile image for each user.
 
