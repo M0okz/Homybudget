@@ -177,11 +177,20 @@ const Sidebar = React.memo(({
           darkMode ? 'hover:bg-slate-900/70 text-slate-200' : 'hover:bg-white/80 text-slate-700'
         }`}
         aria-label={themeLabel}
+        aria-pressed={darkMode}
       >
         {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} />}
         <span>{themeLabel}</span>
-        <span className={`ml-auto text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-          {darkMode ? darkLabel : lightLabel}
+        <span
+          className={`ml-auto relative inline-flex h-5 w-9 items-center rounded-full border transition-colors ${
+            darkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-100'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+              darkMode ? 'translate-x-4' : 'translate-x-1'
+            }`}
+          />
         </span>
       </button>
       <div className={`mt-3 flex items-center justify-center gap-2 text-xs uppercase tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>

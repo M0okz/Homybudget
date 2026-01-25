@@ -28,6 +28,7 @@ interface Category {
   isRecurring?: boolean;
   recurringMonths?: number;
   startMonth?: string; // format: "YYYY-MM"
+  date?: string;
 }
 
 interface FixedExpense {
@@ -37,6 +38,7 @@ interface FixedExpense {
   templateId?: string;
   categoryOverrideId?: string;
   isChecked?: boolean;
+  date?: string;
 }
 
 interface IncomeSource {
@@ -107,6 +109,7 @@ type ExpenseWizardState = {
   targetId?: string;
   name: string;
   amount: string;
+  date: string;
   categoryOverrideId: string;
   isRecurring: boolean;
   recurringMonths: number;
@@ -541,6 +544,17 @@ const titleizeLabel = (value: string) => (
     ))
     .join(' ')
 );
+
+const formatExpenseDate = (value: string, language: LanguageCode) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleDateString(language === 'en' ? 'en-US' : 'fr-FR', {
+    day: '2-digit',
+    month: 'short'
+  });
+};
 
 const DEFAULT_FIXED_EXPENSE_LABELS = [
   normalizeIconLabel(TRANSLATIONS.fr.newFixedExpenseLabel),
@@ -1789,7 +1803,7 @@ const BudgetHeaderSection = React.memo(({
                                 updateIncomeSource(personKey, source.id, 'name', e.target.value);
                               }}
                               readOnly={readOnly}
-                              className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                              className={`flex-1 min-w-0 sm:min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                               placeholder={t('incomePlaceholder')}
                             />
                             <Select
@@ -1900,7 +1914,11 @@ const BudgetHeaderSection = React.memo(({
                       updateIncomeSource(personKey, source.id, 'name', e.target.value);
                     }}
                     readOnly={readOnly}
-                    className={`flex-1 min-w-[10rem] px-3 py-2 border rounded-lg text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                    className={`flex-1 min-w-0 sm:min-w-[10rem] px-3 py-2 rounded-lg text-sm transition ${
+                      darkMode
+                        ? 'bg-transparent text-white placeholder:text-slate-500 focus:bg-slate-900/60 focus:outline-none'
+                        : 'bg-transparent text-slate-800 placeholder:text-slate-400 focus:bg-white/80 focus:outline-none'
+                    }`}
                     placeholder={t('incomePlaceholder')}
                   />
                   <Select
@@ -1946,7 +1964,11 @@ const BudgetHeaderSection = React.memo(({
                       );
                     }}
                     readOnly={readOnly}
-                    className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                    className={`w-24 flex-none px-3 py-2 rounded-lg text-right text-sm transition ${
+                      darkMode
+                        ? 'bg-transparent text-white placeholder:text-slate-500 focus:bg-slate-900/60 focus:outline-none'
+                        : 'bg-transparent text-slate-800 placeholder:text-slate-400 focus:bg-white/80 focus:outline-none'
+                    }`}
                   />
                   <button
                     type="button"
@@ -2124,6 +2146,15 @@ const BudgetFixedSection = React.memo(({
                       <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                         {expense.name || t('newFixedExpenseLabel')}
                       </span>
+                      {expense.date && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                            darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {formatExpenseDate(expense.date, language)}
+                        </span>
+                      )}
                       {resolvedCategory && badgeClass && (
                         <span className={badgeClass}>
                           <span>{resolvedCategory.emoji}</span>
@@ -2220,6 +2251,15 @@ const BudgetFixedSection = React.memo(({
                     <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                       {expense.name || t('newFixedExpenseLabel')}
                     </span>
+                    {expense.date && (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                          darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                        }`}
+                      >
+                        {formatExpenseDate(expense.date, language)}
+                      </span>
+                    )}
                     {resolvedCategory && badgeClass && (
                       <span className={badgeClass}>
                         <span>{resolvedCategory.emoji}</span>
@@ -2392,6 +2432,15 @@ const BudgetFreeSection = React.memo(({
                       <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                         {category.name || t('newCategoryLabel')}
                       </span>
+                      {category.date && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                            darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {formatExpenseDate(category.date, language)}
+                        </span>
+                      )}
                       {resolvedCategory && badgeClass && (
                         <span className={badgeClass}>
                           <span>{resolvedCategory.emoji}</span>
@@ -2494,6 +2543,15 @@ const BudgetFreeSection = React.memo(({
                     <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                       {category.name || t('newCategoryLabel')}
                     </span>
+                    {category.date && (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                          darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                        }`}
+                      >
+                        {formatExpenseDate(category.date, language)}
+                      </span>
+                    )}
                     {resolvedCategory && badgeClass && (
                       <span className={badgeClass}>
                         <span>{resolvedCategory.emoji}</span>
@@ -2545,6 +2603,105 @@ const BudgetFreeSection = React.memo(({
   );
 });
 BudgetFreeSection.displayName = 'BudgetFreeSection';
+
+type BudgetCalendarWidgetProps = {
+  monthKey: string;
+  darkMode: boolean;
+  formatMonthKey: (value: string) => string;
+};
+
+const BudgetCalendarWidget = React.memo(({
+  monthKey,
+  darkMode,
+  formatMonthKey
+}: BudgetCalendarWidgetProps) => {
+  const { language } = useTranslation();
+  const locale = language === 'en' ? 'en-US' : 'fr-FR';
+  const weekStart = language === 'en' ? 0 : 1;
+  const [yearValue, monthValue] = monthKey.split('-');
+  const year = Number(yearValue);
+  const monthIndex = Number(monthValue) - 1;
+
+  const weekdayLabels = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+    const base = new Date(2023, 0, 1);
+    return Array.from({ length: 7 }, (_, index) => {
+      const dayIndex = (weekStart + index) % 7;
+      const date = new Date(base);
+      date.setDate(base.getDate() + dayIndex);
+      return formatter.format(date);
+    });
+  }, [locale, weekStart]);
+
+  const calendar = useMemo(() => {
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+      return null;
+    }
+    const firstOfMonth = new Date(year, monthIndex, 1);
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const offset = (firstOfMonth.getDay() - weekStart + 7) % 7;
+    const totalSlots = Math.ceil((offset + daysInMonth) / 7) * 7;
+    const slots = Array.from({ length: totalSlots }, (_, index) => {
+      const day = index - offset + 1;
+      return day >= 1 && day <= daysInMonth ? day : null;
+    });
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === monthIndex;
+    return {
+      slots,
+      today: isCurrentMonth ? today.getDate() : null
+    };
+  }, [monthIndex, weekStart, year]);
+
+  if (!calendar) {
+    return null;
+  }
+
+  return (
+    <div className="w-60 shrink-0 self-start mt-6 sm:sticky sm:top-14 sm:ml-4">
+      <div
+        className={`rounded-2xl border p-4 shadow-sm backdrop-blur ${
+          darkMode ? 'bg-slate-950/70 border-slate-800 text-slate-200' : 'bg-white/80 border-slate-200 text-slate-700'
+        }`}
+      >
+        <div className="text-sm font-semibold">{formatMonthKey(monthKey)}</div>
+        <div className={`mt-2 grid grid-cols-7 gap-1 text-center text-[10px] uppercase tracking-wide ${
+          darkMode ? 'text-slate-500' : 'text-slate-400'
+        }`}
+        >
+          {weekdayLabels.map(label => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+        <div className="mt-2 grid grid-cols-7 gap-1 text-center">
+          {calendar.slots.map((day, index) => {
+            if (!day) {
+              return <span key={`empty-${index}`} className="h-8 rounded-lg" />;
+            }
+            const isToday = calendar.today === day;
+            return (
+              <span
+                key={`day-${day}`}
+                className={`flex h-8 items-center justify-center rounded-lg text-xs font-semibold transition-colors ${
+                  isToday
+                    ? (darkMode
+                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/40'
+                      : 'bg-emerald-50 text-emerald-600 border border-emerald-200')
+                    : (darkMode
+                      ? 'text-slate-300 hover:bg-slate-900/60'
+                      : 'text-slate-600 hover:bg-slate-100')
+                }`}
+              >
+                {day}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
+BudgetCalendarWidget.displayName = 'BudgetCalendarWidget';
 
 const BudgetColumn = React.memo(({
   person,
@@ -4467,6 +4624,13 @@ const App: React.FC = () => {
         ? [t('appName'), t('settingsLabel'), t('profileTitle')]
         : [t('appName'), pageLabel]
   ), [currentMonthKey, formatMonthKey, isBudgetView, isSettingsView, pageLabel, t]);
+  const calendarWidget = (
+    <BudgetCalendarWidget
+      monthKey={currentMonthKey}
+      darkMode={darkMode}
+      formatMonthKey={formatMonthKey}
+    />
+  );
   const pageStyle = useMemo(() => ({
     backgroundColor: darkMode ? '#0b1220' : '#fbf7f2',
     backgroundImage: darkMode
@@ -5808,7 +5972,8 @@ const App: React.FC = () => {
       amount: overrides.amount ?? 0,
       templateId: overrides.templateId ?? createTemplateId(),
       categoryOverrideId: overrides.categoryOverrideId ?? '',
-      isChecked: overrides.isChecked ?? false
+      isChecked: overrides.isChecked ?? false,
+      date: overrides.date
     };
     setMonthlyBudgets(prev => {
       const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
@@ -5982,7 +6147,7 @@ const App: React.FC = () => {
   const updateFixedExpenseDetails = (
     personKey: 'person1' | 'person2',
     id: string,
-    updates: { name: string; amount: number; categoryOverrideId: string }
+    updates: { name: string; amount: number; categoryOverrideId: string; date?: string }
   ) => {
     setMonthlyBudgets(prev => {
       const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
@@ -5994,6 +6159,7 @@ const App: React.FC = () => {
       const nextName = updates.name;
       const nextAmount = updates.amount;
       const nextCategoryOverrideId = updates.categoryOverrideId;
+      const nextDate = updates.date;
       const shouldPropagate = shouldPropagateFixedExpense(nextName);
       const templateId = targetExpense.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
       const updatedExpense = {
@@ -6001,6 +6167,7 @@ const App: React.FC = () => {
         name: nextName,
         amount: nextAmount,
         categoryOverrideId: nextCategoryOverrideId,
+        date: nextDate,
         ...(templateId ? { templateId } : {})
       };
       const updatedExpenses = currentExpenses.map(exp =>
@@ -6041,6 +6208,7 @@ const App: React.FC = () => {
             exp.name !== nextName
             || coerceNumber(exp.amount) !== coerceNumber(nextAmount)
             || (exp.categoryOverrideId || '') !== (nextCategoryOverrideId || '')
+            || (exp.date || '') !== (nextDate || '')
           ));
         });
 
@@ -6090,6 +6258,7 @@ const App: React.FC = () => {
               name: nextName,
               amount: nextAmount,
               categoryOverrideId: nextCategoryOverrideId,
+              date: nextDate,
               ...(templateId ? { templateId } : {})
             };
           });
@@ -6198,7 +6367,8 @@ const App: React.FC = () => {
       isChecked: overrides.isChecked ?? false,
       isRecurring,
       recurringMonths: isRecurring ? (overrides.recurringMonths ?? 3) : overrides.recurringMonths,
-      startMonth: isRecurring ? (overrides.startMonth ?? currentMonthKey) : overrides.startMonth
+      startMonth: isRecurring ? (overrides.startMonth ?? currentMonthKey) : overrides.startMonth,
+      date: overrides.date
     };
     const normalizedName = normalizeIconLabel(newCategory.name);
     const shouldPropagate = Boolean(newCategory.templateId) || shouldPropagateCategory(newCategory.name);
@@ -6406,6 +6576,7 @@ const App: React.FC = () => {
       name: string;
       amount: number;
       categoryOverrideId: string;
+      date?: string;
       isRecurring: boolean;
       recurringMonths?: number;
       startMonth?: string;
@@ -6433,6 +6604,7 @@ const App: React.FC = () => {
         name: nextName,
         amount: updates.amount,
         categoryOverrideId: updates.categoryOverrideId,
+        date: updates.date,
         isRecurring: nextIsRecurring,
         recurringMonths: nextRecurringMonths,
         startMonth: nextStartMonth,
@@ -6480,6 +6652,7 @@ const App: React.FC = () => {
             cat.name !== nextName
             || coerceNumber(cat.amount) !== coerceNumber(updatedCategory.amount)
             || (cat.categoryOverrideId || '') !== (updatedCategory.categoryOverrideId || '')
+            || (cat.date || '') !== (updatedCategory.date || '')
             || Boolean(cat.isRecurring) !== Boolean(updatedCategory.isRecurring)
             || (cat.recurringMonths || 0) !== (updatedCategory.recurringMonths || 0)
             || (cat.startMonth || '') !== (updatedCategory.startMonth || '')
@@ -6541,16 +6714,17 @@ const App: React.FC = () => {
             if (!isMatch(cat)) {
               return cat;
             }
-            return {
-              ...cat,
-              name: updatedCategory.name,
-              amount: updatedCategory.amount,
-              categoryOverrideId: updatedCategory.categoryOverrideId,
-              isRecurring: updatedCategory.isRecurring,
-              recurringMonths: updatedCategory.recurringMonths,
-              startMonth: updatedCategory.startMonth,
-              ...(templateId ? { templateId } : {})
-            };
+          return {
+            ...cat,
+            name: updatedCategory.name,
+            amount: updatedCategory.amount,
+            categoryOverrideId: updatedCategory.categoryOverrideId,
+            date: updatedCategory.date,
+            isRecurring: updatedCategory.isRecurring,
+            recurringMonths: updatedCategory.recurringMonths,
+            startMonth: updatedCategory.startMonth,
+            ...(templateId ? { templateId } : {})
+          };
           });
           updated[monthKey] = {
             ...monthData,
@@ -6609,7 +6783,8 @@ const App: React.FC = () => {
         templateId,
         categoryOverrideId: movedExpense.categoryOverrideId ?? '',
         isChecked: Boolean(movedExpense.isChecked),
-        isRecurring: false
+        isRecurring: false,
+        date: movedExpense.date
       };
       const nextCategories = [...categories];
       const insertIndex = Math.min(Math.max(destinationIndex, 0), nextCategories.length);
@@ -6667,6 +6842,7 @@ const App: React.FC = () => {
               amount: coerceNumber(movedExpense.amount),
               categoryOverrideId: movedExpense.categoryOverrideId ?? '',
               templateId,
+              date: movedExpense.date,
               isChecked: matchedFixed?.isChecked ?? existingCategory.isChecked
             };
             nextMonthCategories = monthCategories.map((category, index) => (
@@ -6681,7 +6857,8 @@ const App: React.FC = () => {
               templateId,
               categoryOverrideId: movedExpense.categoryOverrideId ?? '',
               isChecked: Boolean(matchedFixed?.isChecked),
-              isRecurring: false
+              isRecurring: false,
+              date: movedExpense.date
             };
             nextMonthCategories = [...monthCategories];
             const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthCategories.length);
@@ -6733,7 +6910,8 @@ const App: React.FC = () => {
         amount: coerceNumber(movedCategory.amount),
         templateId,
         categoryOverrideId: movedCategory.categoryOverrideId ?? '',
-        isChecked: Boolean(movedCategory.isChecked)
+        isChecked: Boolean(movedCategory.isChecked),
+        date: movedCategory.date
       };
       const nextFixedExpenses = [...fixedExpenses];
       const insertIndex = Math.min(Math.max(destinationIndex, 0), nextFixedExpenses.length);
@@ -6790,6 +6968,7 @@ const App: React.FC = () => {
               name: movedCategory.name,
               amount: coerceNumber(movedCategory.amount),
               categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+              date: movedCategory.date,
               templateId
             };
             nextMonthFixed = monthFixed.map((expense, index) => (
@@ -6803,7 +6982,8 @@ const App: React.FC = () => {
               amount: coerceNumber(movedCategory.amount),
               templateId,
               categoryOverrideId: movedCategory.categoryOverrideId ?? '',
-              isChecked: Boolean(matchedCategory?.isChecked)
+              isChecked: Boolean(matchedCategory?.isChecked),
+              date: movedCategory.date
             };
             nextMonthFixed = [...monthFixed];
             const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthFixed.length);
@@ -6883,6 +7063,7 @@ const App: React.FC = () => {
       personKey,
       name: '',
       amount: '',
+      date: '',
       categoryOverrideId: '',
       isRecurring: false,
       recurringMonths: 3,
@@ -6907,6 +7088,7 @@ const App: React.FC = () => {
       targetId: payload.id,
       name: payload.name ?? '',
       amount: String(amountValue),
+      date: payload.date ?? '',
       categoryOverrideId: payload.categoryOverrideId ?? '',
       isRecurring,
       recurringMonths,
@@ -6951,18 +7133,21 @@ const App: React.FC = () => {
         || (expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel'))
     );
     const amount = parseNumberInput(expenseWizard.amount);
+    const dateValue = expenseWizard.date.trim() || undefined;
     if (expenseWizard.mode === 'edit' && expenseWizard.targetId) {
       if (expenseWizard.type === 'fixed') {
         updateFixedExpenseDetails(expenseWizard.personKey, expenseWizard.targetId, {
           name,
           amount,
-          categoryOverrideId: expenseWizard.categoryOverrideId
+          categoryOverrideId: expenseWizard.categoryOverrideId,
+          date: dateValue
         });
       } else {
         updateCategoryDetails(expenseWizard.personKey, expenseWizard.targetId, {
           name,
           amount,
           categoryOverrideId: expenseWizard.categoryOverrideId,
+          date: dateValue,
           isRecurring: expenseWizard.isRecurring,
           recurringMonths: expenseWizard.recurringMonths,
           startMonth: expenseWizard.startMonth
@@ -6972,13 +7157,15 @@ const App: React.FC = () => {
       addFixedExpense(expenseWizard.personKey, {
         name,
         amount,
-        categoryOverrideId: expenseWizard.categoryOverrideId
+        categoryOverrideId: expenseWizard.categoryOverrideId,
+        date: dateValue
       });
     } else {
       addCategory(expenseWizard.personKey, {
         name,
         amount,
         categoryOverrideId: expenseWizard.categoryOverrideId,
+        date: dateValue,
         isRecurring: expenseWizard.isRecurring,
         recurringMonths: expenseWizard.isRecurring ? expenseWizard.recurringMonths : undefined,
         startMonth: expenseWizard.isRecurring ? expenseWizard.startMonth : undefined
@@ -7468,14 +7655,16 @@ const App: React.FC = () => {
               {showNextMonthPanel && nextMonthData ? (
                 <motion.div
                   key="solo-compare"
-                  className="hidden sm:block sm:mb-6"
+                  className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
                   transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
-                  <div className="w-full max-w-screen-2xl mx-auto">
-                  <div className="relative grid grid-cols-2 gap-8">
+                  {calendarWidget}
+                  <div className="flex-1 min-w-0">
+                    <div className="w-full max-w-screen-2xl mx-auto">
+                      <div className="relative grid grid-cols-2 gap-8">
                     <div
                       className="pointer-events-none absolute left-1/2 top-6 bottom-6 w-[4px] rounded-full"
                       style={{
@@ -7607,19 +7796,22 @@ const App: React.FC = () => {
                         useSharedDragContext
                       />
                     </DragDropContext>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
             ) : (
               <motion.div
                 key="solo-single"
-                className="hidden sm:block sm:mb-6"
+                className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
               >
-                <div className="max-w-2xl mx-auto">
+                {calendarWidget}
+                <div className="flex-1 min-w-0">
+                  <div className="max-w-2xl mx-auto">
                   <PersonColumnHeader
                     person={data.person1}
                     personKey="person1"
@@ -7678,6 +7870,7 @@ const App: React.FC = () => {
                       useSharedDragContext
                     />
                   </DragDropContext>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -7687,379 +7880,389 @@ const App: React.FC = () => {
               {showNextMonthPanel && nextMonthData ? (
                 <motion.div
                   key="duo-compare"
-                  className="hidden sm:grid sm:grid-cols-4 sm:gap-8 sm:mb-6 w-full max-w-screen-2xl mx-auto relative"
+                  className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
                   transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
-                <div
-                  className="pointer-events-none absolute left-1/2 top-6 bottom-6 w-[4px] rounded-full"
-                  style={{
-                    backgroundImage: darkMode
-                      ? 'linear-gradient(180deg, rgba(148, 163, 184, 0) 0%, rgba(148, 163, 184, 0.65) 50%, rgba(148, 163, 184, 0) 100%)'
-                      : 'linear-gradient(180deg, rgba(15, 23, 42, 0) 0%, rgba(94, 113, 148, 0.35) 50%, rgba(15, 23, 42, 0) 100%)',
-                    boxShadow: darkMode
-                      ? '0 0 12px rgba(148, 163, 184, 0.35)'
-                      : '0 0 14px rgba(94, 113, 148, 0.25)'
-                  }}
-                />
-                <div className={`col-span-2 text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {formatMonthKey(currentMonthKey)}
-                </div>
-                <div className={`col-span-2 text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {formatMonthKey(nextMonthKey)}
-                </div>
-                <PersonColumnHeader
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  editingName={editingName}
-                  tempName={tempName}
-                  setTempName={setTempName}
-                  startEditingName={startEditingName}
-                  saveName={saveName}
-                  cancelEditingName={cancelEditingName}
-                  isLinked={isPerson1Linked}
-                />
-                <PersonColumnHeader
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  editingName={editingName}
-                  tempName={tempName}
-                  setTempName={setTempName}
-                  startEditingName={startEditingName}
-                  saveName={saveName}
-                  cancelEditingName={cancelEditingName}
-                  isLinked={isPerson2Linked}
-                />
-                <PersonColumnHeader
-                  person={nextMonthData.person1}
-                  personKey="person1"
-                  readOnly
-                  darkMode={darkMode}
-                  editingName={editingName}
-                  tempName={tempName}
-                  setTempName={setTempName}
-                  startEditingName={startEditingName}
-                  saveName={saveName}
-                  cancelEditingName={cancelEditingName}
-                  isLinked={nextPerson1Linked}
-                />
-                <PersonColumnHeader
-                  person={nextMonthData.person2}
-                  personKey="person2"
-                  readOnly
-                  darkMode={darkMode}
-                  editingName={editingName}
-                  tempName={tempName}
-                  setTempName={setTempName}
-                  startEditingName={startEditingName}
-                  saveName={saveName}
-                  cancelEditingName={cancelEditingName}
-                  isLinked={nextPerson2Linked}
-                />
-                <BudgetHeaderSection
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  addIncomeSource={addIncomeSource}
-                  deleteIncomeSource={deleteIncomeSource}
-                  updateIncomeSource={updateIncomeSource}
-                  reorderIncomeSources={reorderIncomeSources}
-                />
-                <BudgetHeaderSection
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  addIncomeSource={addIncomeSource}
-                  deleteIncomeSource={deleteIncomeSource}
-                  updateIncomeSource={updateIncomeSource}
-                  reorderIncomeSources={reorderIncomeSources}
-                />
-                <BudgetHeaderSection
-                  person={nextMonthData.person1}
-                  personKey="person1"
-                  readOnly
-                  darkMode={darkMode}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  addIncomeSource={addIncomeSource}
-                  deleteIncomeSource={deleteIncomeSource}
-                  updateIncomeSource={updateIncomeSource}
-                  reorderIncomeSources={reorderIncomeSources}
-                />
-                <BudgetHeaderSection
-                  person={nextMonthData.person2}
-                  personKey="person2"
-                  readOnly
-                  darkMode={darkMode}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  addIncomeSource={addIncomeSource}
-                  deleteIncomeSource={deleteIncomeSource}
-                  updateIncomeSource={updateIncomeSource}
-                  reorderIncomeSources={reorderIncomeSources}
-                />
-                <DragDropContext onDragEnd={handleExpenseDragEnd}>
-                  <BudgetFixedSection
-                    person={data.person1}
-                    personKey="person1"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                    useSharedDragContext
-                  />
-                  <BudgetFixedSection
-                    person={data.person2}
-                    personKey="person2"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                    useSharedDragContext
-                  />
-                  <BudgetFixedSection
-                    person={nextMonthData.person1}
-                    personKey="person1"
-                    readOnly
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                    useSharedDragContext
-                  />
-                  <BudgetFixedSection
-                    person={nextMonthData.person2}
-                    personKey="person2"
-                    readOnly
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                    useSharedDragContext
-                  />
-                  <BudgetFreeSection
-                    person={data.person1}
-                    personKey="person1"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                    useSharedDragContext
-                  />
-                  <BudgetFreeSection
-                    person={data.person2}
-                    personKey="person2"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                    useSharedDragContext
-                  />
-                  <BudgetFreeSection
-                    person={nextMonthData.person1}
-                    personKey="person1"
-                    readOnly
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                    useSharedDragContext
-                  />
-                  <BudgetFreeSection
-                    person={nextMonthData.person2}
-                    personKey="person2"
-                    readOnly
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                    useSharedDragContext
-                  />
-                </DragDropContext>
-              </motion.div>
+                  {calendarWidget}
+                  <div className="flex-1 min-w-0">
+                    <div className="relative grid grid-cols-4 gap-8 w-full max-w-screen-2xl mx-auto">
+                      <div
+                        className="pointer-events-none absolute left-1/2 top-6 bottom-6 w-[4px] rounded-full"
+                        style={{
+                          backgroundImage: darkMode
+                            ? 'linear-gradient(180deg, rgba(148, 163, 184, 0) 0%, rgba(148, 163, 184, 0.65) 50%, rgba(148, 163, 184, 0) 100%)'
+                            : 'linear-gradient(180deg, rgba(15, 23, 42, 0) 0%, rgba(94, 113, 148, 0.35) 50%, rgba(15, 23, 42, 0) 100%)',
+                          boxShadow: darkMode
+                            ? '0 0 12px rgba(148, 163, 184, 0.35)'
+                            : '0 0 14px rgba(94, 113, 148, 0.25)'
+                        }}
+                      />
+                      <div className={`col-span-2 text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {formatMonthKey(currentMonthKey)}
+                      </div>
+                      <div className={`col-span-2 text-center text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {formatMonthKey(nextMonthKey)}
+                      </div>
+                      <PersonColumnHeader
+                        person={data.person1}
+                        personKey="person1"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        editingName={editingName}
+                        tempName={tempName}
+                        setTempName={setTempName}
+                        startEditingName={startEditingName}
+                        saveName={saveName}
+                        cancelEditingName={cancelEditingName}
+                        isLinked={isPerson1Linked}
+                      />
+                      <PersonColumnHeader
+                        person={data.person2}
+                        personKey="person2"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        editingName={editingName}
+                        tempName={tempName}
+                        setTempName={setTempName}
+                        startEditingName={startEditingName}
+                        saveName={saveName}
+                        cancelEditingName={cancelEditingName}
+                        isLinked={isPerson2Linked}
+                      />
+                      <PersonColumnHeader
+                        person={nextMonthData.person1}
+                        personKey="person1"
+                        readOnly
+                        darkMode={darkMode}
+                        editingName={editingName}
+                        tempName={tempName}
+                        setTempName={setTempName}
+                        startEditingName={startEditingName}
+                        saveName={saveName}
+                        cancelEditingName={cancelEditingName}
+                        isLinked={nextPerson1Linked}
+                      />
+                      <PersonColumnHeader
+                        person={nextMonthData.person2}
+                        personKey="person2"
+                        readOnly
+                        darkMode={darkMode}
+                        editingName={editingName}
+                        tempName={tempName}
+                        setTempName={setTempName}
+                        startEditingName={startEditingName}
+                        saveName={saveName}
+                        cancelEditingName={cancelEditingName}
+                        isLinked={nextPerson2Linked}
+                      />
+                      <BudgetHeaderSection
+                        person={data.person1}
+                        personKey="person1"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        addIncomeSource={addIncomeSource}
+                        deleteIncomeSource={deleteIncomeSource}
+                        updateIncomeSource={updateIncomeSource}
+                        reorderIncomeSources={reorderIncomeSources}
+                      />
+                      <BudgetHeaderSection
+                        person={data.person2}
+                        personKey="person2"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        addIncomeSource={addIncomeSource}
+                        deleteIncomeSource={deleteIncomeSource}
+                        updateIncomeSource={updateIncomeSource}
+                        reorderIncomeSources={reorderIncomeSources}
+                      />
+                      <BudgetHeaderSection
+                        person={nextMonthData.person1}
+                        personKey="person1"
+                        readOnly
+                        darkMode={darkMode}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        addIncomeSource={addIncomeSource}
+                        deleteIncomeSource={deleteIncomeSource}
+                        updateIncomeSource={updateIncomeSource}
+                        reorderIncomeSources={reorderIncomeSources}
+                      />
+                      <BudgetHeaderSection
+                        person={nextMonthData.person2}
+                        personKey="person2"
+                        readOnly
+                        darkMode={darkMode}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        addIncomeSource={addIncomeSource}
+                        deleteIncomeSource={deleteIncomeSource}
+                        updateIncomeSource={updateIncomeSource}
+                        reorderIncomeSources={reorderIncomeSources}
+                      />
+                      <DragDropContext onDragEnd={handleExpenseDragEnd}>
+                        <BudgetFixedSection
+                          person={data.person1}
+                          personKey="person1"
+                          readOnly={false}
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateFixedExpense={updateFixedExpense}
+                          reorderFixedExpenses={reorderFixedExpenses}
+                          useSharedDragContext
+                        />
+                        <BudgetFixedSection
+                          person={data.person2}
+                          personKey="person2"
+                          readOnly={false}
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateFixedExpense={updateFixedExpense}
+                          reorderFixedExpenses={reorderFixedExpenses}
+                          useSharedDragContext
+                        />
+                        <BudgetFixedSection
+                          person={nextMonthData.person1}
+                          personKey="person1"
+                          readOnly
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateFixedExpense={updateFixedExpense}
+                          reorderFixedExpenses={reorderFixedExpenses}
+                          useSharedDragContext
+                        />
+                        <BudgetFixedSection
+                          person={nextMonthData.person2}
+                          personKey="person2"
+                          readOnly
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateFixedExpense={updateFixedExpense}
+                          reorderFixedExpenses={reorderFixedExpenses}
+                          useSharedDragContext
+                        />
+                        <BudgetFreeSection
+                          person={data.person1}
+                          personKey="person1"
+                          readOnly={false}
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateCategory={updateCategory}
+                          reorderCategories={reorderCategories}
+                          useSharedDragContext
+                        />
+                        <BudgetFreeSection
+                          person={data.person2}
+                          personKey="person2"
+                          readOnly={false}
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateCategory={updateCategory}
+                          reorderCategories={reorderCategories}
+                          useSharedDragContext
+                        />
+                        <BudgetFreeSection
+                          person={nextMonthData.person1}
+                          personKey="person1"
+                          readOnly
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateCategory={updateCategory}
+                          reorderCategories={reorderCategories}
+                          useSharedDragContext
+                        />
+                        <BudgetFreeSection
+                          person={nextMonthData.person2}
+                          personKey="person2"
+                          readOnly
+                          darkMode={darkMode}
+                          sortByCost={sortByCost}
+                          enableDrag={enableDrag}
+                          palette={palette}
+                          currencyPreference={currencyPreference}
+                          openExpenseWizard={openExpenseWizard}
+                          openExpenseWizardForEdit={openExpenseWizardForEdit}
+                          updateCategory={updateCategory}
+                          reorderCategories={reorderCategories}
+                          useSharedDragContext
+                        />
+                      </DragDropContext>
+                    </div>
+                  </div>
+                </motion.div>
             ) : (
               <motion.div
                 key="duo-single"
-                className="hidden sm:grid sm:grid-cols-2 sm:gap-6 sm:mb-6 w-full max-w-6xl mx-auto"
+                className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
               >
-                <PersonColumnHeader
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  editingName={editingName}
-                  tempName={tempName}
-                  setTempName={setTempName}
-                  startEditingName={startEditingName}
-                  saveName={saveName}
-                  cancelEditingName={cancelEditingName}
-                  isLinked={isPerson1Linked}
-                />
-                <PersonColumnHeader
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  editingName={editingName}
-                  tempName={tempName}
-                  setTempName={setTempName}
-                  startEditingName={startEditingName}
-                  saveName={saveName}
-                  cancelEditingName={cancelEditingName}
-                  isLinked={isPerson2Linked}
-                />
-                <BudgetHeaderSection
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  addIncomeSource={addIncomeSource}
-                  deleteIncomeSource={deleteIncomeSource}
-                  updateIncomeSource={updateIncomeSource}
-                  reorderIncomeSources={reorderIncomeSources}
-                />
-                <BudgetHeaderSection
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  addIncomeSource={addIncomeSource}
-                  deleteIncomeSource={deleteIncomeSource}
-                  updateIncomeSource={updateIncomeSource}
-                  reorderIncomeSources={reorderIncomeSources}
-                />
-                <DragDropContext onDragEnd={handleExpenseDragEnd}>
-                  <BudgetFixedSection
-                    person={data.person1}
-                    personKey="person1"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                    useSharedDragContext
-                  />
-                  <BudgetFixedSection
-                    person={data.person2}
-                    personKey="person2"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                    useSharedDragContext
-                  />
-                  <BudgetFreeSection
-                    person={data.person1}
-                    personKey="person1"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                    useSharedDragContext
-                  />
-                  <BudgetFreeSection
-                    person={data.person2}
-                    personKey="person2"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                    useSharedDragContext
-                  />
-                </DragDropContext>
+                {calendarWidget}
+                <div className="flex-1 min-w-0">
+                  <div className="grid grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
+                    <PersonColumnHeader
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      editingName={editingName}
+                      tempName={tempName}
+                      setTempName={setTempName}
+                      startEditingName={startEditingName}
+                      saveName={saveName}
+                      cancelEditingName={cancelEditingName}
+                      isLinked={isPerson1Linked}
+                    />
+                    <PersonColumnHeader
+                      person={data.person2}
+                      personKey="person2"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      editingName={editingName}
+                      tempName={tempName}
+                      setTempName={setTempName}
+                      startEditingName={startEditingName}
+                      saveName={saveName}
+                      cancelEditingName={cancelEditingName}
+                      isLinked={isPerson2Linked}
+                    />
+                    <BudgetHeaderSection
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      addIncomeSource={addIncomeSource}
+                      deleteIncomeSource={deleteIncomeSource}
+                      updateIncomeSource={updateIncomeSource}
+                      reorderIncomeSources={reorderIncomeSources}
+                    />
+                    <BudgetHeaderSection
+                      person={data.person2}
+                      personKey="person2"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      addIncomeSource={addIncomeSource}
+                      deleteIncomeSource={deleteIncomeSource}
+                      updateIncomeSource={updateIncomeSource}
+                      reorderIncomeSources={reorderIncomeSources}
+                    />
+                    <DragDropContext onDragEnd={handleExpenseDragEnd}>
+                      <BudgetFixedSection
+                        person={data.person1}
+                        personKey="person1"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateFixedExpense={updateFixedExpense}
+                        reorderFixedExpenses={reorderFixedExpenses}
+                        useSharedDragContext
+                      />
+                      <BudgetFixedSection
+                        person={data.person2}
+                        personKey="person2"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateFixedExpense={updateFixedExpense}
+                        reorderFixedExpenses={reorderFixedExpenses}
+                        useSharedDragContext
+                      />
+                      <BudgetFreeSection
+                        person={data.person1}
+                        personKey="person1"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateCategory={updateCategory}
+                        reorderCategories={reorderCategories}
+                        useSharedDragContext
+                      />
+                      <BudgetFreeSection
+                        person={data.person2}
+                        personKey="person2"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateCategory={updateCategory}
+                        reorderCategories={reorderCategories}
+                        useSharedDragContext
+                      />
+                    </DragDropContext>
+                  </div>
+                </div>
               </motion.div>
             )}
             </AnimatePresence>
@@ -8332,6 +8535,31 @@ const App: React.FC = () => {
                       onChange={(e) => updateExpenseWizard({ amount: e.target.value })}
                       className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium" htmlFor="expense-date">{t('dateLabel')}</label>
+                    <div className="relative">
+                      <input
+                        id="expense-date"
+                        type="date"
+                        value={expenseWizard.date}
+                        onChange={(e) => updateExpenseWizard({ date: e.target.value })}
+                        className={`w-full px-3 py-2 pr-10 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                      />
+                      {expenseWizard.date && (
+                        <button
+                          type="button"
+                          onClick={() => updateExpenseWizard({ date: '' })}
+                          className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 transition ${
+                            darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'
+                          }`}
+                          aria-label={t('clearDateLabel')}
+                          title={t('clearDateLabel')}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
