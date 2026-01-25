@@ -1529,7 +1529,9 @@ type BudgetFixedSectionProps = Pick<
   | 'openExpenseWizardForEdit'
   | 'updateFixedExpense'
   | 'reorderFixedExpenses'
->;
+> & {
+  useSharedDragContext?: boolean;
+};
 
 type BudgetFreeSectionProps = Pick<
   BudgetColumnProps,
@@ -1545,7 +1547,9 @@ type BudgetFreeSectionProps = Pick<
   | 'openExpenseWizardForEdit'
   | 'updateCategory'
   | 'reorderCategories'
->;
+> & {
+  useSharedDragContext?: boolean;
+};
 
 type PersonColumnHeaderProps = Pick<
   BudgetColumnProps,
@@ -1969,7 +1973,8 @@ const BudgetFixedSection = React.memo(({
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateFixedExpense,
-  reorderFixedExpenses
+  reorderFixedExpenses,
+  useSharedDragContext
 }: BudgetFixedSectionProps) => {
   const { t, language } = useTranslation();
   const totalFixed = useMemo(() => calculateTotalFixed(person.fixedExpenses), [person.fixedExpenses]);
@@ -2028,6 +2033,87 @@ const BudgetFixedSection = React.memo(({
     }
     reorderFixedExpenses(personKey, result.source.index, result.destination.index);
   }, [personKey, reorderFixedExpenses]);
+  const isDragEmpty = orderedExpenses.length === 0;
+  const dragContent = (
+    <Droppable droppableId={`fixed-${personKey}`}>
+      {(provided: DroppableProvided) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'} ${isDragEmpty ? 'py-6' : ''}`}
+        >
+          {orderedExpenses.map((expense, index) => {
+            const amountValue = coerceNumber(expense.amount);
+            const resolvedCategory = expense.categoryOverrideId
+              ? getCategoryById(expense.categoryOverrideId)
+              : getAutoCategory(expense.name);
+            const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
+            const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+            return (
+              <Draggable key={expense.id} draggableId={`fixed-${personKey}-${expense.id}`} index={index}>
+                {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                  <div
+                    ref={dragProvided.innerRef}
+                    {...dragProvided.draggableProps}
+                    className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
+                    style={dragProvided.draggableProps.style}
+                  >
+                    <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                      <span
+                        {...dragProvided.dragHandleProps}
+                        className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                        aria-label={t('dragHandleLabel')}
+                      >
+                        <GripVertical size={14} />
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={expense.isChecked || false}
+                        onChange={(e) => {
+                          if (readOnly) {
+                            return;
+                          }
+                          updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked);
+                        }}
+                        disabled={readOnly}
+                        className="h-4 w-4"
+                        style={{ accentColor: fixedTone.border }}
+                        aria-label={t('validateExpenseLabel')}
+                      />
+                      <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
+                        {expense.name || t('newFixedExpenseLabel')}
+                      </span>
+                      {resolvedCategory && badgeClass && (
+                        <span className={badgeClass}>
+                          <span>{resolvedCategory.emoji}</span>
+                          <span>{categoryLabel}</span>
+                        </span>
+                      )}
+                      <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                        {formatCurrency(amountValue, currencyPreference)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
+                        disabled={readOnly}
+                        className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                          readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        aria-label={t('editLabel')}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Draggable>
+            );
+          })}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
 
   return (
     <div
@@ -2056,85 +2142,14 @@ const BudgetFixedSection = React.memo(({
         </button>
       </div>
       <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
-        {orderedExpenses.length === 0 ? (
+        {canDrag ? (
+          useSharedDragContext ? dragContent : (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              {dragContent}
+            </DragDropContext>
+          )
+        ) : orderedExpenses.length === 0 ? (
           <div className="py-6" />
-        ) : canDrag ? (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId={`fixed-${personKey}`}>
-              {(provided: DroppableProvided) => (
-                <div ref={provided.innerRef} {...provided.droppableProps} className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
-                  {orderedExpenses.map((expense, index) => {
-                    const amountValue = coerceNumber(expense.amount);
-                    const resolvedCategory = expense.categoryOverrideId
-                      ? getCategoryById(expense.categoryOverrideId)
-                      : getAutoCategory(expense.name);
-                    const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
-                    const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
-                    return (
-                      <Draggable key={expense.id} draggableId={`fixed-${personKey}-${expense.id}`} index={index}>
-                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-                          <div
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
-                            style={dragProvided.draggableProps.style}
-                          >
-                            <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
-                              <span
-                                {...dragProvided.dragHandleProps}
-                                className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
-                                aria-label={t('dragHandleLabel')}
-                              >
-                                <GripVertical size={14} />
-                              </span>
-                              <input
-                                type="checkbox"
-                                checked={expense.isChecked || false}
-                                onChange={(e) => {
-                                  if (readOnly) {
-                                    return;
-                                  }
-                                  updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked);
-                                }}
-                                disabled={readOnly}
-                                className="h-4 w-4"
-                                style={{ accentColor: fixedTone.border }}
-                                aria-label={t('validateExpenseLabel')}
-                              />
-                              <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
-                                {expense.name || t('newFixedExpenseLabel')}
-                              </span>
-                              {resolvedCategory && badgeClass && (
-                                <span className={badgeClass}>
-                                  <span>{resolvedCategory.emoji}</span>
-                                  <span>{categoryLabel}</span>
-                                </span>
-                              )}
-                              <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
-                                {formatCurrency(amountValue, currencyPreference)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
-                                disabled={readOnly}
-                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
-                                  readOnly ? 'opacity-50 cursor-not-allowed' : ''
-                                }`}
-                                aria-label={t('editLabel')}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    );
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
         ) : (
           <div className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
             {orderedExpenses.map((expense) => {
@@ -2223,7 +2238,8 @@ const BudgetFreeSection = React.memo(({
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateCategory,
-  reorderCategories
+  reorderCategories,
+  useSharedDragContext
 }: BudgetFreeSectionProps) => {
   const { t, language } = useTranslation();
   const totalCategories = useMemo(() => calculateTotalCategories(person.categories), [person.categories]);
@@ -2282,6 +2298,93 @@ const BudgetFreeSection = React.memo(({
     }
     reorderCategories(personKey, result.source.index, result.destination.index);
   }, [personKey, reorderCategories]);
+  const isDragEmpty = orderedCategories.length === 0;
+  const dragContent = (
+    <Droppable droppableId={`free-${personKey}`}>
+      {(provided: DroppableProvided) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'} ${isDragEmpty ? 'py-6' : ''}`}
+        >
+          {orderedCategories.map((category, index) => {
+            const amountValue = coerceNumber(category.amount);
+            const resolvedCategory = category.categoryOverrideId
+              ? getCategoryById(category.categoryOverrideId)
+              : getAutoCategory(category.name);
+            const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
+            const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
+            const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+            return (
+              <Draggable key={category.id} draggableId={`free-${personKey}-${category.id}`} index={index}>
+                {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                  <div
+                    ref={dragProvided.innerRef}
+                    {...dragProvided.draggableProps}
+                    className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
+                    style={dragProvided.draggableProps.style}
+                  >
+                    <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                      <span
+                        {...dragProvided.dragHandleProps}
+                        className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                        aria-label={t('dragHandleLabel')}
+                      >
+                        <GripVertical size={14} />
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={category.isChecked || false}
+                        onChange={(e) => {
+                          if (readOnly) {
+                            return;
+                          }
+                          updateCategory(personKey, category.id, 'isChecked', e.target.checked);
+                        }}
+                        disabled={readOnly}
+                        className="h-4 w-4"
+                        style={{ accentColor: freeTone.border }}
+                        aria-label={t('validateExpenseLabel')}
+                      />
+                      <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
+                        {category.name || t('newCategoryLabel')}
+                      </span>
+                      {resolvedCategory && badgeClass && (
+                        <span className={badgeClass}>
+                          <span>{resolvedCategory.emoji}</span>
+                          <span>{categoryLabel}</span>
+                        </span>
+                      )}
+                      {recurringLabel && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                          {recurringLabel}
+                        </span>
+                      )}
+                      <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                        {formatCurrency(amountValue, currencyPreference)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
+                        disabled={readOnly}
+                        className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                          readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        aria-label={t('editLabel')}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Draggable>
+            );
+          })}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
 
   return (
     <div
@@ -2310,91 +2413,14 @@ const BudgetFreeSection = React.memo(({
         </button>
       </div>
       <div className={`rounded-xl border ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-100' : 'border-slate-100 bg-white/90 text-slate-800'}`}>
-        {orderedCategories.length === 0 ? (
+        {canDrag ? (
+          useSharedDragContext ? dragContent : (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              {dragContent}
+            </DragDropContext>
+          )
+        ) : orderedCategories.length === 0 ? (
           <div className="py-6" />
-        ) : canDrag ? (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId={`free-${personKey}`}>
-              {(provided: DroppableProvided) => (
-                <div ref={provided.innerRef} {...provided.droppableProps} className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
-                  {orderedCategories.map((category, index) => {
-                    const amountValue = coerceNumber(category.amount);
-                    const resolvedCategory = category.categoryOverrideId
-                      ? getCategoryById(category.categoryOverrideId)
-                      : getAutoCategory(category.name);
-                    const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
-                    const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
-                    const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
-                    return (
-                      <Draggable key={category.id} draggableId={`free-${personKey}-${category.id}`} index={index}>
-                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-                          <div
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
-                            style={dragProvided.draggableProps.style}
-                          >
-                            <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
-                              <span
-                                {...dragProvided.dragHandleProps}
-                                className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
-                                aria-label={t('dragHandleLabel')}
-                              >
-                                <GripVertical size={14} />
-                              </span>
-                              <input
-                                type="checkbox"
-                                checked={category.isChecked || false}
-                                onChange={(e) => {
-                                  if (readOnly) {
-                                    return;
-                                  }
-                                  updateCategory(personKey, category.id, 'isChecked', e.target.checked);
-                                }}
-                                disabled={readOnly}
-                                className="h-4 w-4"
-                                style={{ accentColor: freeTone.border }}
-                                aria-label={t('validateExpenseLabel')}
-                              />
-                              <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
-                                {category.name || t('newCategoryLabel')}
-                              </span>
-                              {resolvedCategory && badgeClass && (
-                                <span className={badgeClass}>
-                                  <span>{resolvedCategory.emoji}</span>
-                                  <span>{categoryLabel}</span>
-                                </span>
-                              )}
-                              {recurringLabel && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-                                  {recurringLabel}
-                                </span>
-                              )}
-                              <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
-                                {formatCurrency(amountValue, currencyPreference)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
-                                disabled={readOnly}
-                                className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
-                                  readOnly ? 'opacity-50 cursor-not-allowed' : ''
-                                }`}
-                                aria-label={t('editLabel')}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    );
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
         ) : (
           <div className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
             {orderedCategories.map((category) => {
@@ -6397,6 +6423,119 @@ const App: React.FC = () => {
     }));
   };
 
+  const moveFixedExpenseToCategory = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const fixedExpenses = currentData[personKey].fixedExpenses;
+      const categories = currentData[personKey].categories;
+      const movedExpense = fixedExpenses[sourceIndex];
+      if (!movedExpense) {
+        return prev;
+      }
+      const nextFixedExpenses = fixedExpenses.filter((_, index) => index !== sourceIndex);
+      const templateId = movedExpense.templateId ?? createTemplateId();
+      const newCategory: Category = {
+        id: Date.now().toString(),
+        name: movedExpense.name,
+        amount: coerceNumber(movedExpense.amount),
+        templateId,
+        categoryOverrideId: movedExpense.categoryOverrideId ?? '',
+        isChecked: Boolean(movedExpense.isChecked),
+        isRecurring: false
+      };
+      const nextCategories = [...categories];
+      const insertIndex = Math.min(Math.max(destinationIndex, 0), nextCategories.length);
+      nextCategories.splice(insertIndex, 0, newCategory);
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: nextFixedExpenses,
+            categories: nextCategories
+          }
+        }
+      };
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
+  };
+
+  const moveCategoryToFixedExpense = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const fixedExpenses = currentData[personKey].fixedExpenses;
+      const categories = currentData[personKey].categories;
+      const movedCategory = categories[sourceIndex];
+      if (!movedCategory) {
+        return prev;
+      }
+      const nextCategories = categories.filter((_, index) => index !== sourceIndex);
+      const templateId = movedCategory.templateId ?? createTemplateId();
+      const newExpense: FixedExpense = {
+        id: Date.now().toString(),
+        name: movedCategory.name,
+        amount: coerceNumber(movedCategory.amount),
+        templateId,
+        categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+        isChecked: Boolean(movedCategory.isChecked)
+      };
+      const nextFixedExpenses = [...fixedExpenses];
+      const insertIndex = Math.min(Math.max(destinationIndex, 0), nextFixedExpenses.length);
+      nextFixedExpenses.splice(insertIndex, 0, newExpense);
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: nextFixedExpenses,
+            categories: nextCategories
+          }
+        }
+      };
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
+  };
+
+  const handleExpenseDragEnd = (result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    const { source, destination } = result;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) {
+      return;
+    }
+    const parseDroppable = (droppableId: string) => {
+      const [listType, personKey] = droppableId.split('-');
+      if ((listType !== 'fixed' && listType !== 'free') || (personKey !== 'person1' && personKey !== 'person2')) {
+        return null;
+      }
+      return { listType, personKey } as { listType: 'fixed' | 'free'; personKey: 'person1' | 'person2' };
+    };
+    const sourceMeta = parseDroppable(source.droppableId);
+    const destinationMeta = parseDroppable(destination.droppableId);
+    if (!sourceMeta || !destinationMeta) {
+      return;
+    }
+    if (sourceMeta.personKey !== destinationMeta.personKey) {
+      return;
+    }
+    if (sourceMeta.listType === destinationMeta.listType) {
+      if (sourceMeta.listType === 'fixed') {
+        reorderFixedExpenses(sourceMeta.personKey, source.index, destination.index);
+      } else {
+        reorderCategories(sourceMeta.personKey, source.index, destination.index);
+      }
+      return;
+    }
+    if (sourceMeta.listType === 'fixed') {
+      moveFixedExpenseToCategory(sourceMeta.personKey, source.index, destination.index);
+      return;
+    }
+    moveCategoryToFixedExpense(sourceMeta.personKey, source.index, destination.index);
+  };
+
   const openExpenseWizard = (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => {
     setExpenseWizard({
       mode: 'create',
@@ -7056,62 +7195,68 @@ const App: React.FC = () => {
                       updateIncomeSource={updateIncomeSource}
                       reorderIncomeSources={reorderIncomeSources}
                     />
-                    <BudgetFixedSection
-                      person={data.person1}
-                      personKey="person1"
-                      readOnly={false}
-                      darkMode={darkMode}
-                      sortByCost={sortByCost}
-                      enableDrag={enableDrag}
-                      palette={palette}
-                      currencyPreference={currencyPreference}
-                      openExpenseWizard={openExpenseWizard}
-                      openExpenseWizardForEdit={openExpenseWizardForEdit}
-                      updateFixedExpense={updateFixedExpense}
-                      reorderFixedExpenses={reorderFixedExpenses}
-                    />
-                    <BudgetFixedSection
-                      person={nextMonthData.person1}
-                      personKey="person1"
-                      readOnly
-                      darkMode={darkMode}
-                      sortByCost={sortByCost}
-                      enableDrag={enableDrag}
-                      palette={palette}
-                      currencyPreference={currencyPreference}
-                      openExpenseWizard={openExpenseWizard}
-                      openExpenseWizardForEdit={openExpenseWizardForEdit}
-                      updateFixedExpense={updateFixedExpense}
-                      reorderFixedExpenses={reorderFixedExpenses}
-                    />
-                    <BudgetFreeSection
-                      person={data.person1}
-                      personKey="person1"
-                      readOnly={false}
-                      darkMode={darkMode}
-                      sortByCost={sortByCost}
-                      enableDrag={enableDrag}
-                      palette={palette}
-                      currencyPreference={currencyPreference}
-                      openExpenseWizard={openExpenseWizard}
-                      openExpenseWizardForEdit={openExpenseWizardForEdit}
-                      updateCategory={updateCategory}
-                      reorderCategories={reorderCategories}
-                    />
-                    <BudgetFreeSection
-                      person={nextMonthData.person1}
-                      personKey="person1"
-                      readOnly
-                      darkMode={darkMode}
-                      sortByCost={sortByCost}
-                      enableDrag={enableDrag}
-                      palette={palette}
-                      currencyPreference={currencyPreference}
-                      openExpenseWizard={openExpenseWizard}
-                      openExpenseWizardForEdit={openExpenseWizardForEdit}
-                      updateCategory={updateCategory}
-                      reorderCategories={reorderCategories}
-                    />
+                    <DragDropContext onDragEnd={handleExpenseDragEnd}>
+                      <BudgetFixedSection
+                        person={data.person1}
+                        personKey="person1"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateFixedExpense={updateFixedExpense}
+                        reorderFixedExpenses={reorderFixedExpenses}
+                        useSharedDragContext
+                      />
+                      <BudgetFixedSection
+                        person={nextMonthData.person1}
+                        personKey="person1"
+                        readOnly
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateFixedExpense={updateFixedExpense}
+                        reorderFixedExpenses={reorderFixedExpenses}
+                        useSharedDragContext
+                      />
+                      <BudgetFreeSection
+                        person={data.person1}
+                        personKey="person1"
+                        readOnly={false}
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateCategory={updateCategory}
+                        reorderCategories={reorderCategories}
+                        useSharedDragContext
+                      />
+                      <BudgetFreeSection
+                        person={nextMonthData.person1}
+                        personKey="person1"
+                        readOnly
+                        darkMode={darkMode}
+                        sortByCost={sortByCost}
+                        enableDrag={enableDrag}
+                        palette={palette}
+                        currencyPreference={currencyPreference}
+                        openExpenseWizard={openExpenseWizard}
+                        openExpenseWizardForEdit={openExpenseWizardForEdit}
+                        updateCategory={updateCategory}
+                        reorderCategories={reorderCategories}
+                        useSharedDragContext
+                      />
+                    </DragDropContext>
                   </div>
                 </div>
               </motion.div>
@@ -7151,34 +7296,38 @@ const App: React.FC = () => {
                     updateIncomeSource={updateIncomeSource}
                     reorderIncomeSources={reorderIncomeSources}
                   />
-                  <BudgetFixedSection
-                    person={data.person1}
-                    personKey="person1"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateFixedExpense={updateFixedExpense}
-                    reorderFixedExpenses={reorderFixedExpenses}
-                  />
-                  <BudgetFreeSection
-                    person={data.person1}
-                    personKey="person1"
-                    readOnly={false}
-                    darkMode={darkMode}
-                    sortByCost={sortByCost}
-                    enableDrag={enableDrag}
-                    palette={palette}
-                    currencyPreference={currencyPreference}
-                    openExpenseWizard={openExpenseWizard}
-                    openExpenseWizardForEdit={openExpenseWizardForEdit}
-                    updateCategory={updateCategory}
-                    reorderCategories={reorderCategories}
-                  />
+                  <DragDropContext onDragEnd={handleExpenseDragEnd}>
+                    <BudgetFixedSection
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      sortByCost={sortByCost}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      openExpenseWizard={openExpenseWizard}
+                      openExpenseWizardForEdit={openExpenseWizardForEdit}
+                      updateFixedExpense={updateFixedExpense}
+                      reorderFixedExpenses={reorderFixedExpenses}
+                      useSharedDragContext
+                    />
+                    <BudgetFreeSection
+                      person={data.person1}
+                      personKey="person1"
+                      readOnly={false}
+                      darkMode={darkMode}
+                      sortByCost={sortByCost}
+                      enableDrag={enableDrag}
+                      palette={palette}
+                      currencyPreference={currencyPreference}
+                      openExpenseWizard={openExpenseWizard}
+                      openExpenseWizardForEdit={openExpenseWizardForEdit}
+                      updateCategory={updateCategory}
+                      reorderCategories={reorderCategories}
+                      useSharedDragContext
+                    />
+                  </DragDropContext>
                 </div>
               </motion.div>
             )}
@@ -7315,118 +7464,128 @@ const App: React.FC = () => {
                   updateIncomeSource={updateIncomeSource}
                   reorderIncomeSources={reorderIncomeSources}
                 />
-                <BudgetFixedSection
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateFixedExpense={updateFixedExpense}
-                  reorderFixedExpenses={reorderFixedExpenses}
-                />
-                <BudgetFixedSection
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateFixedExpense={updateFixedExpense}
-                  reorderFixedExpenses={reorderFixedExpenses}
-                />
-                <BudgetFixedSection
-                  person={nextMonthData.person1}
-                  personKey="person1"
-                  readOnly
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateFixedExpense={updateFixedExpense}
-                  reorderFixedExpenses={reorderFixedExpenses}
-                />
-                <BudgetFixedSection
-                  person={nextMonthData.person2}
-                  personKey="person2"
-                  readOnly
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateFixedExpense={updateFixedExpense}
-                  reorderFixedExpenses={reorderFixedExpenses}
-                />
-                <BudgetFreeSection
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateCategory={updateCategory}
-                  reorderCategories={reorderCategories}
-                />
-                <BudgetFreeSection
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateCategory={updateCategory}
-                  reorderCategories={reorderCategories}
-                />
-                <BudgetFreeSection
-                  person={nextMonthData.person1}
-                  personKey="person1"
-                  readOnly
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateCategory={updateCategory}
-                  reorderCategories={reorderCategories}
-                />
-                <BudgetFreeSection
-                  person={nextMonthData.person2}
-                  personKey="person2"
-                  readOnly
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateCategory={updateCategory}
-                  reorderCategories={reorderCategories}
-                />
+                <DragDropContext onDragEnd={handleExpenseDragEnd}>
+                  <BudgetFixedSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                    useSharedDragContext
+                  />
+                  <BudgetFixedSection
+                    person={data.person2}
+                    personKey="person2"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                    useSharedDragContext
+                  />
+                  <BudgetFixedSection
+                    person={nextMonthData.person1}
+                    personKey="person1"
+                    readOnly
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                    useSharedDragContext
+                  />
+                  <BudgetFixedSection
+                    person={nextMonthData.person2}
+                    personKey="person2"
+                    readOnly
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                    useSharedDragContext
+                  />
+                  <BudgetFreeSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                    useSharedDragContext
+                  />
+                  <BudgetFreeSection
+                    person={data.person2}
+                    personKey="person2"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                    useSharedDragContext
+                  />
+                  <BudgetFreeSection
+                    person={nextMonthData.person1}
+                    personKey="person1"
+                    readOnly
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                    useSharedDragContext
+                  />
+                  <BudgetFreeSection
+                    person={nextMonthData.person2}
+                    personKey="person2"
+                    readOnly
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                    useSharedDragContext
+                  />
+                </DragDropContext>
               </motion.div>
             ) : (
               <motion.div
@@ -7489,62 +7648,68 @@ const App: React.FC = () => {
                   updateIncomeSource={updateIncomeSource}
                   reorderIncomeSources={reorderIncomeSources}
                 />
-                <BudgetFixedSection
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateFixedExpense={updateFixedExpense}
-                  reorderFixedExpenses={reorderFixedExpenses}
-                />
-                <BudgetFixedSection
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateFixedExpense={updateFixedExpense}
-                  reorderFixedExpenses={reorderFixedExpenses}
-                />
-                <BudgetFreeSection
-                  person={data.person1}
-                  personKey="person1"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateCategory={updateCategory}
-                  reorderCategories={reorderCategories}
-                />
-                <BudgetFreeSection
-                  person={data.person2}
-                  personKey="person2"
-                  readOnly={false}
-                  darkMode={darkMode}
-                  sortByCost={sortByCost}
-                  enableDrag={enableDrag}
-                  palette={palette}
-                  currencyPreference={currencyPreference}
-                  openExpenseWizard={openExpenseWizard}
-                  openExpenseWizardForEdit={openExpenseWizardForEdit}
-                  updateCategory={updateCategory}
-                  reorderCategories={reorderCategories}
-                />
+                <DragDropContext onDragEnd={handleExpenseDragEnd}>
+                  <BudgetFixedSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                    useSharedDragContext
+                  />
+                  <BudgetFixedSection
+                    person={data.person2}
+                    personKey="person2"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateFixedExpense={updateFixedExpense}
+                    reorderFixedExpenses={reorderFixedExpenses}
+                    useSharedDragContext
+                  />
+                  <BudgetFreeSection
+                    person={data.person1}
+                    personKey="person1"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                    useSharedDragContext
+                  />
+                  <BudgetFreeSection
+                    person={data.person2}
+                    personKey="person2"
+                    readOnly={false}
+                    darkMode={darkMode}
+                    sortByCost={sortByCost}
+                    enableDrag={enableDrag}
+                    palette={palette}
+                    currencyPreference={currencyPreference}
+                    openExpenseWizard={openExpenseWizard}
+                    openExpenseWizardForEdit={openExpenseWizardForEdit}
+                    updateCategory={updateCategory}
+                    reorderCategories={reorderCategories}
+                    useSharedDragContext
+                  />
+                </DragDropContext>
               </motion.div>
             )}
             </AnimatePresence>
