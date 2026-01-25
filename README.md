@@ -14,6 +14,7 @@ Budget tracker with a React + Vite frontend and a Node/Express + PostgreSQL API.
 - 🧾 Joint account with deposits, expenses, and live balance.
 - 🗓️ Month navigation with manual create/delete.
 - 🧭 Optional desktop sidebar month list (toggle in settings).
+- 📲 PWA support.
 - 💾 Autosave to PostgreSQL (debounced).
 - 🌓 Light/dark mode toggle.
 - 🔐 JWT login with user accounts and password resets.
