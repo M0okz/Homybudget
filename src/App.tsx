@@ -2253,7 +2253,7 @@ const BudgetFixedSection = React.memo(({
           <span className="tabular-nums">{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
           {hasPaidFixed && (
             <span
-              className="remaining-pill inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold"
+              className="remaining-pill inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
               style={fixedBadgeStyle}
               title={t('remainingToPayLabel')}
             >
@@ -2532,7 +2532,7 @@ const BudgetFreeSection = React.memo(({
           <span className="tabular-nums">{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
           {hasPaidCategories && (
             <span
-              className="remaining-pill inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold"
+              className="remaining-pill inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
               style={freeBadgeStyle}
               title={t('remainingToPayLabel')}
             >
