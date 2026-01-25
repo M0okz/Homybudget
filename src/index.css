@@ -394,6 +394,12 @@ body.theme-transition * {
   animation: version-breathing 1.8s ease-in-out infinite;
 }
 
+.remaining-pill {
+  animation: remaining-pill 2.6s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform, filter;
+}
+
 .month-live {
   position: relative;
 }
@@ -433,6 +439,18 @@ body.theme-transition * {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes remaining-pill {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.07);
+    filter: brightness(1.08);
   }
 }
 

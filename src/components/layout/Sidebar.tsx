@@ -195,32 +195,42 @@ const Sidebar = React.memo(({
 
   const sidebarMonths = showMonthList && monthItems.length > 0 ? (
     <div className="mt-6">
-      <div className={`text-xs uppercase tracking-wide font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-        {monthListLabel}
+      <div className="flex items-center justify-between">
+        <div className={`text-xs uppercase tracking-wide font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+          {monthListLabel}
+        </div>
       </div>
-      <div className="mt-2 space-y-1">
-        {monthItems.map((month) => {
-          const isActive = month.key === activeMonthKey;
-          const isDisabled = !month.isAvailable;
-          return (
-            <button
-              key={month.key}
-              type="button"
-              onClick={() => onSelectMonth(month.key)}
-              disabled={isDisabled}
-              aria-current={isActive ? 'page' : undefined}
-              className={`w-full flex items-center px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                isActive
-                  ? (darkMode ? 'text-[color:var(--brand-accent-3)] bg-slate-900/70' : 'text-[color:var(--brand-primary)] bg-slate-100/80')
-                  : isDisabled
-                    ? (darkMode ? 'text-slate-600' : 'text-slate-400')
-                    : (darkMode ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100/70')
-              } ${isDisabled ? 'cursor-not-allowed' : ''}`}
-            >
-              <span className="truncate">{month.label}</span>
-            </button>
-          );
-        })}
+      <div
+        className={`mt-2 rounded-2xl border p-2 shadow-sm ${
+          darkMode ? 'border-slate-800 bg-slate-950/60' : 'border-slate-100 bg-white/80'
+        }`}
+      >
+        <div className="space-y-1">
+          {monthItems.map((month) => {
+            const isActive = month.key === activeMonthKey;
+            const isDisabled = !month.isAvailable;
+            return (
+              <button
+                key={month.key}
+                type="button"
+                onClick={() => onSelectMonth(month.key)}
+                disabled={isDisabled}
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative w-full flex items-center rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
+                  isActive
+                    ? (darkMode
+                      ? 'text-[color:var(--brand-accent-3)] bg-slate-900/80 shadow-inner'
+                      : 'text-[color:var(--brand-primary)] bg-slate-100/80 shadow-inner')
+                    : isDisabled
+                      ? (darkMode ? 'text-slate-600' : 'text-slate-400')
+                      : (darkMode ? 'text-slate-300 hover:bg-slate-900/60 hover:text-slate-100' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900')
+                } ${isDisabled ? 'cursor-not-allowed' : ''} ${isActive ? 'after:absolute after:inset-y-2 after:left-2 after:w-1 after:rounded-full after:bg-emerald-400/70' : ''}`}
+              >
+                <span className="truncate pl-3">{month.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   ) : null;

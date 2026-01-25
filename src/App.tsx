@@ -2057,10 +2057,12 @@ const BudgetFixedSection = React.memo(({
   );
   const fixedBadgeStyle = useMemo(
     () => ({
-      color: fixedTone.text,
-      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
+      color: darkMode ? '#D7E8FF' : '#3B4A6B',
+      backgroundColor: darkMode ? 'rgba(148, 197, 255, 0.18)' : 'rgba(199, 210, 254, 0.6)',
+      border: darkMode ? '1px solid rgba(148, 197, 255, 0.3)' : '1px solid rgba(129, 140, 248, 0.35)',
+      boxShadow: darkMode ? '0 0 12px rgba(148, 197, 255, 0.18)' : '0 0 10px rgba(165, 180, 252, 0.35)'
     }),
-    [darkMode, fixedTone.text]
+    [darkMode]
   );
   const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -2251,7 +2253,7 @@ const BudgetFixedSection = React.memo(({
           <span className="tabular-nums">{formatCurrency(animatedTotalFixed, currencyPreference)}</span>
           {hasPaidFixed && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              className="remaining-pill inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold"
               style={fixedBadgeStyle}
               title={t('remainingToPayLabel')}
             >
@@ -2322,10 +2324,12 @@ const BudgetFreeSection = React.memo(({
   );
   const freeBadgeStyle = useMemo(
     () => ({
-      color: freeTone.text,
-      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)'
+      color: darkMode ? '#D7E8FF' : '#3B4A6B',
+      backgroundColor: darkMode ? 'rgba(148, 197, 255, 0.18)' : 'rgba(199, 210, 254, 0.6)',
+      border: darkMode ? '1px solid rgba(148, 197, 255, 0.3)' : '1px solid rgba(129, 140, 248, 0.35)',
+      boxShadow: darkMode ? '0 0 12px rgba(148, 197, 255, 0.18)' : '0 0 10px rgba(165, 180, 252, 0.35)'
     }),
-    [darkMode, freeTone.text]
+    [darkMode]
   );
   const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -2528,7 +2532,7 @@ const BudgetFreeSection = React.memo(({
           <span className="tabular-nums">{formatCurrency(animatedTotalCategories, currencyPreference)}</span>
           {hasPaidCategories && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              className="remaining-pill inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold"
               style={freeBadgeStyle}
               title={t('remainingToPayLabel')}
             >
