@@ -22,6 +22,7 @@ interface Category {
   name: string;
   amount: number;
   icon?: string;
+  templateId?: string;
   categoryOverrideId?: string;
   isChecked?: boolean;
   isRecurring?: boolean;
@@ -41,7 +42,7 @@ interface FixedExpense {
 interface IncomeSource {
   id: string;
   name: string;
-  amount: number;
+  amount: number | string;
   templateId?: string;
   categoryOverrideId?: string;
   propagate?: boolean;
@@ -438,7 +439,7 @@ const getCurrentMonthKey = (date: Date) => {
 };
 
 const calculateTotalIncome = (incomeSources: IncomeSource[]) => {
-  return incomeSources.reduce((sum, source) => sum + source.amount, 0);
+  return incomeSources.reduce((sum, source) => sum + coerceNumber(source.amount), 0);
 };
 
 const calculateTotalFixed = (expenses: FixedExpense[]) => {
@@ -520,6 +521,16 @@ const DEFAULT_INCOME_SOURCE_LABELS = [
 const shouldPropagateIncomeSource = (name: string) => {
   const normalized = normalizeIconLabel(name);
   return Boolean(normalized) && !DEFAULT_INCOME_SOURCE_LABELS.includes(normalized);
+};
+
+const DEFAULT_CATEGORY_LABELS = [
+  normalizeIconLabel(TRANSLATIONS.fr.newCategoryLabel),
+  normalizeIconLabel(TRANSLATIONS.en.newCategoryLabel)
+];
+
+const shouldPropagateCategory = (name: string) => {
+  const normalized = normalizeIconLabel(name);
+  return Boolean(normalized) && !DEFAULT_CATEGORY_LABELS.includes(normalized);
 };
 
 const createTemplateId = () => {
@@ -1767,12 +1778,18 @@ const BudgetHeaderSection = React.memo(({
                             </Select>
                             <input
                               type="number"
-                              value={coerceNumber(source.amount)}
+                              value={source.amount}
                               onChange={(e) => {
                                 if (readOnly) {
                                   return;
                                 }
-                                updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value));
+                                const nextValue = e.target.value;
+                                updateIncomeSource(
+                                  personKey,
+                                  source.id,
+                                  'amount',
+                                  nextValue === '' ? '' : parseNumberInput(nextValue)
+                                );
                               }}
                               readOnly={readOnly}
                               className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
@@ -1872,12 +1889,18 @@ const BudgetHeaderSection = React.memo(({
                   </Select>
                   <input
                     type="number"
-                    value={coerceNumber(source.amount)}
+                    value={source.amount}
                     onChange={(e) => {
                       if (readOnly) {
                         return;
                       }
-                      updateIncomeSource(personKey, source.id, 'amount', parseNumberInput(e.target.value));
+                      const nextValue = e.target.value;
+                      updateIncomeSource(
+                        personKey,
+                        source.id,
+                        'amount',
+                        nextValue === '' ? '' : parseNumberInput(nextValue)
+                      );
                     }}
                     readOnly={readOnly}
                     className={`w-24 flex-none px-3 py-2 border rounded-lg text-right text-sm ${darkMode ? 'bg-slate-950 text-white border-slate-700' : 'bg-white border-slate-200'}`}
@@ -5025,12 +5048,27 @@ const App: React.FC = () => {
     setIsHydrated(false);
   };
 
+  const isCategoryActiveInMonth = (category: Category, targetMonth: string) => {
+    if (!category.isRecurring) {
+      return true;
+    }
+    if (!category.startMonth || !category.recurringMonths) {
+      return false;
+    }
+    const startDate = new Date(category.startMonth + '-01');
+    const targetDate = new Date(targetMonth + '-01');
+    const monthsDiff = (targetDate.getFullYear() - startDate.getFullYear()) * 12 +
+      (targetDate.getMonth() - startDate.getMonth());
+    return monthsDiff >= 0 && monthsDiff < category.recurringMonths;
+  };
+
   const copyRecurringCategories = (categories: Category[], targetMonth: string): Category[] => {
     const recurringCategories: Category[] = [];
 
     const nonRecurringCategories = categories.filter(cat => !cat.isRecurring).map(cat => ({
       ...cat,
-      id: Date.now().toString() + Math.random()
+      id: Date.now().toString() + Math.random(),
+      templateId: cat.templateId ?? createTemplateId()
     }));
 
     categories.forEach(cat => {
@@ -5043,7 +5081,8 @@ const App: React.FC = () => {
         if (monthsDiff >= 0 && monthsDiff < cat.recurringMonths) {
           recurringCategories.push({
             ...cat,
-            id: Date.now().toString() + Math.random()
+            id: Date.now().toString() + Math.random(),
+            templateId: cat.templateId ?? createTemplateId()
           });
         }
       }
@@ -5426,7 +5465,7 @@ const App: React.FC = () => {
     const newSource: IncomeSource = {
       id: Date.now().toString(),
       name: t('newIncomeSourceLabel'),
-      amount: 0,
+      amount: '',
       templateId: createTemplateId(),
       categoryOverrideId: '',
       propagate: true
@@ -5833,6 +5872,133 @@ const App: React.FC = () => {
     });
   };
 
+  const updateFixedExpenseDetails = (
+    personKey: 'person1' | 'person2',
+    id: string,
+    updates: { name: string; amount: number; categoryOverrideId: string }
+  ) => {
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const currentExpenses = currentData[personKey].fixedExpenses;
+      const targetExpense = currentExpenses.find(exp => exp.id === id);
+      if (!targetExpense) {
+        return prev;
+      }
+      const nextName = updates.name;
+      const nextAmount = updates.amount;
+      const nextCategoryOverrideId = updates.categoryOverrideId;
+      const shouldPropagate = shouldPropagateFixedExpense(nextName);
+      const templateId = targetExpense.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+      const updatedExpense = {
+        ...targetExpense,
+        name: nextName,
+        amount: nextAmount,
+        categoryOverrideId: nextCategoryOverrideId,
+        ...(templateId ? { templateId } : {})
+      };
+      const updatedExpenses = currentExpenses.map(exp =>
+        exp.id === id ? updatedExpense : exp
+      );
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            fixedExpenses: updatedExpenses
+          }
+        }
+      };
+
+      if (!shouldPropagate) {
+        return applyJointBalanceCarryover(updated, currentMonthKey);
+      }
+
+      const normalizedName = normalizeIconLabel(targetExpense.name);
+      const hasDifferences = Object.keys(updated)
+        .filter(monthKey => monthKey > currentMonthKey)
+        .some(monthKey => {
+          const monthData = updated[monthKey];
+          if (!monthData) {
+            return false;
+          }
+          const matches = monthData[personKey].fixedExpenses.filter(exp => {
+            const matchesTemplate = templateId && exp.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          });
+          if (matches.length === 0) {
+            return true;
+          }
+          return matches.some(exp => (
+            exp.name !== nextName
+            || coerceNumber(exp.amount) !== coerceNumber(nextAmount)
+            || (exp.categoryOverrideId || '') !== (nextCategoryOverrideId || '')
+          ));
+        });
+
+      const shouldSync = !hasDifferences || (
+        typeof window !== 'undefined' && window.confirm(t('syncFutureConfirmLabel'))
+      );
+      if (!shouldSync) {
+        return applyJointBalanceCarryover(updated, currentMonthKey);
+      }
+
+      Object.keys(updated)
+        .filter(monthKey => monthKey > currentMonthKey)
+        .forEach(monthKey => {
+          const monthData = updated[monthKey];
+          if (!monthData) {
+            return;
+          }
+          const matches = monthData[personKey].fixedExpenses.filter(exp => {
+            const matchesTemplate = templateId && exp.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          });
+          if (matches.length === 0) {
+            const propagatedExpense: FixedExpense = {
+              ...updatedExpense,
+              id: `${Date.now()}-${Math.random()}`,
+              isChecked: false,
+              ...(templateId ? { templateId } : {})
+            };
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                fixedExpenses: [...monthData[personKey].fixedExpenses, propagatedExpense]
+              }
+            };
+            return;
+          }
+          const nextExpenses = monthData[personKey].fixedExpenses.map(exp => {
+            const matchesTemplate = templateId && exp.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
+            if (!matchesTemplate && !matchesName) {
+              return exp;
+            }
+            return {
+              ...exp,
+              name: nextName,
+              amount: nextAmount,
+              categoryOverrideId: nextCategoryOverrideId,
+              ...(templateId ? { templateId } : {})
+            };
+          });
+          updated[monthKey] = {
+            ...monthData,
+            [personKey]: {
+              ...monthData[personKey],
+              fixedExpenses: nextExpenses
+            }
+          };
+        });
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
+  };
+
   const reorderFixedExpenses = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
     setData(prev => ({
       ...prev,
@@ -5844,53 +6010,381 @@ const App: React.FC = () => {
   };
 
   const addCategory = (personKey: 'person1' | 'person2', overrides: Partial<Category> = {}) => {
+    const isRecurring = overrides.isRecurring ?? false;
     const newCategory: Category = {
       id: Date.now().toString(),
       name: overrides.name ?? t('newCategoryLabel'),
       amount: overrides.amount ?? 0,
+      templateId: overrides.templateId,
       categoryOverrideId: overrides.categoryOverrideId ?? '',
       isChecked: overrides.isChecked ?? false,
-      isRecurring: overrides.isRecurring ?? false,
-      recurringMonths: overrides.recurringMonths,
-      startMonth: overrides.startMonth
+      isRecurring,
+      recurringMonths: isRecurring ? (overrides.recurringMonths ?? 3) : overrides.recurringMonths,
+      startMonth: isRecurring ? (overrides.startMonth ?? currentMonthKey) : overrides.startMonth
     };
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        categories: [...prev[personKey].categories, newCategory]
+    const normalizedName = normalizeIconLabel(newCategory.name);
+    const shouldPropagate = Boolean(newCategory.templateId) || shouldPropagateCategory(newCategory.name);
+    const templateId = newCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+    const seededCategory = templateId ? { ...newCategory, templateId } : newCategory;
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            categories: [...currentData[personKey].categories, seededCategory]
+          }
+        }
+      };
+
+      if (shouldPropagate) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            if (!isCategoryActiveInMonth(seededCategory, monthKey)) {
+              return;
+            }
+            const alreadyExists = monthData[personKey].categories.some(cat => {
+              const matchesTemplate = templateId && cat.templateId === templateId;
+              const matchesName = !matchesTemplate && normalizeIconLabel(cat.name) === normalizedName;
+              return matchesTemplate || matchesName;
+            });
+            if (alreadyExists) {
+              return;
+            }
+            const propagatedCategory: Category = {
+              ...seededCategory,
+              id: `${Date.now()}-${Math.random()}`,
+              isChecked: false,
+              ...(templateId ? { templateId } : {})
+            };
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                categories: [...monthData[personKey].categories, propagatedCategory]
+              }
+            };
+          });
       }
-    }));
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const deleteCategory = (personKey: 'person1' | 'person2', id: string) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        categories: prev[personKey].categories.filter(cat => cat.id !== id)
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const targetCategory = currentData[personKey].categories.find(cat => cat.id === id);
+      if (!targetCategory) {
+        return prev;
       }
-    }));
+      const normalizedName = normalizeIconLabel(targetCategory.name);
+      const templateId = targetCategory.templateId;
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            categories: currentData[personKey].categories.filter(cat => cat.id !== id)
+          }
+        }
+      };
+
+      const shouldPropagate = Boolean(templateId) || shouldPropagateCategory(targetCategory.name);
+      if (shouldPropagate) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            const nextCategories = monthData[personKey].categories.filter(cat => (
+              templateId ? cat.templateId !== templateId : normalizeIconLabel(cat.name) !== normalizedName
+            ));
+            if (nextCategories.length === monthData[personKey].categories.length) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                categories: nextCategories
+              }
+            };
+          });
+      }
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const updateCategory = (personKey: 'person1' | 'person2', id: string, field: keyof Category, value: string | number | boolean) => {
-    setData(prev => ({
-      ...prev,
-      [personKey]: {
-        ...prev[personKey],
-        categories: prev[personKey].categories.map(cat => {
-          if (cat.id === id) {
-            const updated = { ...cat, [field]: value };
-            if (field === 'isRecurring' && value === true) {
-              updated.recurringMonths = updated.recurringMonths || 3;
-              updated.startMonth = updated.startMonth || currentMonthKey;
-            }
-            return updated;
-          }
-          return cat;
-        })
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const currentCategories = currentData[personKey].categories;
+      const targetCategory = currentCategories.find(cat => cat.id === id);
+      if (!targetCategory) {
+        return prev;
       }
-    }));
+      const nextName = field === 'name' ? String(value) : targetCategory.name;
+      const nextCategory = { ...targetCategory, [field]: value };
+      if (field === 'isRecurring' && value === true) {
+        nextCategory.recurringMonths = nextCategory.recurringMonths || 3;
+        nextCategory.startMonth = nextCategory.startMonth || currentMonthKey;
+      }
+      const shouldPropagate = field !== 'isChecked'
+        && (Boolean(targetCategory.templateId) || shouldPropagateCategory(nextName));
+      const templateId = targetCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+      const updatedCategory = templateId ? { ...nextCategory, templateId } : nextCategory;
+      const updatedCategories = currentCategories.map(cat =>
+        cat.id === id ? updatedCategory : cat
+      );
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            categories: updatedCategories
+          }
+        }
+      };
+
+      if (shouldPropagate) {
+        const normalizedName = normalizeIconLabel(targetCategory.name);
+        const updateFields = field === 'isRecurring' && value === true
+          ? {
+              isRecurring: true,
+              recurringMonths: updatedCategory.recurringMonths,
+              startMonth: updatedCategory.startMonth
+            }
+          : ({ [field]: field === 'name' ? nextName : value } as Partial<Category>);
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
+            let changed = false;
+            let hasMatch = false;
+            const nextCategories: Category[] = [];
+            monthData[personKey].categories.forEach(cat => {
+              const matchesTemplate = templateId && cat.templateId === templateId;
+              const matchesName = !matchesTemplate && normalizeIconLabel(cat.name) === normalizedName;
+              if (!matchesTemplate && !matchesName) {
+                nextCategories.push(cat);
+                return;
+              }
+              hasMatch = true;
+              if (!shouldExist) {
+                changed = true;
+                return;
+              }
+              changed = true;
+              const base = templateId ? { ...cat, templateId } : { ...cat };
+              nextCategories.push({ ...base, ...updateFields });
+            });
+            if (shouldExist && !hasMatch) {
+              nextCategories.push({
+                ...updatedCategory,
+                id: `${Date.now()}-${Math.random()}`,
+                isChecked: false,
+                ...(templateId ? { templateId } : {})
+              });
+              changed = true;
+            }
+            if (!changed) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                categories: nextCategories
+              }
+            };
+          });
+      }
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
+  };
+
+  const updateCategoryDetails = (
+    personKey: 'person1' | 'person2',
+    id: string,
+    updates: {
+      name: string;
+      amount: number;
+      categoryOverrideId: string;
+      isRecurring: boolean;
+      recurringMonths?: number;
+      startMonth?: string;
+    }
+  ) => {
+    setMonthlyBudgets(prev => {
+      const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const currentCategories = currentData[personKey].categories;
+      const targetCategory = currentCategories.find(cat => cat.id === id);
+      if (!targetCategory) {
+        return prev;
+      }
+      const nextName = updates.name;
+      const nextIsRecurring = updates.isRecurring;
+      const nextRecurringMonths = nextIsRecurring
+        ? (updates.recurringMonths ?? targetCategory.recurringMonths ?? 3)
+        : undefined;
+      const nextStartMonth = nextIsRecurring
+        ? (updates.startMonth ?? targetCategory.startMonth ?? currentMonthKey)
+        : undefined;
+      const shouldPropagate = Boolean(targetCategory.templateId) || shouldPropagateCategory(nextName);
+      const templateId = targetCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+      const updatedCategory: Category = {
+        ...targetCategory,
+        name: nextName,
+        amount: updates.amount,
+        categoryOverrideId: updates.categoryOverrideId,
+        isRecurring: nextIsRecurring,
+        recurringMonths: nextRecurringMonths,
+        startMonth: nextStartMonth,
+        ...(templateId ? { templateId } : {})
+      };
+      const updatedCategories = currentCategories.map(cat =>
+        cat.id === id ? updatedCategory : cat
+      );
+      const updated: MonthlyBudget = {
+        ...prev,
+        [currentMonthKey]: {
+          ...currentData,
+          [personKey]: {
+            ...currentData[personKey],
+            categories: updatedCategories
+          }
+        }
+      };
+
+      if (!shouldPropagate) {
+        return applyJointBalanceCarryover(updated, currentMonthKey);
+      }
+
+      const normalizedName = normalizeIconLabel(targetCategory.name);
+      const hasDifferences = Object.keys(updated)
+        .filter(monthKey => monthKey > currentMonthKey)
+        .some(monthKey => {
+          const monthData = updated[monthKey];
+          if (!monthData) {
+            return false;
+          }
+          const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
+          const matches = monthData[personKey].categories.filter(cat => {
+            const matchesTemplate = templateId && cat.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(cat.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          });
+          if (matches.length === 0) {
+            return shouldExist;
+          }
+          if (!shouldExist) {
+            return true;
+          }
+          return matches.some(cat => (
+            cat.name !== nextName
+            || coerceNumber(cat.amount) !== coerceNumber(updatedCategory.amount)
+            || (cat.categoryOverrideId || '') !== (updatedCategory.categoryOverrideId || '')
+            || Boolean(cat.isRecurring) !== Boolean(updatedCategory.isRecurring)
+            || (cat.recurringMonths || 0) !== (updatedCategory.recurringMonths || 0)
+            || (cat.startMonth || '') !== (updatedCategory.startMonth || '')
+          ));
+        });
+
+      const shouldSync = !hasDifferences || (
+        typeof window !== 'undefined' && window.confirm(t('syncFutureConfirmLabel'))
+      );
+      if (!shouldSync) {
+        return applyJointBalanceCarryover(updated, currentMonthKey);
+      }
+
+      Object.keys(updated)
+        .filter(monthKey => monthKey > currentMonthKey)
+        .forEach(monthKey => {
+          const monthData = updated[monthKey];
+          if (!monthData) {
+            return;
+          }
+          const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
+          const isMatch = (cat: Category) => {
+            const matchesTemplate = templateId && cat.templateId === templateId;
+            const matchesName = !matchesTemplate && normalizeIconLabel(cat.name) === normalizedName;
+            return matchesTemplate || matchesName;
+          };
+          const matches = monthData[personKey].categories.filter(isMatch);
+          if (!shouldExist && matches.length === 0) {
+            return;
+          }
+          if (!shouldExist) {
+            const nextCategories = monthData[personKey].categories.filter(cat => !isMatch(cat));
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                categories: nextCategories
+              }
+            };
+            return;
+          }
+          if (matches.length === 0) {
+            const propagatedCategory: Category = {
+              ...updatedCategory,
+              id: `${Date.now()}-${Math.random()}`,
+              isChecked: false,
+              ...(templateId ? { templateId } : {})
+            };
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                categories: [...monthData[personKey].categories, propagatedCategory]
+              }
+            };
+            return;
+          }
+          const nextCategories = monthData[personKey].categories.map(cat => {
+            if (!isMatch(cat)) {
+              return cat;
+            }
+            return {
+              ...cat,
+              name: updatedCategory.name,
+              amount: updatedCategory.amount,
+              categoryOverrideId: updatedCategory.categoryOverrideId,
+              isRecurring: updatedCategory.isRecurring,
+              recurringMonths: updatedCategory.recurringMonths,
+              startMonth: updatedCategory.startMonth,
+              ...(templateId ? { templateId } : {})
+            };
+          });
+          updated[monthKey] = {
+            ...monthData,
+            [personKey]: {
+              ...monthData[personKey],
+              categories: nextCategories
+            }
+          };
+        });
+
+      return applyJointBalanceCarryover(updated, currentMonthKey);
+    });
   };
 
   const reorderCategories = (personKey: 'person1' | 'person2', sourceIndex: number, destinationIndex: number) => {
@@ -5981,18 +6475,20 @@ const App: React.FC = () => {
     const amount = parseNumberInput(expenseWizard.amount);
     if (expenseWizard.mode === 'edit' && expenseWizard.targetId) {
       if (expenseWizard.type === 'fixed') {
-        updateFixedExpense(expenseWizard.personKey, expenseWizard.targetId, 'name', name);
-        updateFixedExpense(expenseWizard.personKey, expenseWizard.targetId, 'amount', amount);
-        updateFixedExpense(expenseWizard.personKey, expenseWizard.targetId, 'categoryOverrideId', expenseWizard.categoryOverrideId);
+        updateFixedExpenseDetails(expenseWizard.personKey, expenseWizard.targetId, {
+          name,
+          amount,
+          categoryOverrideId: expenseWizard.categoryOverrideId
+        });
       } else {
-        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'name', name);
-        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'amount', amount);
-        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'categoryOverrideId', expenseWizard.categoryOverrideId);
-        updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'isRecurring', expenseWizard.isRecurring);
-        if (expenseWizard.isRecurring) {
-          updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'recurringMonths', expenseWizard.recurringMonths);
-          updateCategory(expenseWizard.personKey, expenseWizard.targetId, 'startMonth', expenseWizard.startMonth);
-        }
+        updateCategoryDetails(expenseWizard.personKey, expenseWizard.targetId, {
+          name,
+          amount,
+          categoryOverrideId: expenseWizard.categoryOverrideId,
+          isRecurring: expenseWizard.isRecurring,
+          recurringMonths: expenseWizard.recurringMonths,
+          startMonth: expenseWizard.startMonth
+        });
       }
     } else if (expenseWizard.type === 'fixed') {
       addFixedExpense(expenseWizard.personKey, {
