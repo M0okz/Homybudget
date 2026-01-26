@@ -72,6 +72,7 @@ const defaultSettings = {
   sortByCost: false,
   showSidebarMonths: true,
   currencyPreference: 'EUR',
+  sessionDurationHours: 12,
   oidcEnabled: false,
   oidcProviderName: '',
   oidcIssuer: '',
@@ -225,6 +226,7 @@ const ensureThemePreferenceColumn = async () => {
 
 const normalizeSettings = (input) => {
   const next = {};
+  const sessionHours = Number(input.sessionDurationHours);
   if (input.languagePreference === 'fr' || input.languagePreference === 'en') {
     next.languagePreference = input.languagePreference;
   }
@@ -239,6 +241,9 @@ const normalizeSettings = (input) => {
   }
   if (input.currencyPreference === 'EUR' || input.currencyPreference === 'USD') {
     next.currencyPreference = input.currencyPreference;
+  }
+  if (Number.isFinite(sessionHours)) {
+    next.sessionDurationHours = Math.min(24, Math.max(1, Math.round(sessionHours)));
   }
   if (input.oidcEnabled !== undefined) {
     next.oidcEnabled = Boolean(input.oidcEnabled);
@@ -450,11 +455,24 @@ const sanitizeSettingsForUser = (settings, user) => {
   };
 };
 
-const createAuthToken = (user) => {
+const resolveSessionDurationHours = (value) => {
+  const hours = Number(value);
+  if (!Number.isFinite(hours)) {
+    return 12;
+  }
+  return Math.min(24, Math.max(1, Math.round(hours)));
+};
+
+const createAuthToken = (user, sessionDurationHours) => {
   if (!jwtSecret) {
     return null;
   }
-  return jwt.sign({ sub: user.id, username: user.username, role: user.role }, jwtSecret, { expiresIn: '8h' });
+  const hours = resolveSessionDurationHours(sessionDurationHours);
+  return jwt.sign(
+    { sub: user.id, username: user.username, role: user.role },
+    jwtSecret,
+    { expiresIn: `${hours}h` }
+  );
 };
 
 const getUserByLogin = async (login) => {
@@ -616,7 +634,8 @@ const loginHandler = async (req, res) => {
       return;
     }
     await pool.query('update users set last_login_at = now(), updated_at = now() where id = $1', [user.id]);
-    const token = createAuthToken(user);
+    const settings = await getAppSettings();
+    const token = createAuthToken(user, settings?.sessionDurationHours);
     res.json({ token, user: sanitizeUser(user) });
   } catch (error) {
     console.error('Login failed', error);
@@ -808,7 +827,7 @@ app.get('/api/auth/oidc/callback', async (req, res) => {
       return;
     }
     await pool.query('update users set last_login_at = now(), updated_at = now() where id = $1', [user.id]);
-    const token = createAuthToken(user);
+    const token = createAuthToken(user, settings?.sessionDurationHours);
     if (!token) {
       res.status(500).json({ error: 'Server misconfigured' });
       return;
@@ -834,6 +853,7 @@ app.patch('/api/settings', authRequired, async (req, res) => {
   let updates = normalizeSettings(req.body || {});
   if (req.user?.role !== 'admin') {
     updates = stripOidcSettings(updates);
+    delete updates.sessionDurationHours;
   }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: 'No updates provided' });
@@ -1137,11 +1157,12 @@ app.get('/api/health', async (_req, res) => {
 app.get('/api/months', authRequired, async (_req, res) => {
   try {
     const result = await pool.query(
-      'select month_key, data from monthly_budgets order by month_key'
+      'select month_key, data, updated_at from monthly_budgets order by month_key'
     );
     const months = result.rows.map(row => ({
       monthKey: row.month_key,
-      data: row.data
+      data: row.data,
+      updatedAt: row.updated_at
     }));
     res.json({ months });
   } catch (error) {
@@ -1159,14 +1180,18 @@ app.get('/api/months/:monthKey', authRequired, async (req, res) => {
 
   try {
     const result = await pool.query(
-      'select month_key, data from monthly_budgets where month_key = $1',
+      'select month_key, data, updated_at from monthly_budgets where month_key = $1',
       [monthKey]
     );
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Month not found' });
       return;
     }
-    res.json({ monthKey, data: result.rows[0].data });
+    res.json({
+      monthKey,
+      data: result.rows[0].data,
+      updatedAt: result.rows[0].updated_at
+    });
   } catch (error) {
     console.error('Failed to load month', error);
     res.status(500).json({ error: 'Failed to load month' });
@@ -1186,14 +1211,15 @@ app.put('/api/months/:monthKey', authRequired, async (req, res) => {
   }
 
   try {
-    await pool.query(
+    const result = await pool.query(
       `insert into monthly_budgets (month_key, data, created_at, updated_at)
        values ($1, $2::jsonb, now(), now())
        on conflict (month_key)
-       do update set data = excluded.data, updated_at = now()`,
+       do update set data = excluded.data, updated_at = now()
+       returning updated_at`,
       [monthKey, JSON.stringify(data)]
     );
-    res.status(204).end();
+    res.json({ updatedAt: result.rows[0]?.updated_at ?? null });
   } catch (error) {
     console.error('Failed to save month', error);
     res.status(500).json({ error: 'Failed to save month' });

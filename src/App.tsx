@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical, Eye, EyeOff, Link2, Link2Off, CalendarDays } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, LayoutDashboard, Wallet, BarChart3, Settings, ArrowUpDown, Users, User, KeyRound, Globe2, Coins, GripVertical, Eye, EyeOff, Link2, Link2Off, CalendarDays, Clock } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DragDropContext,
@@ -84,6 +84,7 @@ type MonthlyBudget = Record<string, BudgetData>;
 type ApiMonth = {
   monthKey: string;
   data: BudgetData;
+  updatedAt?: string | null;
 };
 
 type AppSettings = {
@@ -93,12 +94,19 @@ type AppSettings = {
   sortByCost: boolean;
   showSidebarMonths: boolean;
   currencyPreference: 'EUR' | 'USD';
+  sessionDurationHours: number;
   oidcEnabled: boolean;
   oidcProviderName: string;
   oidcIssuer: string;
   oidcClientId: string;
   oidcClientSecret: string;
   oidcRedirectUri: string;
+};
+
+type SyncQueue = {
+  months: Record<string, { payload: string; updatedAt: number }>;
+  deletes: Record<string, { updatedAt: number }>;
+  settings?: { payload: string; updatedAt: number };
 };
 
 type ExpenseWizardState = {
@@ -251,6 +259,50 @@ const getInitialCurrencyPreference = (): 'EUR' | 'USD' => {
   return localStorage.getItem('currencyPreference') === 'USD' ? 'USD' : 'EUR';
 };
 
+const SYNC_QUEUE_STORAGE_KEY = 'syncQueue';
+const OFFLINE_BUDGET_CACHE_KEY = 'offlineBudgetCache';
+
+const getInitialOnlineStatus = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  return navigator.onLine;
+};
+
+const loadSyncQueue = (): SyncQueue => {
+  if (typeof window === 'undefined') {
+    return { months: {}, deletes: {} };
+  }
+  const raw = localStorage.getItem(SYNC_QUEUE_STORAGE_KEY);
+  if (!raw) {
+    return { months: {}, deletes: {} };
+  }
+  try {
+    const parsed = JSON.parse(raw) as SyncQueue;
+    const months = parsed?.months && typeof parsed.months === 'object' ? parsed.months : {};
+    const deletes = parsed?.deletes && typeof parsed.deletes === 'object' ? parsed.deletes : {};
+    const settings = parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : undefined;
+    return { months, deletes, settings };
+  } catch (error) {
+    return { months: {}, deletes: {} };
+  }
+};
+
+const loadBudgetCache = (): MonthlyBudget | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = localStorage.getItem(OFFLINE_BUDGET_CACHE_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as MonthlyBudget;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+};
 const getAuthToken = () => {
   if (typeof window === 'undefined') {
     return null;
@@ -1209,7 +1261,29 @@ const fetchMonths = async (): Promise<ApiMonth[]> => {
   return Array.isArray(payload.months) ? payload.months : [];
 };
 
-const upsertMonth = async (monthKey: string, data: BudgetData) => {
+const fetchMonth = async (monthKey: string): Promise<{ data: BudgetData; updatedAt: string | null } | null> => {
+  const response = await fetch(apiUrl(`/api/months/${monthKey}`), {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw createApiError(`Failed to load month (${response.status})`, response.status);
+  }
+  const payload = await response.json() as { data?: BudgetData; updatedAt?: string | null };
+  if (!payload?.data) {
+    return null;
+  }
+  return { data: payload.data, updatedAt: payload.updatedAt ?? null };
+};
+
+const upsertMonth = async (monthKey: string, data: BudgetData): Promise<string | null> => {
   const response = await fetch(apiUrl(`/api/months/${monthKey}`), {
     method: 'PUT',
     headers: {
@@ -1224,6 +1298,19 @@ const upsertMonth = async (monthKey: string, data: BudgetData) => {
   if (!response.ok) {
     throw createApiError(`Failed to save month (${response.status})`, response.status);
   }
+  const payload = await response.json() as { updatedAt?: string | null };
+  return payload?.updatedAt ?? null;
+};
+
+const isRetriableSyncError = (error: unknown) => {
+  if (isAuthError(error)) {
+    return false;
+  }
+  const status = typeof error === 'object' && error ? (error as ApiError).status : undefined;
+  if (status && status < 500) {
+    return false;
+  }
+  return true;
 };
 
 const deleteMonth = async (monthKey: string) => {
@@ -1235,6 +1322,9 @@ const deleteMonth = async (monthKey: string) => {
   });
   if (response.status === 401) {
     throw createApiError('Unauthorized', 401);
+  }
+  if (response.status === 404) {
+    return;
   }
   if (!response.ok) {
     throw createApiError(`Failed to delete month (${response.status})`, response.status);
@@ -3053,6 +3143,7 @@ type OnboardingWizardProps = {
   onModeChange: (value: 'solo' | 'duo') => void;
   onComplete: (options: { person1Name: string; person2Name: string; mode: 'solo' | 'duo' }) => void;
   onCreateAdmin: (username: string, password: string) => Promise<void>;
+  onCreateSecondUser: (payload: { username: string; password: string; displayName?: string | null }) => Promise<void>;
 };
 
 const OnboardingWizard = ({
@@ -3065,16 +3156,19 @@ const OnboardingWizard = ({
   onThemeChange,
   onModeChange,
   onComplete,
-  onCreateAdmin
+  onCreateAdmin,
+  onCreateSecondUser
 }: OnboardingWizardProps) => {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [finishLoading, setFinishLoading] = useState(false);
   const [adminForm, setAdminForm] = useState({ username: 'admin', password: '', confirm: '' });
   const [modeChoice, setModeChoice] = useState<'solo' | 'duo'>(soloModeEnabled ? 'solo' : 'duo');
   const [person1Name, setPerson1Name] = useState('');
   const [person2Name, setPerson2Name] = useState('');
+  const [secondUserForm, setSecondUserForm] = useState({ username: '', password: '', confirm: '', displayName: '' });
   const totalSteps = modeChoice === 'duo' ? 5 : 4;
 
   const handleAdminSubmit = async (event: React.FormEvent) => {
@@ -3114,7 +3208,40 @@ const OnboardingWizard = ({
     setStep(prev => Math.max(prev - 1, 0));
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
+    setError(null);
+    if (modeChoice === 'duo') {
+      if (!person2Name.trim()) {
+        setError(t('onboardingPerson2Required'));
+        return;
+      }
+      const username = secondUserForm.username.trim();
+      if (!username || !secondUserForm.password) {
+        setError(t('userCreateRequiredError'));
+        return;
+      }
+      if (secondUserForm.password !== secondUserForm.confirm) {
+        setError(t('userCreateMismatchError'));
+        return;
+      }
+      setFinishLoading(true);
+      try {
+        await onCreateSecondUser({
+          username,
+          password: secondUserForm.password,
+          displayName: secondUserForm.displayName.trim() || person2Name.trim() || null
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message) {
+          setError(err.message);
+        } else {
+          setError(t('userCreateError'));
+        }
+        setFinishLoading(false);
+        return;
+      }
+      setFinishLoading(false);
+    }
     onComplete({ person1Name, person2Name, mode: modeChoice });
   };
 
@@ -3333,6 +3460,43 @@ const OnboardingWizard = ({
                 className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
               />
             </div>
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">{t('onboardingSecondUserTitle')}</div>
+              <div className="text-xs text-slate-500">{t('onboardingSecondUserHint')}</div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  autoComplete="username"
+                  value={secondUserForm.username}
+                  onChange={(event) => setSecondUserForm(prev => ({ ...prev, username: event.target.value }))}
+                  placeholder={t('createUserUsernamePlaceholder')}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                />
+                <input
+                  type="text"
+                  value={secondUserForm.displayName}
+                  onChange={(event) => setSecondUserForm(prev => ({ ...prev, displayName: event.target.value }))}
+                  placeholder={t('createUserDisplayNamePlaceholder')}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                />
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={secondUserForm.password}
+                  onChange={(event) => setSecondUserForm(prev => ({ ...prev, password: event.target.value }))}
+                  placeholder={t('createUserPasswordPlaceholder')}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                />
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={secondUserForm.confirm}
+                  onChange={(event) => setSecondUserForm(prev => ({ ...prev, confirm: event.target.value }))}
+                  placeholder={t('createUserConfirmPlaceholder')}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'}`}
+                />
+              </div>
+            </div>
             <div className="flex items-center justify-between">
               <button type="button" onClick={handleBack} className="text-sm font-semibold text-slate-500">
                 {t('onboardingBack')}
@@ -3340,9 +3504,10 @@ const OnboardingWizard = ({
               <button
                 type="button"
                 onClick={handleFinish}
-                className="px-4 py-2 rounded-md font-semibold btn-gradient"
+                disabled={finishLoading}
+                className={`px-4 py-2 rounded-md font-semibold btn-gradient ${finishLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                {t('onboardingFinish')}
+                {finishLoading ? t('creatingUserButton') : t('onboardingFinish')}
               </button>
             </div>
           </div>
@@ -3493,6 +3658,66 @@ const SelectRow = React.memo(({
 ));
 SelectRow.displayName = 'SelectRow';
 
+type RangeRowProps = {
+  icon: React.ComponentType<{ size?: number | string }>;
+  label: string;
+  hint?: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (next: number) => void;
+  darkMode: boolean;
+};
+
+const RangeRow = React.memo(({
+  icon: Icon,
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  darkMode
+}: RangeRowProps) => (
+  <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
+    <div className="flex items-center gap-3">
+      <span className={`h-9 w-9 rounded-full flex items-center justify-center ${
+        darkMode ? 'bg-slate-800 text-slate-100' : 'brand-icon'
+      }`}>
+        <Icon size={18} />
+      </span>
+      <div>
+        <div className="font-semibold">{label}</div>
+        {hint && (
+          <div className={darkMode ? 'text-slate-400 text-xs' : 'text-slate-500 text-xs'}>
+            {hint}
+          </div>
+        )}
+      </div>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs font-semibold">{value}h</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => {
+          const nextValue = parseInt(event.target.value, 10);
+          if (Number.isFinite(nextValue)) {
+            onChange(nextValue);
+          }
+        }}
+        className={`h-2 w-32 cursor-pointer accent-emerald-500 ${darkMode ? 'bg-slate-800' : 'bg-slate-200'}`}
+      />
+    </div>
+  </div>
+));
+RangeRow.displayName = 'RangeRow';
+
 type SettingsViewProps = {
   user: AuthUser | null;
   fallbackUsername: string;
@@ -3512,6 +3737,8 @@ type SettingsViewProps = {
   onToggleSoloModeEnabled: (value: boolean) => void;
   currencyPreference: 'EUR' | 'USD';
   onCurrencyPreferenceChange: (value: 'EUR' | 'USD') => void;
+  sessionDurationHours: number;
+  onSessionDurationHoursChange: (value: number) => void;
   oidcEnabled: boolean;
   oidcProviderName: string;
   oidcIssuer: string;
@@ -3550,6 +3777,8 @@ const SettingsView = ({
   onToggleSoloModeEnabled,
   currencyPreference,
   onCurrencyPreferenceChange,
+  sessionDurationHours,
+  onSessionDurationHoursChange,
   oidcEnabled,
   oidcProviderName,
   oidcIssuer,
@@ -4067,6 +4296,17 @@ const SettingsView = ({
               />
               {isAdmin && (
                 <>
+                  <RangeRow
+                    icon={Clock}
+                    label={t('sessionDurationLabel')}
+                    hint={t('sessionDurationHint')}
+                    value={sessionDurationHours}
+                    min={1}
+                    max={24}
+                    step={1}
+                    onChange={onSessionDurationHoursChange}
+                    darkMode={darkMode}
+                  />
                   <ToggleRow
                     icon={KeyRound}
                     label={t('oidcSectionTitle')}
@@ -4514,6 +4754,7 @@ const App: React.FC = () => {
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
   const [showSidebarMonths, setShowSidebarMonths] = useState<boolean>(() => getInitialSidebarMonths());
   const [currencyPreference, setCurrencyPreference] = useState<'EUR' | 'USD'>(() => getInitialCurrencyPreference());
+  const [sessionDurationHours, setSessionDurationHours] = useState<number>(12);
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcProviderName, setOidcProviderName] = useState('');
   const [oidcIssuer, setOidcIssuer] = useState('');
@@ -4532,10 +4773,20 @@ const App: React.FC = () => {
   const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
   const [jointWizard, setJointWizard] = useState<JointWizardState | null>(null);
   const [jointDeleteArmed, setJointDeleteArmed] = useState(false);
-  const [toast, setToast] = useState<{ message: string; tone?: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    tone?: 'success' | 'error';
+    action?: {
+      label: string;
+      onClick: () => void;
+    };
+  } | null>(null);
   const [deleteMonthOpen, setDeleteMonthOpen] = useState(false);
   const [deleteMonthInput, setDeleteMonthInput] = useState('');
   const [showNextMonth, setShowNextMonth] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(() => getInitialOnlineStatus());
+  const [syncQueue, setSyncQueue] = useState<SyncQueue>(() => loadSyncQueue());
+  const [syncNotice, setSyncNotice] = useState<{ label: string; tone: 'info' | 'warning' } | null>(null);
 
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget>({});
   const [isHydrated, setIsHydrated] = useState(false);
@@ -4545,6 +4796,9 @@ const App: React.FC = () => {
   const oidcHandledRef = useRef(false);
   const jointDeleteTimerRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const syncNoticeTimeoutRef = useRef<number | null>(null);
+  const syncQueueRef = useRef<SyncQueue>(syncQueue);
+  const syncInFlightRef = useRef(false);
 
   const palette = useMemo(() => getPaletteById(paletteId), [paletteId]);
   const jointTone = useMemo(() => getPaletteTone(palette, 3, darkMode), [palette, darkMode]);
@@ -4624,6 +4878,34 @@ const App: React.FC = () => {
         ? [t('appName'), t('settingsLabel'), t('profileTitle')]
         : [t('appName'), pageLabel]
   ), [currentMonthKey, formatMonthKey, isBudgetView, isSettingsView, pageLabel, t]);
+  const pendingSyncCount = useMemo(() => (
+    Object.keys(syncQueue.months).length
+    + Object.keys(syncQueue.deletes).length
+    + (syncQueue.settings ? 1 : 0)
+  ), [syncQueue.deletes, syncQueue.months, syncQueue.settings]);
+  const syncBadgeLabel = useMemo(() => {
+    if (syncNotice) {
+      return syncNotice.label;
+    }
+    if (!isOnline) {
+      return pendingSyncCount > 0
+        ? `${t('offlineLabel')} · ${pendingSyncCount}`
+        : t('offlineLabel');
+    }
+    if (pendingSyncCount > 0) {
+      return `${t('syncPendingLabel')} ${pendingSyncCount}`;
+    }
+    return null;
+  }, [isOnline, pendingSyncCount, syncNotice, t]);
+  const syncBadgeTone = useMemo(() => {
+    if (syncNotice) {
+      return syncNotice.tone;
+    }
+    if (!isOnline) {
+      return 'warning' as const;
+    }
+    return 'info' as const;
+  }, [isOnline, syncNotice]);
   const calendarWidget = (
     <BudgetCalendarWidget
       monthKey={currentMonthKey}
@@ -4653,6 +4935,8 @@ const App: React.FC = () => {
     sortByCost,
     showSidebarMonths,
     currencyPreference,
+    isOnline,
+    sessionDurationHours,
     oidcEnabled,
     oidcProviderName,
     oidcIssuer,
@@ -4719,8 +5003,40 @@ const App: React.FC = () => {
       if (toastTimeoutRef.current) {
         window.clearTimeout(toastTimeoutRef.current);
       }
+      if (syncNoticeTimeoutRef.current) {
+        window.clearTimeout(syncNoticeTimeoutRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    syncQueueRef.current = syncQueue;
+    if (typeof window === 'undefined') {
+      return;
+    }
+    localStorage.setItem(SYNC_QUEUE_STORAGE_KEY, JSON.stringify(syncQueue));
+  }, [syncQueue]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOnline) {
+      return;
+    }
+    void flushSyncQueue();
+  }, [flushSyncQueue, isOnline, pendingSyncCount]);
 
   const handleLogin = async (username: string, password: string) => {
     if (!username || !password) {
@@ -4865,6 +5181,13 @@ const App: React.FC = () => {
   }, [currencyPreference]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !isHydrated) {
+      return;
+    }
+    localStorage.setItem(OFFLINE_BUDGET_CACHE_KEY, JSON.stringify(monthlyBudgets));
+  }, [isHydrated, monthlyBudgets]);
+
+  useEffect(() => {
     if (!authToken || !settingsLoaded || showOnboarding) {
       return;
     }
@@ -4875,13 +5198,23 @@ const App: React.FC = () => {
     }
     const previous = lastSavedSettingsRef.current;
     lastSavedSettingsRef.current = serialized;
+    if (!isOnline) {
+      enqueueSettingsSync(serialized);
+      return;
+    }
     void updateAppSettingsRequest(payload)
       .then((settings) => {
         lastSavedSettingsRef.current = JSON.stringify(settings);
       })
       .catch((error) => {
-        lastSavedSettingsRef.current = previous;
-        console.error('Failed to update settings', error);
+        if (!handleAuthFailure(error)) {
+          if (isRetriableSyncError(error)) {
+            enqueueSettingsSync(serialized);
+          } else {
+            lastSavedSettingsRef.current = previous;
+            console.error('Failed to update settings', error);
+          }
+        }
       });
   }, [
     authToken,
@@ -4893,6 +5226,7 @@ const App: React.FC = () => {
     sortByCost,
     showSidebarMonths,
     currencyPreference,
+    sessionDurationHours,
     oidcEnabled,
     oidcProviderName,
     oidcIssuer,
@@ -5056,6 +5390,7 @@ const App: React.FC = () => {
         setShowSidebarMonths(settings.showSidebarMonths ?? true);
         setLanguagePreference(settings.languagePreference);
         setCurrencyPreference(settings.currencyPreference ?? 'EUR');
+        setSessionDurationHours(settings.sessionDurationHours ?? 12);
         setOidcEnabled(settings.oidcEnabled ?? false);
         setOidcProviderName(settings.oidcProviderName ?? '');
         setOidcIssuer(settings.oidcIssuer ?? '');
@@ -5121,6 +5456,7 @@ const App: React.FC = () => {
     }
 
     const loadMonths = async () => {
+      let usedCache = false;
       try {
         const months = await fetchMonths();
         if (!isActive) {
@@ -5158,9 +5494,26 @@ const App: React.FC = () => {
           hadAuthFailure = true;
           return;
         }
-        console.error('Failed to load months', error);
-        const initialKey = getCurrentMonthKey(new Date());
-        setMonthlyBudgets({ [initialKey]: getDefaultBudgetData() });
+        if (isRetriableSyncError(error)) {
+          const cached = loadBudgetCache();
+          if (cached && Object.keys(cached).length > 0) {
+            const normalized: MonthlyBudget = {};
+            Object.keys(cached).forEach(monthKey => {
+              normalized[monthKey] = normalizeBudgetData(cached[monthKey]);
+            });
+            lastSavedPayloadRef.current = {};
+            Object.keys(normalized).forEach(monthKey => {
+              lastSavedPayloadRef.current[monthKey] = JSON.stringify(normalized[monthKey]);
+            });
+            setMonthlyBudgets(normalized);
+            usedCache = true;
+          }
+        }
+        if (!usedCache) {
+          console.error('Failed to load months', error);
+          const initialKey = getCurrentMonthKey(new Date());
+          setMonthlyBudgets({ [initialKey]: getDefaultBudgetData() });
+        }
       } finally {
         if (isActive && !hadAuthFailure) {
           setIsHydrated(true);
@@ -5205,13 +5558,24 @@ const App: React.FC = () => {
         if (lastSavedPayloadRef.current[monthKey] === payload) {
           return;
         }
+        if (!isOnline) {
+          if (syncQueueRef.current.months[monthKey]?.payload !== payload) {
+            enqueueMonthSync(monthKey, payload);
+          }
+          return;
+        }
         void upsertMonth(monthKey, monthData)
           .then(() => {
             lastSavedPayloadRef.current[monthKey] = payload;
+            clearSyncQueueEntry(monthKey);
           })
           .catch(error => {
             if (!handleAuthFailure(error)) {
-              console.error('Failed to save month', error);
+              if (isRetriableSyncError(error)) {
+                enqueueMonthSync(monthKey, payload);
+              } else {
+                console.error('Failed to save month', error);
+              }
             }
           });
       });
@@ -5222,7 +5586,7 @@ const App: React.FC = () => {
         window.clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [authToken, isHydrated, monthlyBudgets]);
+  }, [authToken, isHydrated, isOnline, monthlyBudgets]);
 
   useEffect(() => {
     if (!pendingOnboarding || !isHydrated) {
@@ -5288,13 +5652,24 @@ const App: React.FC = () => {
       if (lastSavedPayloadRef.current[monthKey] === payload) {
         return;
       }
+      if (!isOnline) {
+        if (syncQueueRef.current.months[monthKey]?.payload !== payload) {
+          enqueueMonthSync(monthKey, payload);
+        }
+        return;
+      }
       void upsertMonth(monthKey, monthData)
         .then(() => {
           lastSavedPayloadRef.current[monthKey] = payload;
+          clearSyncQueueEntry(monthKey);
         })
         .catch(error => {
           if (!handleAuthFailure(error)) {
-            console.error('Failed to save month', error);
+            if (isRetriableSyncError(error)) {
+              enqueueMonthSync(monthKey, payload);
+            } else {
+              console.error('Failed to save month', error);
+            }
           }
         });
     });
@@ -5460,15 +5835,25 @@ const App: React.FC = () => {
       window.clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    try {
-      await deleteMonth(monthKey);
-      delete lastSavedPayloadRef.current[monthKey];
-    } catch (error) {
-      if (!handleAuthFailure(error)) {
-        console.error('Failed to delete month', error);
-        alert(t('deleteMonthError'));
+    if (!isOnline) {
+      enqueueMonthDelete(monthKey);
+    } else {
+      try {
+        await deleteMonth(monthKey);
+        delete lastSavedPayloadRef.current[monthKey];
+      } catch (error) {
+        if (!handleAuthFailure(error)) {
+          if (isRetriableSyncError(error)) {
+            enqueueMonthDelete(monthKey);
+          } else {
+            console.error('Failed to delete month', error);
+            alert(t('deleteMonthError'));
+            return;
+          }
+        } else {
+          return;
+        }
       }
-      return;
     }
 
     const remainingKeys = Object.keys(monthlyBudgets).filter(key => key !== monthKey).sort();
@@ -5795,6 +6180,7 @@ const App: React.FC = () => {
       if (!targetSource) {
         return prev;
       }
+      showUndoToast(t('undoDeleteLabel'), () => setMonthlyBudgets(prev));
       const normalizedName = normalizeIconLabel(targetSource.name);
       const templateId = targetSource.templateId;
       const updated: MonthlyBudget = {
@@ -6032,6 +6418,7 @@ const App: React.FC = () => {
       if (!targetExpense) {
         return prev;
       }
+      showUndoToast(t('undoDeleteLabel'), () => setMonthlyBudgets(prev));
       const normalizedName = normalizeIconLabel(targetExpense.name);
       const templateId = targetExpense.templateId;
       const updated: MonthlyBudget = {
@@ -6156,6 +6543,7 @@ const App: React.FC = () => {
       if (!targetExpense) {
         return prev;
       }
+      showUndoToast(t('undoEditLabel'), () => setMonthlyBudgets(prev));
       const nextName = updates.name;
       const nextAmount = updates.amount;
       const nextCategoryOverrideId = updates.categoryOverrideId;
@@ -6433,6 +6821,7 @@ const App: React.FC = () => {
       if (!targetCategory) {
         return prev;
       }
+      showUndoToast(t('undoDeleteLabel'), () => setMonthlyBudgets(prev));
       const normalizedName = normalizeIconLabel(targetCategory.name);
       const templateId = targetCategory.templateId;
       const updated: MonthlyBudget = {
@@ -6589,6 +6978,7 @@ const App: React.FC = () => {
       if (!targetCategory) {
         return prev;
       }
+      showUndoToast(t('undoEditLabel'), () => setMonthlyBudgets(prev));
       const nextName = updates.name;
       const nextIsRecurring = updates.isRecurring;
       const nextRecurringMonths = nextIsRecurring
@@ -7191,16 +7581,199 @@ const App: React.FC = () => {
     resetJointDeleteConfirm();
   };
 
-  const showToast = (message: string, tone: 'success' | 'error' = 'success') => {
-    setToast({ message, tone });
+  const showToast = (
+    message: string,
+    tone: 'success' | 'error' = 'success',
+    action?: { label: string; onClick: () => void },
+    durationMs = 2600
+  ) => {
+    setToast({ message, tone, action });
     if (toastTimeoutRef.current) {
       window.clearTimeout(toastTimeoutRef.current);
     }
     toastTimeoutRef.current = window.setTimeout(() => {
       setToast(null);
       toastTimeoutRef.current = null;
-    }, 2600);
+    }, durationMs);
   };
+
+  const showUndoToast = (message: string, onUndo: () => void) => {
+    showToast(message, 'success', { label: t('undoLabel'), onClick: onUndo }, 6000);
+  };
+
+  const showSyncNotice = (label: string, tone: 'info' | 'warning' = 'info') => {
+    setSyncNotice({ label, tone });
+    if (syncNoticeTimeoutRef.current) {
+      window.clearTimeout(syncNoticeTimeoutRef.current);
+    }
+    syncNoticeTimeoutRef.current = window.setTimeout(() => {
+      setSyncNotice(null);
+      syncNoticeTimeoutRef.current = null;
+    }, 5000);
+  };
+
+  const enqueueMonthSync = (monthKey: string, payload: string) => {
+    setSyncQueue(prev => ({
+      ...prev,
+      months: {
+        ...prev.months,
+        [monthKey]: { payload, updatedAt: Date.now() }
+      },
+      deletes: Object.keys(prev.deletes).includes(monthKey)
+        ? Object.fromEntries(Object.entries(prev.deletes).filter(([key]) => key !== monthKey))
+        : prev.deletes
+    }));
+  };
+
+  const enqueueMonthDelete = (monthKey: string) => {
+    setSyncQueue(prev => ({
+      ...prev,
+      months: Object.keys(prev.months).includes(monthKey)
+        ? Object.fromEntries(Object.entries(prev.months).filter(([key]) => key !== monthKey))
+        : prev.months,
+      deletes: {
+        ...prev.deletes,
+        [monthKey]: { updatedAt: Date.now() }
+      }
+    }));
+  };
+
+  const enqueueSettingsSync = (payload: string) => {
+    setSyncQueue(prev => ({
+      ...prev,
+      settings: { payload, updatedAt: Date.now() }
+    }));
+  };
+
+  const clearSyncQueueEntry = (monthKey: string) => {
+    setSyncQueue(prev => {
+      if (!prev.months[monthKey] && !prev.deletes[monthKey]) {
+        return prev;
+      }
+      const nextMonths = { ...prev.months };
+      const nextDeletes = { ...prev.deletes };
+      delete nextMonths[monthKey];
+      delete nextDeletes[monthKey];
+      return { ...prev, months: nextMonths, deletes: nextDeletes };
+    });
+  };
+
+  const resolveServerPayloadString = (data: BudgetData | null) => (
+    data ? JSON.stringify(normalizeBudgetData(data)) : null
+  );
+
+  const flushSyncQueue = useCallback(async () => {
+    if (!authToken || !isOnline || syncInFlightRef.current) {
+      return;
+    }
+    const queueSnapshot = syncQueueRef.current;
+    const monthEntries = Object.entries(queueSnapshot.months);
+    const deleteEntries = Object.entries(queueSnapshot.deletes);
+    const hasSettings = Boolean(queueSnapshot.settings);
+    if (monthEntries.length === 0 && deleteEntries.length === 0 && !hasSettings) {
+      return;
+    }
+    syncInFlightRef.current = true;
+    try {
+      for (const [monthKey, entry] of deleteEntries) {
+        let serverPayload: string | null = null;
+        let serverUpdatedAt: string | null = null;
+        try {
+          const server = await fetchMonth(monthKey);
+          serverPayload = resolveServerPayloadString(server?.data ?? null);
+          serverUpdatedAt = server?.updatedAt ?? null;
+        } catch (error) {
+          if (isAuthError(error)) {
+            return;
+          }
+          if (!isRetriableSyncError(error)) {
+            clearSyncQueueEntry(monthKey);
+          }
+          continue;
+        }
+        const serverTimestamp = Date.parse(serverUpdatedAt ?? '') || 0;
+        if (serverPayload && serverTimestamp > entry.updatedAt) {
+          const normalized = JSON.parse(serverPayload) as BudgetData;
+          setMonthlyBudgets(prev => {
+            const next = { ...prev, [monthKey]: normalizeBudgetData(normalized) };
+            return applyJointBalanceCarryover(next, monthKey);
+          });
+          lastSavedPayloadRef.current[monthKey] = serverPayload;
+          clearSyncQueueEntry(monthKey);
+          showSyncNotice(t('syncAutoServerLabel'), 'warning');
+          continue;
+        }
+        try {
+          await deleteMonth(monthKey);
+          clearSyncQueueEntry(monthKey);
+          delete lastSavedPayloadRef.current[monthKey];
+          showSyncNotice(t('syncAutoLocalLabel'), 'info');
+        } catch (error) {
+          if (!isAuthError(error) && !isRetriableSyncError(error)) {
+            clearSyncQueueEntry(monthKey);
+          }
+        }
+      }
+
+      for (const [monthKey, entry] of monthEntries) {
+        const localPayload = entry.payload;
+        let serverPayload: string | null = null;
+        let serverUpdatedAt: string | null = null;
+        try {
+          const server = await fetchMonth(monthKey);
+          serverPayload = resolveServerPayloadString(server?.data ?? null);
+          serverUpdatedAt = server?.updatedAt ?? null;
+        } catch (error) {
+          if (isAuthError(error)) {
+            return;
+          }
+          if (!isRetriableSyncError(error)) {
+            clearSyncQueueEntry(monthKey);
+          }
+          continue;
+        }
+        const serverTimestamp = Date.parse(serverUpdatedAt ?? '') || 0;
+        if (serverPayload && serverTimestamp > entry.updatedAt) {
+          const normalized = JSON.parse(serverPayload) as BudgetData;
+          setMonthlyBudgets(prev => {
+            const next = { ...prev, [monthKey]: normalizeBudgetData(normalized) };
+            return applyJointBalanceCarryover(next, monthKey);
+          });
+          lastSavedPayloadRef.current[monthKey] = serverPayload;
+          clearSyncQueueEntry(monthKey);
+          showSyncNotice(t('syncAutoServerLabel'), 'warning');
+          continue;
+        }
+        try {
+          const payload = JSON.parse(localPayload) as BudgetData;
+          await upsertMonth(monthKey, payload);
+          lastSavedPayloadRef.current[monthKey] = localPayload;
+          clearSyncQueueEntry(monthKey);
+          showSyncNotice(t('syncAutoLocalLabel'), 'info');
+        } catch (error) {
+          if (!isAuthError(error) && !isRetriableSyncError(error)) {
+            clearSyncQueueEntry(monthKey);
+          }
+        }
+      }
+
+      if (queueSnapshot.settings) {
+        try {
+          const settingsPayload = JSON.parse(queueSnapshot.settings.payload) as Partial<AppSettings>;
+          const settings = await updateAppSettingsRequest(settingsPayload);
+          lastSavedSettingsRef.current = JSON.stringify(settings);
+          setSyncQueue(prev => ({ ...prev, settings: undefined }));
+          showSyncNotice(t('syncAutoLocalLabel'), 'info');
+        } catch (error) {
+          if (!isAuthError(error) && !isRetriableSyncError(error)) {
+            setSyncQueue(prev => ({ ...prev, settings: undefined }));
+          }
+        }
+      }
+    } finally {
+      syncInFlightRef.current = false;
+    }
+  }, [authToken, clearSyncQueueEntry, isOnline, resolveServerPayloadString, showSyncNotice, t]);
 
   const openJointWizardForCreate = (type: 'deposit' | 'expense') => {
     resetJointDeleteConfirm();
@@ -7426,6 +7999,14 @@ const App: React.FC = () => {
             const result = await loginRequest(username, password);
             applyLoginResult(result);
           }}
+          onCreateSecondUser={async ({ username, password, displayName }) => {
+            await createUserRequest({
+              username,
+              password,
+              displayName: displayName?.trim() || null,
+              role: 'user'
+            });
+          }}
         />
       </TranslationContext.Provider>
     );
@@ -7519,6 +8100,8 @@ const App: React.FC = () => {
               userDisplayName={userDisplayName}
               userAvatarUrl={resolvedUserAvatarUrl}
               breadcrumbItems={breadcrumbItems}
+              syncBadgeLabel={syncBadgeLabel}
+              syncBadgeTone={syncBadgeTone}
             />
 
       {isBudgetView && selectorError && (
@@ -7546,6 +8129,8 @@ const App: React.FC = () => {
           onLanguagePreferenceChange={setLanguagePreference}
           currencyPreference={currencyPreference}
           onCurrencyPreferenceChange={setCurrencyPreference}
+          sessionDurationHours={sessionDurationHours}
+          onSessionDurationHoursChange={setSessionDurationHours}
           oidcEnabled={oidcEnabled}
           oidcProviderName={oidcProviderName}
           oidcIssuer={oidcIssuer}
@@ -8863,13 +9448,29 @@ const App: React.FC = () => {
             aria-live="polite"
           >
             <div
-              className={`w-full sm:w-auto sm:min-w-[220px] rounded-xl px-4 py-2 text-sm font-semibold shadow-lg ${
+              className={`w-full sm:w-auto sm:min-w-[220px] rounded-xl px-4 py-2 text-sm font-semibold shadow-lg pointer-events-auto flex items-center gap-3 ${
                 toast.tone === 'error'
                   ? (darkMode ? 'bg-rose-600 text-white' : 'bg-rose-500 text-white')
                   : (darkMode ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-white')
               }`}
             >
-              {toast.message}
+              <span className="flex-1">{toast.message}</span>
+              {toast.action && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.action?.onClick();
+                    if (toastTimeoutRef.current) {
+                      window.clearTimeout(toastTimeoutRef.current);
+                      toastTimeoutRef.current = null;
+                    }
+                    setToast(null);
+                  }}
+                  className="px-2 py-1 text-xs font-semibold rounded-full border border-white/50 text-white hover:bg-white/15 transition whitespace-nowrap"
+                >
+                  {toast.action.label}
+                </button>
+              )}
             </div>
           </div>
         )}

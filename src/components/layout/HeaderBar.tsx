@@ -27,6 +27,8 @@ type HeaderBarProps = {
   userDisplayName: string;
   userAvatarUrl: string | null;
   breadcrumbItems: string[];
+  syncBadgeLabel?: string | null;
+  syncBadgeTone?: 'info' | 'warning' | 'error';
 };
 
 const HeaderBar = React.memo(({
@@ -53,7 +55,9 @@ const HeaderBar = React.memo(({
   userInitial,
   userDisplayName,
   userAvatarUrl,
-  breadcrumbItems
+  breadcrumbItems,
+  syncBadgeLabel,
+  syncBadgeTone = 'info'
 }: HeaderBarProps) => (
   <div className="flex flex-col gap-3 mb-4 sm:mb-6 sm:static sticky top-0 z-30 pb-2 sm:pb-0 bg-transparent">
     <div className="sm:hidden flex items-center justify-between gap-2">
@@ -66,6 +70,19 @@ const HeaderBar = React.memo(({
         <Menu size={20} />
       </button>
       <div className="flex items-center gap-2">
+        {syncBadgeLabel && (
+          <span
+            className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
+              syncBadgeTone === 'error'
+                ? 'bg-rose-500 text-white'
+                : syncBadgeTone === 'warning'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-sky-500 text-white'
+            }`}
+          >
+            {syncBadgeLabel}
+          </span>
+        )}
         {renderPaletteSelector()}
         <button
           type="button"
@@ -191,6 +208,19 @@ const HeaderBar = React.memo(({
           darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-white/80 border-slate-100'
         }`}
         >
+          {syncBadgeLabel && (
+            <span
+              className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
+                syncBadgeTone === 'error'
+                  ? 'bg-rose-500 text-white'
+                  : syncBadgeTone === 'warning'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-sky-500 text-white'
+              }`}
+            >
+              {syncBadgeLabel}
+            </span>
+          )}
           {isBudgetView && (
             <button
               onClick={onToggleNextMonth}
