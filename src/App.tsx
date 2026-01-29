@@ -29,6 +29,7 @@ interface Category {
   recurringMonths?: number;
   startMonth?: string; // format: "YYYY-MM"
   date?: string;
+  propagate?: boolean;
 }
 
 interface FixedExpense {
@@ -122,6 +123,7 @@ type ExpenseWizardState = {
   isRecurring: boolean;
   recurringMonths: number;
   startMonth: string;
+  propagate: boolean;
 };
 
 type JointWizardState = {
@@ -259,8 +261,27 @@ const getInitialCurrencyPreference = (): 'EUR' | 'USD' => {
   return localStorage.getItem('currencyPreference') === 'USD' ? 'USD' : 'EUR';
 };
 
+const LAST_VIEWED_MONTH_KEY = 'lastViewedMonthKey';
 const SYNC_QUEUE_STORAGE_KEY = 'syncQueue';
 const OFFLINE_BUDGET_CACHE_KEY = 'offlineBudgetCache';
+
+const getLastViewedMonthStorageKey = (userHandle?: string | null) => (
+  userHandle ? `${LAST_VIEWED_MONTH_KEY}:${userHandle}` : LAST_VIEWED_MONTH_KEY
+);
+
+const getInitialCurrentDate = (): Date => {
+  if (typeof window === 'undefined') {
+    return new Date();
+  }
+  const stored = localStorage.getItem(getLastViewedMonthStorageKey());
+  if (stored && /^\d{4}-\d{2}$/.test(stored)) {
+    const parsed = new Date(`${stored}-01`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return new Date();
+};
 
 const getInitialOnlineStatus = (): boolean => {
   if (typeof window === 'undefined') {
@@ -499,6 +520,19 @@ const getCurrentMonthKey = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
+};
+
+const getDefaultDateForMonthKey = (monthKey: string, baseDate = new Date()) => {
+  const [yearValue, monthValue] = monthKey.split('-');
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return '';
+  }
+  const day = baseDate.getDate();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const safeDay = Math.min(Math.max(day, 1), daysInMonth);
+  return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 };
 
 const calculateTotalIncome = (incomeSources: IncomeSource[]) => {
@@ -1132,7 +1166,8 @@ const normalizeBudgetData = (data: BudgetData): BudgetData => ({
     categories: (data.person1?.categories ?? []).map(category => ({
       ...category,
       amount: coerceNumber(category.amount),
-      isChecked: Boolean(category.isChecked)
+      isChecked: Boolean(category.isChecked),
+      propagate: category.propagate !== false
     }))
   },
   person2: {
@@ -1150,7 +1185,8 @@ const normalizeBudgetData = (data: BudgetData): BudgetData => ({
     categories: (data.person2?.categories ?? []).map(category => ({
       ...category,
       amount: coerceNumber(category.amount),
-      isChecked: Boolean(category.isChecked)
+      isChecked: Boolean(category.isChecked),
+      propagate: category.propagate !== false
     }))
   },
   jointAccount: {
@@ -4713,7 +4749,7 @@ const SettingsView = ({
 const App: React.FC = () => {
   const [themePreference, setThemePreference] = useState<'light' | 'dark'>(() => getInitialThemePreference());
   const [darkMode, setDarkMode] = useState(() => getInitialThemePreference() === 'dark');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState<Date>(() => getInitialCurrentDate());
   const [authToken, setAuthToken] = useState<string | null>(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -4799,6 +4835,7 @@ const App: React.FC = () => {
   const syncNoticeTimeoutRef = useRef<number | null>(null);
   const syncQueueRef = useRef<SyncQueue>(syncQueue);
   const syncInFlightRef = useRef(false);
+  const lastViewedMonthUserRef = useRef<string | null>(null);
 
   const palette = useMemo(() => getPaletteById(paletteId), [paletteId]);
   const jointTone = useMemo(() => getPaletteTone(palette, 3, darkMode), [palette, darkMode]);
@@ -4935,7 +4972,6 @@ const App: React.FC = () => {
     sortByCost,
     showSidebarMonths,
     currencyPreference,
-    isOnline,
     sessionDurationHours,
     oidcEnabled,
     oidcProviderName,
@@ -5030,13 +5066,6 @@ const App: React.FC = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-
-  useEffect(() => {
-    if (!isOnline) {
-      return;
-    }
-    void flushSyncQueue();
-  }, [flushSyncQueue, isOnline, pendingSyncCount]);
 
   const handleLogin = async (username: string, password: string) => {
     if (!username || !password) {
@@ -5443,6 +5472,38 @@ const App: React.FC = () => {
   }, [currentMonthKey]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    localStorage.setItem(getLastViewedMonthStorageKey(), currentMonthKey);
+    if (userHandle) {
+      localStorage.setItem(getLastViewedMonthStorageKey(userHandle), currentMonthKey);
+    }
+  }, [currentMonthKey, userHandle]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!userHandle) {
+      lastViewedMonthUserRef.current = null;
+      return;
+    }
+    if (lastViewedMonthUserRef.current === userHandle) {
+      return;
+    }
+    lastViewedMonthUserRef.current = userHandle;
+    const stored = localStorage.getItem(getLastViewedMonthStorageKey(userHandle));
+    if (!stored || !/^\d{4}-\d{2}$/.test(stored) || stored === currentMonthKey) {
+      return;
+    }
+    const parsed = new Date(`${stored}-01`);
+    if (!Number.isNaN(parsed.getTime())) {
+      setCurrentDate(parsed);
+    }
+  }, [currentMonthKey, userHandle]);
+
+  useEffect(() => {
     let isActive = true;
     let hadAuthFailure = false;
 
@@ -5711,13 +5772,16 @@ const App: React.FC = () => {
   const copyRecurringCategories = (categories: Category[], targetMonth: string): Category[] => {
     const recurringCategories: Category[] = [];
 
-    const nonRecurringCategories = categories.filter(cat => !cat.isRecurring).map(cat => ({
+    const nonRecurringCategories = categories.filter(cat => !cat.isRecurring && cat.propagate !== false).map(cat => ({
       ...cat,
       id: Date.now().toString() + Math.random(),
       templateId: cat.templateId ?? createTemplateId()
     }));
 
     categories.forEach(cat => {
+      if (cat.propagate === false) {
+        return;
+      }
       if (cat.isRecurring && cat.startMonth && cat.recurringMonths) {
         const startDate = new Date(cat.startMonth + '-01');
         const targetDate = new Date(targetMonth + '-01');
@@ -6756,10 +6820,11 @@ const App: React.FC = () => {
       isRecurring,
       recurringMonths: isRecurring ? (overrides.recurringMonths ?? 3) : overrides.recurringMonths,
       startMonth: isRecurring ? (overrides.startMonth ?? currentMonthKey) : overrides.startMonth,
-      date: overrides.date
+      date: overrides.date,
+      propagate: overrides.propagate ?? true
     };
     const normalizedName = normalizeIconLabel(newCategory.name);
-    const shouldPropagate = Boolean(newCategory.templateId) || shouldPropagateCategory(newCategory.name);
+    const shouldPropagate = newCategory.propagate !== false && (Boolean(newCategory.templateId) || shouldPropagateCategory(newCategory.name));
     const templateId = newCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
     const seededCategory = templateId ? { ...newCategory, templateId } : newCategory;
     setMonthlyBudgets(prev => {
@@ -6835,7 +6900,8 @@ const App: React.FC = () => {
         }
       };
 
-      const shouldPropagate = Boolean(templateId) || shouldPropagateCategory(targetCategory.name);
+      const shouldPropagate = targetCategory.propagate !== false
+        && (Boolean(templateId) || shouldPropagateCategory(targetCategory.name));
       if (shouldPropagate) {
         Object.keys(updated)
           .filter(monthKey => monthKey > currentMonthKey)
@@ -6878,10 +6944,14 @@ const App: React.FC = () => {
         nextCategory.recurringMonths = nextCategory.recurringMonths || 3;
         nextCategory.startMonth = nextCategory.startMonth || currentMonthKey;
       }
+      const nextPropagate = field === 'propagate' ? Boolean(value) : targetCategory.propagate !== false;
       const shouldPropagate = field !== 'isChecked'
+        && nextPropagate
         && (Boolean(targetCategory.templateId) || shouldPropagateCategory(nextName));
       const templateId = targetCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
-      const updatedCategory = templateId ? { ...nextCategory, templateId } : nextCategory;
+      const updatedCategory = templateId
+        ? { ...nextCategory, templateId, propagate: nextPropagate }
+        : { ...nextCategory, propagate: nextPropagate };
       const updatedCategories = currentCategories.map(cat =>
         cat.id === id ? updatedCategory : cat
       );
@@ -6896,8 +6966,44 @@ const App: React.FC = () => {
         }
       };
 
-      if (shouldPropagate) {
+      if (shouldPropagate || field === 'propagate') {
         const normalizedName = normalizeIconLabel(targetCategory.name);
+        if (!normalizedName) {
+          return applyJointBalanceCarryover(updated, currentMonthKey);
+        }
+        if (field === 'propagate') {
+          Object.keys(updated)
+            .filter(monthKey => monthKey > currentMonthKey)
+            .forEach(monthKey => {
+              const monthData = updated[monthKey];
+              if (!monthData) {
+                return;
+              }
+              let changed = false;
+              const nextCategories: Category[] = monthData[personKey].categories.map(cat => {
+                const matchesTemplate = templateId && cat.templateId === templateId;
+                const matchesName = !matchesTemplate && normalizeIconLabel(cat.name) === normalizedName;
+                if (!matchesTemplate && !matchesName) {
+                  return cat;
+                }
+                changed = true;
+                const base = templateId ? { ...cat, templateId } : { ...cat };
+                return { ...base, propagate: nextPropagate };
+              });
+              if (!changed) {
+                return;
+              }
+              updated[monthKey] = {
+                ...monthData,
+                [personKey]: {
+                  ...monthData[personKey],
+                  categories: nextCategories
+                }
+              };
+            });
+          return applyJointBalanceCarryover(updated, currentMonthKey);
+        }
+
         const updateFields = field === 'isRecurring' && value === true
           ? {
               isRecurring: true,
@@ -6917,6 +7023,10 @@ const App: React.FC = () => {
             let hasMatch = false;
             const nextCategories: Category[] = [];
             monthData[personKey].categories.forEach(cat => {
+              if (cat.propagate === false) {
+                nextCategories.push(cat);
+                return;
+              }
               const matchesTemplate = templateId && cat.templateId === templateId;
               const matchesName = !matchesTemplate && normalizeIconLabel(cat.name) === normalizedName;
               if (!matchesTemplate && !matchesName) {
@@ -6969,6 +7079,7 @@ const App: React.FC = () => {
       isRecurring: boolean;
       recurringMonths?: number;
       startMonth?: string;
+      propagate: boolean;
     }
   ) => {
     setMonthlyBudgets(prev => {
@@ -6987,7 +7098,9 @@ const App: React.FC = () => {
       const nextStartMonth = nextIsRecurring
         ? (updates.startMonth ?? targetCategory.startMonth ?? currentMonthKey)
         : undefined;
-      const shouldPropagate = Boolean(targetCategory.templateId) || shouldPropagateCategory(nextName);
+      const nextPropagate = updates.propagate !== false;
+      const shouldPropagate = nextPropagate
+        && (Boolean(targetCategory.templateId) || shouldPropagateCategory(nextName));
       const templateId = targetCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
       const updatedCategory: Category = {
         ...targetCategory,
@@ -6998,6 +7111,7 @@ const App: React.FC = () => {
         isRecurring: nextIsRecurring,
         recurringMonths: nextRecurringMonths,
         startMonth: nextStartMonth,
+        propagate: nextPropagate,
         ...(templateId ? { templateId } : {})
       };
       const updatedCategories = currentCategories.map(cat =>
@@ -7046,6 +7160,7 @@ const App: React.FC = () => {
             || Boolean(cat.isRecurring) !== Boolean(updatedCategory.isRecurring)
             || (cat.recurringMonths || 0) !== (updatedCategory.recurringMonths || 0)
             || (cat.startMonth || '') !== (updatedCategory.startMonth || '')
+            || Boolean(cat.propagate !== false) !== Boolean(updatedCategory.propagate !== false)
           ));
         });
 
@@ -7104,17 +7219,21 @@ const App: React.FC = () => {
             if (!isMatch(cat)) {
               return cat;
             }
-          return {
-            ...cat,
-            name: updatedCategory.name,
-            amount: updatedCategory.amount,
-            categoryOverrideId: updatedCategory.categoryOverrideId,
-            date: updatedCategory.date,
-            isRecurring: updatedCategory.isRecurring,
-            recurringMonths: updatedCategory.recurringMonths,
-            startMonth: updatedCategory.startMonth,
-            ...(templateId ? { templateId } : {})
-          };
+            if (cat.propagate === false) {
+              return cat;
+            }
+            return {
+              ...cat,
+              name: updatedCategory.name,
+              amount: updatedCategory.amount,
+              categoryOverrideId: updatedCategory.categoryOverrideId,
+              date: updatedCategory.date,
+              isRecurring: updatedCategory.isRecurring,
+              recurringMonths: updatedCategory.recurringMonths,
+              startMonth: updatedCategory.startMonth,
+              propagate: updatedCategory.propagate,
+              ...(templateId ? { templateId } : {})
+            };
           });
           updated[monthKey] = {
             ...monthData,
@@ -7174,7 +7293,8 @@ const App: React.FC = () => {
         categoryOverrideId: movedExpense.categoryOverrideId ?? '',
         isChecked: Boolean(movedExpense.isChecked),
         isRecurring: false,
-        date: movedExpense.date
+        date: movedExpense.date,
+        propagate: true
       };
       const nextCategories = [...categories];
       const insertIndex = Math.min(Math.max(destinationIndex, 0), nextCategories.length);
@@ -7233,7 +7353,8 @@ const App: React.FC = () => {
               categoryOverrideId: movedExpense.categoryOverrideId ?? '',
               templateId,
               date: movedExpense.date,
-              isChecked: matchedFixed?.isChecked ?? existingCategory.isChecked
+              isChecked: matchedFixed?.isChecked ?? existingCategory.isChecked,
+              propagate: existingCategory.propagate !== false
             };
             nextMonthCategories = monthCategories.map((category, index) => (
               index === categoryIndex ? updatedCategory : category
@@ -7248,7 +7369,8 @@ const App: React.FC = () => {
               categoryOverrideId: movedExpense.categoryOverrideId ?? '',
               isChecked: Boolean(matchedFixed?.isChecked),
               isRecurring: false,
-              date: movedExpense.date
+              date: movedExpense.date,
+              propagate: true
             };
             nextMonthCategories = [...monthCategories];
             const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthCategories.length);
@@ -7317,85 +7439,88 @@ const App: React.FC = () => {
           }
         }
       };
-      Object.keys(updated)
-        .filter(monthKey => monthKey > currentMonthKey)
-        .forEach(monthKey => {
-          const monthData = updated[monthKey];
-          if (!monthData) {
-            return;
-          }
-          const monthFixed = monthData[personKey].fixedExpenses;
-          const monthCategories = monthData[personKey].categories;
-          const matchesFixed = (expense: FixedExpense) => {
-            const matchesTemplate = templateId && expense.templateId === templateId;
-            const matchesName = !matchesTemplate && normalizeIconLabel(expense.name) === normalizedName;
-            return matchesTemplate || matchesName;
-          };
-          const matchesCategory = (category: Category) => {
-            const matchesTemplate = templateId && category.templateId === templateId;
-            const matchesName = !matchesTemplate && normalizeIconLabel(category.name) === normalizedName;
-            return matchesTemplate || matchesName;
-          };
-          const fixedIndex = monthFixed.findIndex(matchesFixed);
-          const categoryIndex = monthCategories.findIndex(matchesCategory);
-          if (fixedIndex === -1 && categoryIndex === -1) {
-            return;
-          }
-          const matchedCategory = categoryIndex !== -1 ? monthCategories[categoryIndex] : null;
-          let nextMonthFixed = monthFixed;
-          let nextMonthCategories = monthCategories;
-          let changed = false;
-
-          if (categoryIndex !== -1) {
-            nextMonthCategories = monthCategories.filter((_, index) => index !== categoryIndex);
-            changed = true;
-          }
-
-          if (fixedIndex !== -1) {
-            const existingExpense = monthFixed[fixedIndex];
-            const updatedExpense: FixedExpense = {
-              ...existingExpense,
-              name: movedCategory.name,
-              amount: coerceNumber(movedCategory.amount),
-              categoryOverrideId: movedCategory.categoryOverrideId ?? '',
-              date: movedCategory.date,
-              templateId
-            };
-            nextMonthFixed = monthFixed.map((expense, index) => (
-              index === fixedIndex ? updatedExpense : expense
-            ));
-            changed = true;
-          } else {
-            const insertedExpense: FixedExpense = {
-              id: `${Date.now()}-${Math.random()}`,
-              name: movedCategory.name,
-              amount: coerceNumber(movedCategory.amount),
-              templateId,
-              categoryOverrideId: movedCategory.categoryOverrideId ?? '',
-              isChecked: Boolean(matchedCategory?.isChecked),
-              date: movedCategory.date
-            };
-            nextMonthFixed = [...monthFixed];
-            const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthFixed.length);
-            nextMonthFixed.splice(targetIndex, 0, insertedExpense);
-            changed = true;
-          }
-
-          if (!changed) {
-            return;
-          }
-          updated = {
-            ...updated,
-            [monthKey]: {
-              ...monthData,
-              [personKey]: {
-                ...monthData[personKey],
-                fixedExpenses: nextMonthFixed,
-                categories: nextMonthCategories
-              }
+      const shouldSyncFuture = movedCategory.propagate !== false;
+      if (shouldSyncFuture) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
             }
-          };
-        });
+            const monthFixed = monthData[personKey].fixedExpenses;
+            const monthCategories = monthData[personKey].categories;
+            const matchesFixed = (expense: FixedExpense) => {
+              const matchesTemplate = templateId && expense.templateId === templateId;
+              const matchesName = !matchesTemplate && normalizeIconLabel(expense.name) === normalizedName;
+              return matchesTemplate || matchesName;
+            };
+            const matchesCategory = (category: Category) => {
+              const matchesTemplate = templateId && category.templateId === templateId;
+              const matchesName = !matchesTemplate && normalizeIconLabel(category.name) === normalizedName;
+              return matchesTemplate || matchesName;
+            };
+            const fixedIndex = monthFixed.findIndex(matchesFixed);
+            const categoryIndex = monthCategories.findIndex(matchesCategory);
+            if (fixedIndex === -1 && categoryIndex === -1) {
+              return;
+            }
+            const matchedCategory = categoryIndex !== -1 ? monthCategories[categoryIndex] : null;
+            let nextMonthFixed = monthFixed;
+            let nextMonthCategories = monthCategories;
+            let changed = false;
+
+            if (categoryIndex !== -1) {
+              nextMonthCategories = monthCategories.filter((_, index) => index !== categoryIndex);
+              changed = true;
+            }
+
+            if (fixedIndex !== -1) {
+              const existingExpense = monthFixed[fixedIndex];
+              const updatedExpense: FixedExpense = {
+                ...existingExpense,
+                name: movedCategory.name,
+                amount: coerceNumber(movedCategory.amount),
+                categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+                date: movedCategory.date,
+                templateId
+              };
+              nextMonthFixed = monthFixed.map((expense, index) => (
+                index === fixedIndex ? updatedExpense : expense
+              ));
+              changed = true;
+            } else {
+              const insertedExpense: FixedExpense = {
+                id: `${Date.now()}-${Math.random()}`,
+                name: movedCategory.name,
+                amount: coerceNumber(movedCategory.amount),
+                templateId,
+                categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+                isChecked: Boolean(matchedCategory?.isChecked),
+                date: movedCategory.date
+              };
+              nextMonthFixed = [...monthFixed];
+              const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthFixed.length);
+              nextMonthFixed.splice(targetIndex, 0, insertedExpense);
+              changed = true;
+            }
+
+            if (!changed) {
+              return;
+            }
+            updated = {
+              ...updated,
+              [monthKey]: {
+                ...monthData,
+                [personKey]: {
+                  ...monthData[personKey],
+                  fixedExpenses: nextMonthFixed,
+                  categories: nextMonthCategories
+                }
+              }
+            };
+          });
+      }
 
       if (!sortByCost) {
         updated = syncFutureOrder(updated, personKey, {
@@ -7453,11 +7578,12 @@ const App: React.FC = () => {
       personKey,
       name: '',
       amount: '',
-      date: '',
+      date: getDefaultDateForMonthKey(currentMonthKey),
       categoryOverrideId: '',
       isRecurring: false,
       recurringMonths: 3,
-      startMonth: currentMonthKey
+      startMonth: currentMonthKey,
+      propagate: true
     });
   };
 
@@ -7470,6 +7596,9 @@ const App: React.FC = () => {
     const startMonth = type === 'free' && 'startMonth' in payload && payload.startMonth
       ? payload.startMonth
       : currentMonthKey;
+    const propagate = isRecurring
+      ? true
+      : (type === 'free' && 'propagate' in payload ? payload.propagate !== false : true);
     setExpenseWizard({
       mode: 'edit',
       step: 1,
@@ -7482,7 +7611,8 @@ const App: React.FC = () => {
       categoryOverrideId: payload.categoryOverrideId ?? '',
       isRecurring,
       recurringMonths,
-      startMonth
+      startMonth,
+      propagate
     });
   };
 
@@ -7540,7 +7670,8 @@ const App: React.FC = () => {
           date: dateValue,
           isRecurring: expenseWizard.isRecurring,
           recurringMonths: expenseWizard.recurringMonths,
-          startMonth: expenseWizard.startMonth
+          startMonth: expenseWizard.startMonth,
+          propagate: expenseWizard.propagate
         });
       }
     } else if (expenseWizard.type === 'fixed') {
@@ -7558,7 +7689,8 @@ const App: React.FC = () => {
         date: dateValue,
         isRecurring: expenseWizard.isRecurring,
         recurringMonths: expenseWizard.isRecurring ? expenseWizard.recurringMonths : undefined,
-        startMonth: expenseWizard.isRecurring ? expenseWizard.startMonth : undefined
+        startMonth: expenseWizard.isRecurring ? expenseWizard.startMonth : undefined,
+        propagate: expenseWizard.propagate
       });
     }
     setExpenseWizard(null);
@@ -7774,6 +7906,13 @@ const App: React.FC = () => {
       syncInFlightRef.current = false;
     }
   }, [authToken, clearSyncQueueEntry, isOnline, resolveServerPayloadString, showSyncNotice, t]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      return;
+    }
+    void flushSyncQueue();
+  }, [flushSyncQueue, isOnline, pendingSyncCount]);
 
   const openJointWizardForCreate = (type: 'deposit' | 'expense') => {
     resetJointDeleteConfirm();
@@ -9180,10 +9319,26 @@ const App: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={expenseWizard.isRecurring}
-                          onChange={(e) => updateExpenseWizard({ isRecurring: e.target.checked })}
+                          onChange={(e) => {
+                            const nextValue = e.target.checked;
+                            updateExpenseWizard({
+                              isRecurring: nextValue,
+                              propagate: nextValue ? true : expenseWizard.propagate
+                            });
+                          }}
                           className="h-4 w-4 accent-emerald-500"
                         />
                         {t('installmentLabel')}
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={expenseWizard.propagate}
+                          onChange={(e) => updateExpenseWizard({ propagate: e.target.checked })}
+                          disabled={expenseWizard.isRecurring}
+                          className="h-4 w-4 accent-emerald-500"
+                        />
+                        {t('expenseLinkLabel')}
                       </label>
                       {expenseWizard.isRecurring && (
                         <div className="flex items-center gap-2">
