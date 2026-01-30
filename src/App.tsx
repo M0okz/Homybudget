@@ -547,6 +547,33 @@ const calculateTotalCategories = (categories: Category[]) => {
   return categories.reduce((sum, cat) => sum + cat.amount, 0);
 };
 
+const calculateActualFixed = (expenses: FixedExpense[]) => (
+  expenses.reduce((sum, exp) => (exp.isChecked ? sum + coerceNumber(exp.amount) : sum), 0)
+);
+
+const calculateActualCategories = (categories: Category[]) => (
+  categories.reduce((sum, cat) => (cat.isChecked ? sum + coerceNumber(cat.amount) : sum), 0)
+);
+
+const calculatePlannedExpensesForData = (budget: BudgetData) => (
+  calculateTotalFixed(budget.person1.fixedExpenses)
+  + calculateTotalFixed(budget.person2.fixedExpenses)
+  + calculateTotalCategories(budget.person1.categories)
+  + calculateTotalCategories(budget.person2.categories)
+);
+
+const calculateActualExpensesForData = (budget: BudgetData) => (
+  calculateActualFixed(budget.person1.fixedExpenses)
+  + calculateActualFixed(budget.person2.fixedExpenses)
+  + calculateActualCategories(budget.person1.categories)
+  + calculateActualCategories(budget.person2.categories)
+);
+
+const calculateTotalIncomeForData = (budget: BudgetData) => (
+  calculateTotalIncome(budget.person1.incomeSources)
+  + calculateTotalIncome(budget.person2.incomeSources)
+);
+
 const parseNumberInput = (rawValue: string) => {
   const trimmed = rawValue.trim();
   if (trimmed === '') {
@@ -2760,12 +2787,146 @@ type BudgetCalendarWidgetProps = {
   monthKey: string;
   darkMode: boolean;
   formatMonthKey: (value: string) => string;
+  selectedDate?: string | null;
+};
+
+type ExpenseSeriesPoint = {
+  key: string;
+  label: string;
+  planned: number;
+  actual: number | null;
+};
+
+type DashboardCardProps = {
+  title: string;
+  subtitle?: string;
+  darkMode: boolean;
+  children: React.ReactNode;
+};
+
+const DashboardCard = ({ title, subtitle, darkMode, children }: DashboardCardProps) => (
+  <div
+    className={`rounded-2xl border p-4 shadow-sm ${
+      darkMode ? 'bg-slate-950/70 border-slate-800 text-slate-200' : 'bg-white/80 border-slate-200 text-slate-700'
+    }`}
+  >
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        <div className="text-sm font-semibold">{title}</div>
+        {subtitle && <div className="text-xs text-slate-400">{subtitle}</div>}
+      </div>
+    </div>
+    <div className="mt-3">{children}</div>
+  </div>
+);
+
+type MonthlyExpenseChartProps = {
+  points: ExpenseSeriesPoint[];
+  darkMode: boolean;
+};
+
+const MonthlyExpenseChart = ({ points, darkMode }: MonthlyExpenseChartProps) => {
+  if (!points.length) {
+    return null;
+  }
+  const width = 260;
+  const height = 120;
+  const padding = 12;
+  const maxValue = Math.max(
+    1,
+    ...points.map(point => Math.max(point.planned, point.actual ?? 0))
+  );
+  const step = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+  const getY = (value: number) => {
+    const ratio = Math.min(value / maxValue, 1);
+    return height - padding - ratio * (height - padding * 2);
+  };
+  const buildPath = (values: Array<number | null>) => values
+    .map((value, index) => {
+      if (value === null) {
+        return null;
+      }
+      const x = padding + step * index;
+      const y = getY(value);
+      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+    })
+    .filter(Boolean)
+    .join(' ');
+
+  const plannedPath = buildPath(points.map(point => point.planned));
+  const actualPath = buildPath(points.map(point => (point.actual === null ? null : point.actual)));
+  const plannedColor = darkMode ? '#93C5FD' : '#3B82F6';
+  const actualColor = darkMode ? '#6EE7B7' : '#10B981';
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28">
+      {[0.25, 0.5, 0.75].map((tick, index) => (
+        <line
+          key={index}
+          x1={padding}
+          x2={width - padding}
+          y1={padding + tick * (height - padding * 2)}
+          y2={padding + tick * (height - padding * 2)}
+          stroke={darkMode ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.35)'}
+          strokeDasharray="4 6"
+        />
+      ))}
+      {plannedPath && (
+        <path
+          d={plannedPath}
+          fill="none"
+          stroke={plannedColor}
+          strokeWidth={2.5}
+          strokeLinecap="round"
+        />
+      )}
+      {actualPath && (
+        <path
+          d={actualPath}
+          fill="none"
+          stroke={actualColor}
+          strokeWidth={2.5}
+          strokeLinecap="round"
+        />
+      )}
+      {points.map((point, index) => {
+        const x = padding + step * index;
+        const plannedY = getY(point.planned);
+        return (
+          <circle
+            key={`planned-${point.key}`}
+            cx={x}
+            cy={plannedY}
+            r={3}
+            fill={plannedColor}
+          />
+        );
+      })}
+      {points.map((point, index) => {
+        if (point.actual === null) {
+          return null;
+        }
+        const x = padding + step * index;
+        const actualY = getY(point.actual);
+        return (
+          <circle
+            key={`actual-${point.key}`}
+            cx={x}
+            cy={actualY}
+            r={3}
+            fill={actualColor}
+          />
+        );
+      })}
+    </svg>
+  );
 };
 
 const BudgetCalendarWidget = React.memo(({
   monthKey,
   darkMode,
-  formatMonthKey
+  formatMonthKey,
+  selectedDate
 }: BudgetCalendarWidgetProps) => {
   const { language } = useTranslation();
   const locale = language === 'en' ? 'en-US' : 'fr-FR';
@@ -2773,6 +2934,17 @@ const BudgetCalendarWidget = React.memo(({
   const [yearValue, monthValue] = monthKey.split('-');
   const year = Number(yearValue);
   const monthIndex = Number(monthValue) - 1;
+
+  const selectedDay = useMemo(() => {
+    if (!selectedDate || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+      return null;
+    }
+    const [selectedYear, selectedMonth, selectedDayValue] = selectedDate.split('-').map(Number);
+    if (selectedYear === year && selectedMonth - 1 === monthIndex) {
+      return selectedDayValue;
+    }
+    return null;
+  }, [monthIndex, selectedDate, year]);
 
   const weekdayLabels = useMemo(() => {
     const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
@@ -2831,17 +3003,22 @@ const BudgetCalendarWidget = React.memo(({
               return <span key={`empty-${index}`} className="h-8 rounded-lg" />;
             }
             const isToday = calendar.today === day;
+            const isSelected = selectedDay === day;
             return (
               <span
                 key={`day-${day}`}
                 className={`flex h-8 items-center justify-center rounded-lg text-xs font-semibold transition-colors ${
-                  isToday
+                  isSelected
                     ? (darkMode
-                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/40'
-                      : 'bg-emerald-50 text-emerald-600 border border-emerald-200')
-                    : (darkMode
-                      ? 'text-slate-300 hover:bg-slate-900/60'
-                      : 'text-slate-600 hover:bg-slate-100')
+                      ? 'bg-sky-500/20 text-sky-100 border border-sky-400/40'
+                      : 'bg-sky-50 text-sky-700 border border-sky-200')
+                    : isToday
+                      ? (darkMode
+                        ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/40'
+                        : 'bg-emerald-50 text-emerald-600 border border-emerald-200')
+                      : (darkMode
+                        ? 'text-slate-300 hover:bg-slate-900/60'
+                        : 'text-slate-600 hover:bg-slate-100')
                 }`}
               >
                 {day}
@@ -2854,6 +3031,264 @@ const BudgetCalendarWidget = React.memo(({
   );
 });
 BudgetCalendarWidget.displayName = 'BudgetCalendarWidget';
+
+type DashboardViewProps = {
+  monthlyBudgets: MonthlyBudget;
+  currentMonthKey: string;
+  darkMode: boolean;
+  currencyPreference: 'EUR' | 'USD';
+  palette: Palette;
+  monthOptions: string[];
+  formatMonthKey: (value: string) => string;
+  data: BudgetData;
+  jointAccountEnabled: boolean;
+};
+
+const DashboardView = ({
+  monthlyBudgets,
+  currentMonthKey,
+  darkMode,
+  currencyPreference,
+  palette,
+  monthOptions,
+  formatMonthKey,
+  data,
+  jointAccountEnabled
+}: DashboardViewProps) => {
+  const { t, language } = useTranslation();
+  const accentTone = useMemo(() => getPaletteTone(palette, 1, darkMode), [palette, darkMode]);
+  const formatMonthShort = useCallback((monthKey: string) => {
+    const [, month] = monthKey.split('-');
+    const monthIndex = Number(month) - 1;
+    return monthOptions[monthIndex] ?? monthKey;
+  }, [monthOptions]);
+
+  const expenseSeries = useMemo(() => {
+    const keys = Object.keys(monthlyBudgets).filter(key => key <= currentMonthKey).sort();
+    const recentKeys = keys.slice(-12);
+    return recentKeys.map(key => {
+      const budget = monthlyBudgets[key];
+      const planned = budget ? calculatePlannedExpensesForData(budget) : 0;
+      const actual = budget && key < currentMonthKey ? calculateActualExpensesForData(budget) : null;
+      return {
+        key,
+        label: formatMonthShort(key),
+        planned,
+        actual
+      };
+    });
+  }, [currentMonthKey, monthlyBudgets, formatMonthShort]);
+
+  const plannedTotal = useMemo(() => calculatePlannedExpensesForData(data), [data]);
+  const actualTotal = useMemo(() => calculateActualExpensesForData(data), [data]);
+  const incomeTotal = useMemo(() => calculateTotalIncomeForData(data), [data]);
+  const availableTotal = incomeTotal - plannedTotal;
+  const progressRatio = plannedTotal > 0 ? Math.min(actualTotal / plannedTotal, 1) : 0;
+  const isOverBudget = actualTotal > plannedTotal && plannedTotal > 0;
+  const jointBalance = useMemo(() => calculateJointBalanceForData(data), [data]);
+  const transactionCount = data.jointAccount.transactions.length;
+
+  const topCategories = useMemo(() => {
+    const allCategories = [...data.person1.categories, ...data.person2.categories]
+      .map(category => ({
+        name: category.name || t('newCategoryLabel'),
+        amount: coerceNumber(category.amount),
+        isChecked: Boolean(category.isChecked),
+        id: category.id
+      }))
+      .filter(item => item.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 4);
+    return allCategories;
+  }, [data.person1.categories, data.person2.categories, t]);
+
+  const upcomingExpenses = useMemo(() => {
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+    const upcoming = [
+      ...data.person1.fixedExpenses.map(expense => ({
+        name: expense.name || t('newFixedExpenseLabel'),
+        amount: coerceNumber(expense.amount),
+        date: expense.date,
+        isChecked: Boolean(expense.isChecked)
+      })),
+      ...data.person2.fixedExpenses.map(expense => ({
+        name: expense.name || t('newFixedExpenseLabel'),
+        amount: coerceNumber(expense.amount),
+        date: expense.date,
+        isChecked: Boolean(expense.isChecked)
+      })),
+      ...data.person1.categories.map(category => ({
+        name: category.name || t('newCategoryLabel'),
+        amount: coerceNumber(category.amount),
+        date: category.date,
+        isChecked: Boolean(category.isChecked)
+      })),
+      ...data.person2.categories.map(category => ({
+        name: category.name || t('newCategoryLabel'),
+        amount: coerceNumber(category.amount),
+        date: category.date,
+        isChecked: Boolean(category.isChecked)
+      }))
+    ]
+      .filter(item => item.date && item.date.startsWith(currentMonthKey) && item.date >= todayKey && !item.isChecked)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      .slice(0, 4);
+    return upcoming;
+  }, [currentMonthKey, data.person1.categories, data.person1.fixedExpenses, data.person2.categories, data.person2.fixedExpenses, t]);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <DashboardCard
+            title={t('monthlyExpensesCardTitle')}
+            subtitle={formatMonthKey(currentMonthKey)}
+            darkMode={darkMode}
+          >
+            {expenseSeries.length > 0 ? (
+              <>
+                <MonthlyExpenseChart points={expenseSeries} darkMode={darkMode} />
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: darkMode ? '#93C5FD' : '#3B82F6' }} />
+                    {t('forecastLabel')}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: darkMode ? '#6EE7B7' : '#10B981' }} />
+                    {t('actualLabel')}
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-400 sm:grid-cols-6">
+                  {expenseSeries.map(point => (
+                    <div key={point.key} className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-500">{point.label}</span>
+                      <span className="text-slate-400">{formatCurrency(point.planned, currencyPreference)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-slate-400">{t('noDataLabel')}</div>
+            )}
+          </DashboardCard>
+        </div>
+        <DashboardCard
+          title={t('availableNowLabel')}
+          subtitle={t('monthlyBalanceLabel')}
+          darkMode={darkMode}
+        >
+          <div className={`text-3xl font-semibold ${availableTotal < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+            {formatCurrency(availableTotal, currencyPreference)}
+          </div>
+          <div className="mt-2 text-xs text-slate-400">
+            {t('incomeLabel')}: <span className="font-semibold text-slate-500">{formatCurrency(incomeTotal, currencyPreference)}</span>
+          </div>
+          <div className="text-xs text-slate-400">
+            {t('totalExpensesShortLabel')}: <span className="font-semibold text-slate-500">{formatCurrency(plannedTotal, currencyPreference)}</span>
+          </div>
+          <div className="mt-3 rounded-full border p-2 text-xs font-semibold text-center" style={{ borderColor: accentTone.border, color: accentTone.text }}>
+            {t('budgetLabel')} {t('inProgressLabel')}
+          </div>
+        </DashboardCard>
+        <DashboardCard
+          title={t('monthProgressTitle')}
+          subtitle={t('actualVsForecastLabel')}
+          darkMode={darkMode}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span>{t('actualLabel')}</span>
+            <span>{formatCurrency(actualTotal, currencyPreference)}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
+            <span>{t('forecastLabel')}</span>
+            <span>{formatCurrency(plannedTotal, currencyPreference)}</span>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-slate-200/40">
+            <div
+              className={`h-2 rounded-full ${isOverBudget ? 'bg-rose-400' : 'bg-emerald-400'}`}
+              style={{ width: `${Math.round(progressRatio * 100)}%` }}
+            />
+          </div>
+          <div className={`mt-2 text-xs font-semibold ${isOverBudget ? 'text-rose-400' : 'text-emerald-400'}`}>
+            {Math.round(progressRatio * 100)}%
+          </div>
+        </DashboardCard>
+        {jointAccountEnabled ? (
+          <DashboardCard
+            title={t('jointAccountCardTitle')}
+            subtitle={t('jointAccountCardSubtitle')}
+            darkMode={darkMode}
+          >
+            <div className={`text-2xl font-semibold ${jointBalance < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {formatCurrency(jointBalance, currencyPreference)}
+            </div>
+            <div className="mt-2 text-xs text-slate-400">
+              {t('initialBalanceLabel')}: <span className="font-semibold text-slate-500">{formatCurrency(coerceNumber(data.jointAccount.initialBalance), currencyPreference)}</span>
+            </div>
+            <div className="text-xs text-slate-400">
+              {t('transactionsLabel')}: <span className="font-semibold text-slate-500">{transactionCount}</span>
+            </div>
+          </DashboardCard>
+        ) : (
+          <DashboardCard
+            title={t('savingsCardTitle')}
+            subtitle={t('savingsCardSubtitle')}
+            darkMode={darkMode}
+          >
+            <div className="text-2xl font-semibold text-emerald-400">
+              {formatCurrency(Math.max(0, availableTotal), currencyPreference)}
+            </div>
+            <div className="mt-2 text-xs text-slate-400">
+              {t('availableNowLabel')}
+            </div>
+          </DashboardCard>
+        )}
+        <DashboardCard
+          title={t('topCategoriesTitle')}
+          subtitle={t('topCategoriesSubtitle')}
+          darkMode={darkMode}
+        >
+          {topCategories.length > 0 ? (
+            <div className="space-y-2">
+              {topCategories.map(item => (
+                <div key={item.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate">{item.name}</span>
+                  <span className="font-semibold">{formatCurrency(item.amount, currencyPreference)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400">{t('noDataLabel')}</div>
+          )}
+        </DashboardCard>
+        <DashboardCard
+          title={t('upcomingLabel')}
+          subtitle={t('upcomingSubtitle')}
+          darkMode={darkMode}
+        >
+          {upcomingExpenses.length > 0 ? (
+            <div className="space-y-2">
+              {upcomingExpenses.map((item, index) => (
+                <div key={`${item.name}-${index}`} className="flex items-center justify-between text-sm">
+                  <div className="flex flex-col">
+                    <span className="truncate">{item.name}</span>
+                    {item.date && (
+                      <span className="text-xs text-slate-400">{formatExpenseDate(item.date, language)}</span>
+                    )}
+                  </div>
+                  <span className="font-semibold">{formatCurrency(item.amount, currencyPreference)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400">{t('noUpcomingLabel')}</div>
+          )}
+        </DashboardCard>
+      </div>
+    </div>
+  );
+};
 
 const BudgetColumn = React.memo(({
   person,
@@ -4869,6 +5304,7 @@ const App: React.FC = () => {
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
   const isBudgetView = activePage === 'budget';
   const isSettingsView = activePage === 'settings';
+  const isDashboardView = activePage === 'dashboard';
   const deleteConfirmToken = t('deleteMonthConfirmToken');
   const isDeleteConfirmValid = deleteMonthInput.trim().toLowerCase() === deleteConfirmToken.toLowerCase();
   const pageLabel = useMemo(() => (
@@ -4969,11 +5405,13 @@ const App: React.FC = () => {
     }
     return 'info' as const;
   }, [isOnline, syncNotice]);
+  const selectedCalendarDate = expenseWizard?.date || null;
   const calendarWidget = (
     <BudgetCalendarWidget
       monthKey={currentMonthKey}
       darkMode={darkMode}
       formatMonthKey={formatMonthKey}
+      selectedDate={selectedCalendarDate}
     />
   );
   const pageStyle = useMemo(() => ({
@@ -8317,6 +8755,18 @@ const App: React.FC = () => {
           person1UserId={person1UserId}
           person2UserId={person2UserId}
           onPersonLinkChange={updatePersonMapping}
+        />
+      ) : isDashboardView ? (
+        <DashboardView
+          monthlyBudgets={monthlyBudgets}
+          currentMonthKey={currentMonthKey}
+          darkMode={darkMode}
+          currencyPreference={currencyPreference}
+          palette={palette}
+          monthOptions={monthOptions}
+          formatMonthKey={formatMonthKey}
+          data={data}
+          jointAccountEnabled={jointAccountEnabled}
         />
       ) : isBudgetView ? (
         <>
