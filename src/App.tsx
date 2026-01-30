@@ -2524,6 +2524,7 @@ const BudgetFreeSection = React.memo(({
             const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
             const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
             const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+            const isLinked = category.propagate !== false;
             return (
               <Draggable key={category.id} draggableId={`free-${personKey}-${category.id}`} index={index}>
                 {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
@@ -2581,6 +2582,18 @@ const BudgetFreeSection = React.memo(({
                       <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                         {formatCurrency(amountValue, currencyPreference)}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => updateCategory(personKey, category.id, 'propagate', !isLinked)}
+                        disabled={readOnly || category.isRecurring}
+                        className={`p-1 rounded-full border ${
+                          darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                        } ${readOnly || category.isRecurring ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                        aria-label={isLinked ? t('expenseSyncOnLabel') : t('expenseSyncOffLabel')}
+                        title={isLinked ? t('expenseSyncOnLabel') : t('expenseSyncOffLabel')}
+                      >
+                        {isLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
+                      </button>
                       <button
                         type="button"
                         onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
@@ -2649,6 +2662,7 @@ const BudgetFreeSection = React.memo(({
               const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
               const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
               const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+              const isLinked = category.propagate !== false;
               return (
                 <div key={category.id} className="px-2 py-2">
                   <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
@@ -2692,6 +2706,18 @@ const BudgetFreeSection = React.memo(({
                     <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => updateCategory(personKey, category.id, 'propagate', !isLinked)}
+                      disabled={readOnly || category.isRecurring}
+                      className={`p-1 rounded-full border ${
+                        darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
+                      } ${readOnly || category.isRecurring ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                      aria-label={isLinked ? t('expenseSyncOnLabel') : t('expenseSyncOffLabel')}
+                      title={isLinked ? t('expenseSyncOnLabel') : t('expenseSyncOffLabel')}
+                    >
+                      {isLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
+                    </button>
                     <button
                       type="button"
                       onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
