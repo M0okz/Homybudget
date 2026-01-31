@@ -3801,9 +3801,15 @@ const LoginScreen = React.memo(({
           darkMode ? 'bg-slate-950/80 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
         }`}
       >
-        <div className="space-y-1">
+        <div className="space-y-2 text-center">
+          <div className="flex justify-center">
+            <img
+              src="/icons/icon-192.png"
+              alt={t('appName')}
+              className="h-12 w-12 rounded-xl object-contain"
+            />
+          </div>
           <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
-          <h1 className="text-2xl font-semibold">{t('loginTitle')}</h1>
         </div>
 
         <div className="space-y-3">
