@@ -30,6 +30,7 @@ interface Category {
   startMonth?: string; // format: "YYYY-MM"
   date?: string;
   propagate?: boolean;
+  accountId?: string;
 }
 
 interface FixedExpense {
@@ -40,6 +41,7 @@ interface FixedExpense {
   categoryOverrideId?: string;
   isChecked?: boolean;
   date?: string;
+  accountId?: string;
 }
 
 interface IncomeSource {
@@ -102,12 +104,24 @@ type AppSettings = {
   oidcClientId: string;
   oidcClientSecret: string;
   oidcRedirectUri: string;
+  bankAccountsEnabled: boolean;
+  bankAccounts: BankAccountSettings;
 };
 
 type SyncQueue = {
   months: Record<string, { payload: string; updatedAt: number }>;
   deletes: Record<string, { updatedAt: number }>;
   settings?: { payload: string; updatedAt: number };
+};
+
+type BankAccount = {
+  id: string;
+  name: string;
+};
+
+type BankAccountSettings = {
+  person1: BankAccount[];
+  person2: BankAccount[];
 };
 
 type ExpenseWizardState = {
@@ -124,6 +138,7 @@ type ExpenseWizardState = {
   recurringMonths: number;
   startMonth: string;
   propagate: boolean;
+  accountId: string;
 };
 
 type JointWizardState = {
@@ -259,6 +274,13 @@ const getInitialCurrencyPreference = (): 'EUR' | 'USD' => {
     return 'EUR';
   }
   return localStorage.getItem('currencyPreference') === 'USD' ? 'USD' : 'EUR';
+};
+
+const getInitialBankAccountsEnabled = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  return localStorage.getItem('bankAccountsEnabled') !== 'false';
 };
 
 const LAST_VIEWED_MONTH_KEY = 'lastViewedMonthKey';
@@ -704,6 +726,88 @@ const createTemplateId = () => {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const BANK_ACCOUNT_LIMIT = 3;
+
+const getBankAccountBaseLabel = (language: LanguageCode) => (
+  TRANSLATIONS[language]?.bankAccountBaseLabel ?? 'Compte'
+);
+
+const createBankAccount = (name: string): BankAccount => ({
+  id: createTemplateId(),
+  name
+});
+
+const normalizeBankAccountList = (input: unknown, language: LanguageCode): BankAccount[] => {
+  const baseLabel = getBankAccountBaseLabel(language);
+  const next: BankAccount[] = [];
+  const usedIds = new Set<string>();
+  if (Array.isArray(input)) {
+    input.forEach((raw) => {
+      if (next.length >= BANK_ACCOUNT_LIMIT) {
+        return;
+      }
+      const name = typeof raw?.name === 'string' ? raw.name.trim() : '';
+      if (!name) {
+        return;
+      }
+      let id = typeof raw?.id === 'string' && raw.id.trim() ? raw.id.trim() : createTemplateId();
+      if (usedIds.has(id)) {
+        id = createTemplateId();
+      }
+      usedIds.add(id);
+      next.push({ id, name });
+    });
+  }
+  if (next.length === 0) {
+    next.push(createBankAccount(`${baseLabel} 1`));
+  }
+  return next;
+};
+
+const normalizeBankAccounts = (input: unknown, language: LanguageCode): BankAccountSettings => {
+  const source = typeof input === 'object' && input ? input as { person1?: unknown; person2?: unknown } : {};
+  return {
+    person1: normalizeBankAccountList(source.person1, language),
+    person2: normalizeBankAccountList(source.person2, language)
+  };
+};
+
+const ACCOUNT_TONES = [
+  {
+    lightBg: '#EEF2FF',
+    lightText: '#312E81',
+    lightBorder: '#C7D2FE',
+    darkBg: 'rgba(99, 102, 241, 0.18)',
+    darkText: '#C7D2FE',
+    darkBorder: 'rgba(99, 102, 241, 0.45)'
+  },
+  {
+    lightBg: '#ECFDF3',
+    lightText: '#065F46',
+    lightBorder: '#A7F3D0',
+    darkBg: 'rgba(16, 185, 129, 0.18)',
+    darkText: '#A7F3D0',
+    darkBorder: 'rgba(16, 185, 129, 0.45)'
+  },
+  {
+    lightBg: '#FFF7ED',
+    lightText: '#9A3412',
+    lightBorder: '#FED7AA',
+    darkBg: 'rgba(251, 146, 60, 0.18)',
+    darkText: '#FDBA74',
+    darkBorder: 'rgba(251, 146, 60, 0.45)'
+  }
+];
+
+const getAccountChipStyle = (index: number, darkMode: boolean) => {
+  const tone = ACCOUNT_TONES[index % ACCOUNT_TONES.length];
+  return {
+    backgroundColor: darkMode ? tone.darkBg : tone.lightBg,
+    color: darkMode ? tone.darkText : tone.lightText,
+    border: `1px solid ${darkMode ? tone.darkBorder : tone.lightBorder}`
+  } as React.CSSProperties;
 };
 
 type AutoCategory = {
@@ -1683,6 +1787,8 @@ type BudgetColumnProps = {
   enableDrag: boolean;
   palette: Palette;
   currencyPreference: 'EUR' | 'USD';
+  bankAccountsEnabled: boolean;
+  bankAccounts: BankAccountSettings;
   editingName: string | null;
   tempName: string;
   setTempName: (value: string) => void;
@@ -1731,6 +1837,8 @@ type BudgetFixedSectionProps = Pick<
   | 'enableDrag'
   | 'palette'
   | 'currencyPreference'
+  | 'bankAccountsEnabled'
+  | 'bankAccounts'
   | 'openExpenseWizard'
   | 'openExpenseWizardForEdit'
   | 'updateFixedExpense'
@@ -1749,6 +1857,8 @@ type BudgetFreeSectionProps = Pick<
   | 'enableDrag'
   | 'palette'
   | 'currencyPreference'
+  | 'bankAccountsEnabled'
+  | 'bankAccounts'
   | 'openExpenseWizard'
   | 'openExpenseWizardForEdit'
   | 'updateCategory'
@@ -2184,6 +2294,8 @@ const BudgetFixedSection = React.memo(({
   enableDrag,
   palette,
   currencyPreference,
+  bankAccountsEnabled,
+  bankAccounts,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateFixedExpense,
@@ -2239,6 +2351,15 @@ const BudgetFixedSection = React.memo(({
     }),
     [darkMode]
   );
+  const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
+  const resolveAccount = useCallback((accountId?: string) => {
+    if (accountsForPerson.length === 0) {
+      return null;
+    }
+    const account = accountsForPerson.find(item => item.id === accountId) ?? accountsForPerson[0];
+    const index = Math.max(0, accountsForPerson.findIndex(item => item.id === account.id));
+    return { account, index };
+  }, [accountsForPerson]);
   const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) {
@@ -2265,6 +2386,7 @@ const BudgetFixedSection = React.memo(({
               : getAutoCategory(expense.name);
             const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
             const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+            const accountMeta = resolveAccount(expense.accountId);
             return (
               <Draggable key={expense.id} draggableId={`fixed-${personKey}-${expense.id}`} index={index}>
                 {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
@@ -2306,6 +2428,14 @@ const BudgetFixedSection = React.memo(({
                           }`}
                         >
                           {formatExpenseDate(expense.date, language)}
+                        </span>
+                      )}
+                      {bankAccountsEnabled && accountMeta && (
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={getAccountChipStyle(accountMeta.index, darkMode)}
+                        >
+                          {accountMeta.account.name}
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
@@ -2384,6 +2514,7 @@ const BudgetFixedSection = React.memo(({
                 : getAutoCategory(expense.name);
               const categoryLabel = resolvedCategory ? (language === 'fr' ? resolvedCategory.labels.fr : resolvedCategory.labels.en) : null;
               const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
+              const accountMeta = resolveAccount(expense.accountId);
               return (
                 <div key={expense.id} className="px-2 py-2">
                   <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
@@ -2411,6 +2542,14 @@ const BudgetFixedSection = React.memo(({
                         }`}
                       >
                         {formatExpenseDate(expense.date, language)}
+                      </span>
+                    )}
+                    {bankAccountsEnabled && accountMeta && (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        style={getAccountChipStyle(accountMeta.index, darkMode)}
+                      >
+                        {accountMeta.account.name}
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
@@ -2469,6 +2608,8 @@ const BudgetFreeSection = React.memo(({
   enableDrag,
   palette,
   currencyPreference,
+  bankAccountsEnabled,
+  bankAccounts,
   openExpenseWizard,
   openExpenseWizardForEdit,
   updateCategory,
@@ -2524,6 +2665,15 @@ const BudgetFreeSection = React.memo(({
     }),
     [darkMode]
   );
+  const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
+  const resolveAccount = useCallback((accountId?: string) => {
+    if (accountsForPerson.length === 0) {
+      return null;
+    }
+    const account = accountsForPerson.find(item => item.id === accountId) ?? accountsForPerson[0];
+    const index = Math.max(0, accountsForPerson.findIndex(item => item.id === account.id));
+    return { account, index };
+  }, [accountsForPerson]);
   const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) {
@@ -2552,6 +2702,7 @@ const BudgetFreeSection = React.memo(({
             const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
             const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
             const isLinked = category.propagate !== false;
+            const accountMeta = resolveAccount(category.accountId);
             return (
               <Draggable key={category.id} draggableId={`free-${personKey}-${category.id}`} index={index}>
                 {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
@@ -2593,6 +2744,14 @@ const BudgetFreeSection = React.memo(({
                           }`}
                         >
                           {formatExpenseDate(category.date, language)}
+                        </span>
+                      )}
+                      {bankAccountsEnabled && accountMeta && (
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={getAccountChipStyle(accountMeta.index, darkMode)}
+                        >
+                          {accountMeta.account.name}
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
@@ -2690,6 +2849,7 @@ const BudgetFreeSection = React.memo(({
               const recurringLabel = category.isRecurring ? `${category.recurringMonths || 3}x` : null;
               const badgeClass = resolvedCategory ? getCategoryBadgeClass(resolvedCategory.id, darkMode) : null;
               const isLinked = category.propagate !== false;
+              const accountMeta = resolveAccount(category.accountId);
               return (
                 <div key={category.id} className="px-2 py-2">
                   <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
@@ -2717,6 +2877,14 @@ const BudgetFreeSection = React.memo(({
                         }`}
                       >
                         {formatExpenseDate(category.date, language)}
+                      </span>
+                    )}
+                    {bankAccountsEnabled && accountMeta && (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        style={getAccountChipStyle(accountMeta.index, darkMode)}
+                      >
+                        {accountMeta.account.name}
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
@@ -2823,9 +2991,10 @@ const DashboardCard = ({ title, subtitle, darkMode, children }: DashboardCardPro
 type MonthlyExpenseChartProps = {
   points: ExpenseSeriesPoint[];
   darkMode: boolean;
+  variant?: 'spending' | 'default';
 };
 
-const MonthlyExpenseChart = ({ points, darkMode }: MonthlyExpenseChartProps) => {
+const MonthlyExpenseChart = ({ points, darkMode, variant = 'spending' }: MonthlyExpenseChartProps) => {
   if (!points.length) {
     return null;
   }
@@ -2855,11 +3024,19 @@ const MonthlyExpenseChart = ({ points, darkMode }: MonthlyExpenseChartProps) => 
 
   const plannedPath = buildPath(points.map(point => point.planned));
   const actualPath = buildPath(points.map(point => (point.actual === null ? null : point.actual)));
-  const plannedColor = darkMode ? '#93C5FD' : '#3B82F6';
-  const actualColor = darkMode ? '#6EE7B7' : '#10B981';
+  const plannedColor = darkMode ? '#94A3B8' : '#CBD5F5';
+  const actualColor = darkMode ? '#22C55E' : '#16A34A';
+  const gradientId = `actual-gradient-${darkMode ? 'dark' : 'light'}`;
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28">
+      <defs>
+        <linearGradient id={gradientId} x1="0%" x2="100%" y1="0%" y2="0%">
+          <stop offset="0%" stopColor={darkMode ? '#F97316' : '#FB923C'} />
+          <stop offset="50%" stopColor={darkMode ? '#FACC15' : '#FDE047'} />
+          <stop offset="100%" stopColor={actualColor} />
+        </linearGradient>
+      </defs>
       {[0.25, 0.5, 0.75].map((tick, index) => (
         <line
           key={index}
@@ -2876,16 +3053,18 @@ const MonthlyExpenseChart = ({ points, darkMode }: MonthlyExpenseChartProps) => 
           d={plannedPath}
           fill="none"
           stroke={plannedColor}
-          strokeWidth={2.5}
+          strokeWidth={2}
+          strokeDasharray={variant === 'spending' ? '6 6' : undefined}
           strokeLinecap="round"
+          strokeOpacity={variant === 'spending' ? 0.7 : 1}
         />
       )}
       {actualPath && (
         <path
           d={actualPath}
           fill="none"
-          stroke={actualColor}
-          strokeWidth={2.5}
+          stroke={variant === 'spending' ? `url(#${gradientId})` : actualColor}
+          strokeWidth={2.8}
           strokeLinecap="round"
         />
       )}
@@ -3042,6 +3221,10 @@ type DashboardViewProps = {
   formatMonthKey: (value: string) => string;
   data: BudgetData;
   jointAccountEnabled: boolean;
+  onOpenTransactions: () => void;
+  bankAccountsEnabled: boolean;
+  bankAccounts: BankAccountSettings;
+  soloModeEnabled: boolean;
 };
 
 const DashboardView = ({
@@ -3053,7 +3236,11 @@ const DashboardView = ({
   monthOptions,
   formatMonthKey,
   data,
-  jointAccountEnabled
+  jointAccountEnabled,
+  onOpenTransactions,
+  bankAccountsEnabled,
+  bankAccounts,
+  soloModeEnabled
 }: DashboardViewProps) => {
   const { t, language } = useTranslation();
   const accentTone = useMemo(() => getPaletteTone(palette, 1, darkMode), [palette, darkMode]);
@@ -3087,6 +3274,8 @@ const DashboardView = ({
   const isOverBudget = actualTotal > plannedTotal && plannedTotal > 0;
   const jointBalance = useMemo(() => calculateJointBalanceForData(data), [data]);
   const transactionCount = data.jointAccount.transactions.length;
+  const remainingBudget = plannedTotal - actualTotal;
+  const remainingLabel = remainingBudget >= 0 ? t('underBudgetLabel') : t('overBudgetLabel');
 
   const topCategories = useMemo(() => {
     const allCategories = [...data.person1.categories, ...data.person2.categories]
@@ -3137,41 +3326,82 @@ const DashboardView = ({
     return upcoming;
   }, [currentMonthKey, data.person1.categories, data.person1.fixedExpenses, data.person2.categories, data.person2.fixedExpenses, t]);
 
+  const accountTotals = useMemo(() => {
+    const buildTotals = (person: PersonBudget, accounts: BankAccount[]) => {
+      const totals = new Map<string, number>();
+      accounts.forEach(account => totals.set(account.id, 0));
+      const resolveId = (accountId?: string) => {
+        if (accountId && totals.has(accountId)) {
+          return accountId;
+        }
+        return accounts[0]?.id;
+      };
+      const addAmount = (accountId: string | undefined, value: number) => {
+        if (!accountId) {
+          return;
+        }
+        totals.set(accountId, (totals.get(accountId) ?? 0) + coerceNumber(value));
+      };
+      person.fixedExpenses.forEach(expense => addAmount(resolveId(expense.accountId), expense.amount));
+      person.categories.forEach(category => addAmount(resolveId(category.accountId), category.amount));
+      return accounts.map(account => ({
+        ...account,
+        total: totals.get(account.id) ?? 0
+      }));
+    };
+    return {
+      person1: buildTotals(data.person1, bankAccounts.person1),
+      person2: buildTotals(data.person2, bankAccounts.person2)
+    };
+  }, [bankAccounts.person1, bankAccounts.person2, data.person1, data.person2]);
+
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <DashboardCard
-            title={t('monthlyExpensesCardTitle')}
-            subtitle={formatMonthKey(currentMonthKey)}
-            darkMode={darkMode}
+          <div
+            className={`rounded-2xl border p-5 shadow-sm ${
+              darkMode ? 'bg-slate-950/70 border-slate-800 text-slate-200' : 'bg-white/90 border-slate-200 text-slate-700'
+            }`}
           >
-            {expenseSeries.length > 0 ? (
-              <>
-                <MonthlyExpenseChart points={expenseSeries} darkMode={darkMode} />
-                <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: darkMode ? '#93C5FD' : '#3B82F6' }} />
-                    {t('forecastLabel')}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: darkMode ? '#6EE7B7' : '#10B981' }} />
-                    {t('actualLabel')}
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-400 sm:grid-cols-6">
-                  {expenseSeries.map(point => (
-                    <div key={point.key} className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-500">{point.label}</span>
-                      <span className="text-slate-400">{formatCurrency(point.planned, currencyPreference)}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="text-sm text-slate-400">{t('noDataLabel')}</div>
-            )}
-          </DashboardCard>
+            <div className="flex items-center justify-between text-sm font-semibold">
+              <span>{t('monthlySpendingTitle')}</span>
+              <button
+                type="button"
+                onClick={onOpenTransactions}
+                className={`flex items-center gap-1 text-xs font-semibold ${
+                  darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                {t('transactionsCta')}
+                <span aria-hidden="true">›</span>
+              </button>
+            </div>
+            <div className="mt-4 text-center">
+              <div className="text-2xl sm:text-3xl font-semibold">
+                {formatCurrency(Math.abs(remainingBudget), currencyPreference)} {t('leftLabel')}
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                {formatCurrency(plannedTotal, currencyPreference)} {t('budgetedLabel')}
+              </div>
+            </div>
+            <div className="mt-4">
+              {expenseSeries.length > 0 ? (
+                <MonthlyExpenseChart points={expenseSeries} darkMode={darkMode} variant="spending" />
+              ) : (
+                <div className="text-sm text-slate-400">{t('noDataLabel')}</div>
+              )}
+            </div>
+            <div className="mt-3 flex justify-center">
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                  remainingBudget >= 0 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+                }`}
+              >
+                {formatCurrency(Math.abs(remainingBudget), currencyPreference)} {remainingLabel}
+              </span>
+            </div>
+          </div>
         </div>
         <DashboardCard
           title={t('availableNowLabel')}
@@ -3244,6 +3474,54 @@ const DashboardView = ({
             </div>
           </DashboardCard>
         )}
+        {bankAccountsEnabled && (
+          <DashboardCard
+            title={t('accountsBreakdownTitle')}
+            subtitle={t('accountsBreakdownSubtitle')}
+            darkMode={darkMode}
+          >
+            <div className={`grid gap-4 ${soloModeEnabled ? '' : 'sm:grid-cols-2'}`}>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  {data.person1.name || t('person1Label')}
+                </div>
+                <div className="mt-2 space-y-2">
+                  {accountTotals.person1.map((account, index) => (
+                    <div key={account.id} className="flex items-center justify-between text-sm">
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        style={getAccountChipStyle(index, darkMode)}
+                      >
+                        {account.name}
+                      </span>
+                      <span className="font-semibold">{formatCurrency(account.total, currencyPreference)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {!soloModeEnabled && (
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {data.person2.name || t('person2Label')}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {accountTotals.person2.map((account, index) => (
+                      <div key={account.id} className="flex items-center justify-between text-sm">
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={getAccountChipStyle(index, darkMode)}
+                        >
+                          {account.name}
+                        </span>
+                        <span className="font-semibold">{formatCurrency(account.total, currencyPreference)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </DashboardCard>
+        )}
         <DashboardCard
           title={t('topCategoriesTitle')}
           subtitle={t('topCategoriesSubtitle')}
@@ -3299,6 +3577,8 @@ const BudgetColumn = React.memo(({
   enableDrag,
   palette,
   currencyPreference,
+  bankAccountsEnabled,
+  bankAccounts,
   editingName,
   tempName,
   setTempName,
@@ -3339,6 +3619,8 @@ const BudgetColumn = React.memo(({
       enableDrag={enableDrag}
       palette={palette}
       currencyPreference={currencyPreference}
+      bankAccountsEnabled={bankAccountsEnabled}
+      bankAccounts={bankAccounts}
       openExpenseWizard={openExpenseWizard}
       openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateFixedExpense={updateFixedExpense}
@@ -3353,6 +3635,8 @@ const BudgetColumn = React.memo(({
       enableDrag={enableDrag}
       palette={palette}
       currencyPreference={currencyPreference}
+      bankAccountsEnabled={bankAccountsEnabled}
+      bankAccounts={bankAccounts}
       openExpenseWizard={openExpenseWizard}
       openExpenseWizardForEdit={openExpenseWizardForEdit}
       updateCategory={updateCategory}
@@ -4236,6 +4520,10 @@ type SettingsViewProps = {
   onCurrencyPreferenceChange: (value: 'EUR' | 'USD') => void;
   sessionDurationHours: number;
   onSessionDurationHoursChange: (value: number) => void;
+  bankAccountsEnabled: boolean;
+  onToggleBankAccountsEnabled: (value: boolean) => void;
+  bankAccounts: BankAccountSettings;
+  onBankAccountsChange: (value: BankAccountSettings) => void;
   oidcEnabled: boolean;
   oidcProviderName: string;
   oidcIssuer: string;
@@ -4276,6 +4564,10 @@ const SettingsView = ({
   onCurrencyPreferenceChange,
   sessionDurationHours,
   onSessionDurationHoursChange,
+  bankAccountsEnabled,
+  onToggleBankAccountsEnabled,
+  bankAccounts,
+  onBankAccountsChange,
   oidcEnabled,
   oidcProviderName,
   oidcIssuer,
@@ -4332,6 +4624,47 @@ const SettingsView = ({
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const makeUserLabel = (item: AuthUser) => item.displayName || item.username;
+  const accountBaseLabel = getBankAccountBaseLabel(language);
+
+  const updateBankAccountsForPerson = useCallback((personKey: 'person1' | 'person2', nextList: BankAccount[]) => {
+    const trimmedList = nextList.slice(0, BANK_ACCOUNT_LIMIT);
+    const ensured = trimmedList.length > 0 ? trimmedList : [createBankAccount(`${accountBaseLabel} 1`)];
+    onBankAccountsChange({
+      ...bankAccounts,
+      [personKey]: ensured
+    });
+  }, [accountBaseLabel, bankAccounts, onBankAccountsChange]);
+
+  const handleAccountNameChange = useCallback((personKey: 'person1' | 'person2', accountId: string, value: string) => {
+    const nextList = (bankAccounts[personKey] ?? []).map(account => (
+      account.id === accountId ? { ...account, name: value } : account
+    ));
+    updateBankAccountsForPerson(personKey, nextList);
+  }, [bankAccounts, updateBankAccountsForPerson]);
+
+  const handleAccountNameBlur = useCallback((personKey: 'person1' | 'person2', accountId: string, index: number, value: string) => {
+    const nextName = value.trim() || `${accountBaseLabel} ${index + 1}`;
+    const nextList = (bankAccounts[personKey] ?? []).map(account => (
+      account.id === accountId ? { ...account, name: nextName } : account
+    ));
+    updateBankAccountsForPerson(personKey, nextList);
+  }, [accountBaseLabel, bankAccounts, updateBankAccountsForPerson]);
+
+  const handleAddAccount = useCallback((personKey: 'person1' | 'person2') => {
+    const currentList = bankAccounts[personKey] ?? [];
+    if (currentList.length >= BANK_ACCOUNT_LIMIT) {
+      return;
+    }
+    const nextIndex = currentList.length + 1;
+    const nextAccount = createBankAccount(`${accountBaseLabel} ${nextIndex}`);
+    updateBankAccountsForPerson(personKey, [...currentList, nextAccount]);
+  }, [accountBaseLabel, bankAccounts, updateBankAccountsForPerson]);
+
+  const handleRemoveAccount = useCallback((personKey: 'person1' | 'person2', accountId: string) => {
+    const currentList = bankAccounts[personKey] ?? [];
+    const nextList = currentList.filter(account => account.id !== accountId);
+    updateBankAccountsForPerson(personKey, nextList);
+  }, [bankAccounts, updateBankAccountsForPerson]);
 
   useEffect(() => {
     setAvatarInput(user?.avatarUrl ?? '');
@@ -4791,6 +5124,82 @@ const SettingsView = ({
                 ]}
                 darkMode={darkMode}
               />
+              <ToggleRow
+                icon={Wallet}
+                label={t('bankAccountsSettingLabel')}
+                hint={t('bankAccountsSettingHint')}
+                checked={bankAccountsEnabled}
+                onChange={onToggleBankAccountsEnabled}
+                darkMode={darkMode}
+              />
+              {bankAccountsEnabled && (
+              <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{t('bankAccountsTitle')}</div>
+                    <div className={darkMode ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+                      {t('bankAccountsHint')}
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-400">{t('accountLimitHint')}</div>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {(['person1', 'person2'] as const).map(personKey => {
+                    const accounts = bankAccounts[personKey] ?? [];
+                    return (
+                      <div key={personKey} className={`rounded-lg border px-3 py-3 ${
+                        darkMode ? 'border-slate-800 bg-slate-900/60' : 'border-slate-100 bg-white/80'
+                      }`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold">
+                            {personKey === 'person1' ? t('person1Label') : t('person2Label')}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddAccount(personKey)}
+                            disabled={accounts.length >= BANK_ACCOUNT_LIMIT}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
+                              accounts.length >= BANK_ACCOUNT_LIMIT
+                                ? 'opacity-50 cursor-not-allowed'
+                                : (darkMode ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600')
+                            }`}
+                          >
+                            <Plus size={12} />
+                            {t('addAccountLabel')}
+                          </button>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {accounts.map((account, index) => (
+                            <div key={account.id} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={account.name}
+                                onChange={(event) => handleAccountNameChange(personKey, account.id, event.target.value)}
+                                onBlur={(event) => handleAccountNameBlur(personKey, account.id, index, event.target.value)}
+                                className={`flex-1 px-3 py-2 rounded-lg border text-sm ${
+                                  darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
+                                }`}
+                                aria-label={t('bankAccountLabel')}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveAccount(personKey, account.id)}
+                                className={`p-2 rounded-lg ${
+                                  darkMode ? 'text-slate-300 hover:text-red-300' : 'text-slate-500 hover:text-red-500'
+                                }`}
+                                aria-label={t('removeAccountLabel')}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
               {isAdmin && (
                 <>
                   <RangeRow
@@ -5251,6 +5660,10 @@ const App: React.FC = () => {
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
   const [showSidebarMonths, setShowSidebarMonths] = useState<boolean>(() => getInitialSidebarMonths());
   const [currencyPreference, setCurrencyPreference] = useState<'EUR' | 'USD'>(() => getInitialCurrencyPreference());
+  const [bankAccountsEnabled, setBankAccountsEnabled] = useState<boolean>(() => getInitialBankAccountsEnabled());
+  const [bankAccounts, setBankAccounts] = useState<BankAccountSettings>(() => (
+    normalizeBankAccounts(null, getInitialLanguagePreference())
+  ));
   const [sessionDurationHours, setSessionDurationHours] = useState<number>(12);
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcProviderName, setOidcProviderName] = useState('');
@@ -5406,6 +5819,8 @@ const App: React.FC = () => {
     return 'info' as const;
   }, [isOnline, syncNotice]);
   const selectedCalendarDate = expenseWizard?.date || null;
+  const expenseWizardAccounts = expenseWizard ? (bankAccounts[expenseWizard.personKey] ?? []) : [];
+  const expenseWizardAccountId = expenseWizard?.accountId || expenseWizardAccounts[0]?.id || '';
   const calendarWidget = (
     <BudgetCalendarWidget
       monthKey={currentMonthKey}
@@ -5436,6 +5851,8 @@ const App: React.FC = () => {
     sortByCost,
     showSidebarMonths,
     currencyPreference,
+    bankAccountsEnabled,
+    bankAccounts,
     sessionDurationHours,
     oidcEnabled,
     oidcProviderName,
@@ -5674,6 +6091,13 @@ const App: React.FC = () => {
   }, [currencyPreference]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    localStorage.setItem('bankAccountsEnabled', bankAccountsEnabled ? 'true' : 'false');
+  }, [bankAccountsEnabled]);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || !isHydrated) {
       return;
     }
@@ -5719,6 +6143,8 @@ const App: React.FC = () => {
     sortByCost,
     showSidebarMonths,
     currencyPreference,
+    bankAccountsEnabled,
+    bankAccounts,
     sessionDurationHours,
     oidcEnabled,
     oidcProviderName,
@@ -5883,7 +6309,9 @@ const App: React.FC = () => {
         setShowSidebarMonths(settings.showSidebarMonths ?? true);
         setLanguagePreference(settings.languagePreference);
         setCurrencyPreference(settings.currencyPreference ?? 'EUR');
+        setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
         setSessionDurationHours(settings.sessionDurationHours ?? 12);
+        setBankAccounts(normalizeBankAccounts(settings.bankAccounts, settings.languagePreference ?? languagePreference));
         setOidcEnabled(settings.oidcEnabled ?? false);
         setOidcProviderName(settings.oidcProviderName ?? '');
         setOidcIssuer(settings.oidcIssuer ?? '');
@@ -6887,7 +7315,8 @@ const App: React.FC = () => {
       templateId: overrides.templateId ?? createTemplateId(),
       categoryOverrideId: overrides.categoryOverrideId ?? '',
       isChecked: overrides.isChecked ?? false,
-      date: overrides.date
+      date: overrides.date,
+      accountId: overrides.accountId
     };
     setMonthlyBudgets(prev => {
       const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
@@ -7062,7 +7491,7 @@ const App: React.FC = () => {
   const updateFixedExpenseDetails = (
     personKey: 'person1' | 'person2',
     id: string,
-    updates: { name: string; amount: number; categoryOverrideId: string; date?: string }
+    updates: { name: string; amount: number; categoryOverrideId: string; date?: string; accountId: string }
   ) => {
     setMonthlyBudgets(prev => {
       const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
@@ -7076,6 +7505,7 @@ const App: React.FC = () => {
       const nextAmount = updates.amount;
       const nextCategoryOverrideId = updates.categoryOverrideId;
       const nextDate = updates.date;
+      const nextAccountId = updates.accountId;
       const shouldPropagate = shouldPropagateFixedExpense(nextName);
       const templateId = targetExpense.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
       const updatedExpense = {
@@ -7084,6 +7514,7 @@ const App: React.FC = () => {
         amount: nextAmount,
         categoryOverrideId: nextCategoryOverrideId,
         date: nextDate,
+        accountId: nextAccountId,
         ...(templateId ? { templateId } : {})
       };
       const updatedExpenses = currentExpenses.map(exp =>
@@ -7125,6 +7556,7 @@ const App: React.FC = () => {
             || coerceNumber(exp.amount) !== coerceNumber(nextAmount)
             || (exp.categoryOverrideId || '') !== (nextCategoryOverrideId || '')
             || (exp.date || '') !== (nextDate || '')
+            || (exp.accountId || '') !== (nextAccountId || '')
           ));
         });
 
@@ -7175,6 +7607,7 @@ const App: React.FC = () => {
               amount: nextAmount,
               categoryOverrideId: nextCategoryOverrideId,
               date: nextDate,
+              accountId: nextAccountId,
               ...(templateId ? { templateId } : {})
             };
           });
@@ -7285,6 +7718,7 @@ const App: React.FC = () => {
       recurringMonths: isRecurring ? (overrides.recurringMonths ?? 3) : overrides.recurringMonths,
       startMonth: isRecurring ? (overrides.startMonth ?? currentMonthKey) : overrides.startMonth,
       date: overrides.date,
+      accountId: overrides.accountId,
       propagate: overrides.propagate ?? true
     };
     const normalizedName = normalizeIconLabel(newCategory.name);
@@ -7544,6 +7978,7 @@ const App: React.FC = () => {
       recurringMonths?: number;
       startMonth?: string;
       propagate: boolean;
+      accountId: string;
     }
   ) => {
     setMonthlyBudgets(prev => {
@@ -7572,6 +8007,7 @@ const App: React.FC = () => {
         amount: updates.amount,
         categoryOverrideId: updates.categoryOverrideId,
         date: updates.date,
+        accountId: updates.accountId,
         isRecurring: nextIsRecurring,
         recurringMonths: nextRecurringMonths,
         startMonth: nextStartMonth,
@@ -7621,6 +8057,7 @@ const App: React.FC = () => {
             || coerceNumber(cat.amount) !== coerceNumber(updatedCategory.amount)
             || (cat.categoryOverrideId || '') !== (updatedCategory.categoryOverrideId || '')
             || (cat.date || '') !== (updatedCategory.date || '')
+            || (cat.accountId || '') !== (updatedCategory.accountId || '')
             || Boolean(cat.isRecurring) !== Boolean(updatedCategory.isRecurring)
             || (cat.recurringMonths || 0) !== (updatedCategory.recurringMonths || 0)
             || (cat.startMonth || '') !== (updatedCategory.startMonth || '')
@@ -7692,6 +8129,7 @@ const App: React.FC = () => {
               amount: updatedCategory.amount,
               categoryOverrideId: updatedCategory.categoryOverrideId,
               date: updatedCategory.date,
+              accountId: updatedCategory.accountId,
               isRecurring: updatedCategory.isRecurring,
               recurringMonths: updatedCategory.recurringMonths,
               startMonth: updatedCategory.startMonth,
@@ -7758,6 +8196,7 @@ const App: React.FC = () => {
         isChecked: Boolean(movedExpense.isChecked),
         isRecurring: false,
         date: movedExpense.date,
+        accountId: movedExpense.accountId,
         propagate: true
       };
       const nextCategories = [...categories];
@@ -7817,6 +8256,7 @@ const App: React.FC = () => {
               categoryOverrideId: movedExpense.categoryOverrideId ?? '',
               templateId,
               date: movedExpense.date,
+              accountId: movedExpense.accountId,
               isChecked: matchedFixed?.isChecked ?? existingCategory.isChecked,
               propagate: existingCategory.propagate !== false
             };
@@ -7834,6 +8274,7 @@ const App: React.FC = () => {
               isChecked: Boolean(matchedFixed?.isChecked),
               isRecurring: false,
               date: movedExpense.date,
+              accountId: movedExpense.accountId,
               propagate: true
             };
             nextMonthCategories = [...monthCategories];
@@ -7887,7 +8328,8 @@ const App: React.FC = () => {
         templateId,
         categoryOverrideId: movedCategory.categoryOverrideId ?? '',
         isChecked: Boolean(movedCategory.isChecked),
-        date: movedCategory.date
+        date: movedCategory.date,
+        accountId: movedCategory.accountId
       };
       const nextFixedExpenses = [...fixedExpenses];
       const insertIndex = Math.min(Math.max(destinationIndex, 0), nextFixedExpenses.length);
@@ -7941,28 +8383,30 @@ const App: React.FC = () => {
 
             if (fixedIndex !== -1) {
               const existingExpense = monthFixed[fixedIndex];
-              const updatedExpense: FixedExpense = {
-                ...existingExpense,
-                name: movedCategory.name,
-                amount: coerceNumber(movedCategory.amount),
-                categoryOverrideId: movedCategory.categoryOverrideId ?? '',
-                date: movedCategory.date,
-                templateId
-              };
+            const updatedExpense: FixedExpense = {
+              ...existingExpense,
+              name: movedCategory.name,
+              amount: coerceNumber(movedCategory.amount),
+              categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+              date: movedCategory.date,
+              accountId: movedCategory.accountId ?? existingExpense.accountId,
+              templateId
+            };
               nextMonthFixed = monthFixed.map((expense, index) => (
                 index === fixedIndex ? updatedExpense : expense
               ));
               changed = true;
             } else {
-              const insertedExpense: FixedExpense = {
-                id: `${Date.now()}-${Math.random()}`,
-                name: movedCategory.name,
-                amount: coerceNumber(movedCategory.amount),
-                templateId,
-                categoryOverrideId: movedCategory.categoryOverrideId ?? '',
-                isChecked: Boolean(matchedCategory?.isChecked),
-                date: movedCategory.date
-              };
+            const insertedExpense: FixedExpense = {
+              id: `${Date.now()}-${Math.random()}`,
+              name: movedCategory.name,
+              amount: coerceNumber(movedCategory.amount),
+              templateId,
+              categoryOverrideId: movedCategory.categoryOverrideId ?? '',
+              isChecked: Boolean(matchedCategory?.isChecked),
+              date: movedCategory.date,
+              accountId: movedCategory.accountId
+            };
               nextMonthFixed = [...monthFixed];
               const targetIndex = Math.min(Math.max(destinationIndex, 0), nextMonthFixed.length);
               nextMonthFixed.splice(targetIndex, 0, insertedExpense);
@@ -8035,6 +8479,7 @@ const App: React.FC = () => {
   };
 
   const openExpenseWizard = (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => {
+    const defaultAccountId = bankAccounts[personKey]?.[0]?.id ?? '';
     setExpenseWizard({
       mode: 'create',
       step: 1,
@@ -8047,7 +8492,8 @@ const App: React.FC = () => {
       isRecurring: false,
       recurringMonths: 3,
       startMonth: currentMonthKey,
-      propagate: true
+      propagate: true,
+      accountId: defaultAccountId
     });
   };
 
@@ -8063,6 +8509,7 @@ const App: React.FC = () => {
     const propagate = isRecurring
       ? true
       : (type === 'free' && 'propagate' in payload ? payload.propagate !== false : true);
+    const defaultAccountId = bankAccounts[personKey]?.[0]?.id ?? '';
     setExpenseWizard({
       mode: 'edit',
       step: 1,
@@ -8076,7 +8523,8 @@ const App: React.FC = () => {
       isRecurring,
       recurringMonths,
       startMonth,
-      propagate
+      propagate,
+      accountId: ('accountId' in payload && payload.accountId) ? payload.accountId : defaultAccountId
     });
   };
 
@@ -8124,7 +8572,8 @@ const App: React.FC = () => {
           name,
           amount,
           categoryOverrideId: expenseWizard.categoryOverrideId,
-          date: dateValue
+          date: dateValue,
+          accountId: expenseWizard.accountId
         });
       } else {
         updateCategoryDetails(expenseWizard.personKey, expenseWizard.targetId, {
@@ -8135,7 +8584,8 @@ const App: React.FC = () => {
           isRecurring: expenseWizard.isRecurring,
           recurringMonths: expenseWizard.recurringMonths,
           startMonth: expenseWizard.startMonth,
-          propagate: expenseWizard.propagate
+          propagate: expenseWizard.propagate,
+          accountId: expenseWizard.accountId
         });
       }
     } else if (expenseWizard.type === 'fixed') {
@@ -8143,7 +8593,8 @@ const App: React.FC = () => {
         name,
         amount,
         categoryOverrideId: expenseWizard.categoryOverrideId,
-        date: dateValue
+        date: dateValue,
+        accountId: expenseWizard.accountId
       });
     } else {
       addCategory(expenseWizard.personKey, {
@@ -8154,7 +8605,8 @@ const App: React.FC = () => {
         isRecurring: expenseWizard.isRecurring,
         recurringMonths: expenseWizard.isRecurring ? expenseWizard.recurringMonths : undefined,
         startMonth: expenseWizard.isRecurring ? expenseWizard.startMonth : undefined,
-        propagate: expenseWizard.propagate
+        propagate: expenseWizard.propagate,
+        accountId: expenseWizard.accountId
       });
     }
     setExpenseWizard(null);
@@ -8574,6 +9026,7 @@ const App: React.FC = () => {
                 setSoloModeEnabled(settings.soloModeEnabled);
                 setShowSidebarMonths(settings.showSidebarMonths ?? true);
                 setLanguagePreference(settings.languagePreference);
+                setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
               })
               .catch((error) => {
                 console.error('Failed to save onboarding settings', error);
@@ -8734,6 +9187,10 @@ const App: React.FC = () => {
           onCurrencyPreferenceChange={setCurrencyPreference}
           sessionDurationHours={sessionDurationHours}
           onSessionDurationHoursChange={setSessionDurationHours}
+          bankAccountsEnabled={bankAccountsEnabled}
+          onToggleBankAccountsEnabled={setBankAccountsEnabled}
+          bankAccounts={bankAccounts}
+          onBankAccountsChange={setBankAccounts}
           oidcEnabled={oidcEnabled}
           oidcProviderName={oidcProviderName}
           oidcIssuer={oidcIssuer}
@@ -8767,6 +9224,10 @@ const App: React.FC = () => {
           formatMonthKey={formatMonthKey}
           data={data}
           jointAccountEnabled={jointAccountEnabled}
+          onOpenTransactions={() => setActivePage('reports')}
+          bankAccountsEnabled={bankAccountsEnabled}
+          bankAccounts={bankAccounts}
+          soloModeEnabled={soloModeEnabled}
         />
       ) : isBudgetView ? (
         <>
@@ -8831,6 +9292,8 @@ const App: React.FC = () => {
               enableDrag={enableDrag}
               palette={palette}
               currencyPreference={currencyPreference}
+              bankAccountsEnabled={bankAccountsEnabled}
+              bankAccounts={bankAccounts}
               editingName={editingName}
               tempName={tempName}
               setTempName={setTempName}
@@ -8944,6 +9407,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateFixedExpense={updateFixedExpense}
@@ -8959,6 +9424,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateFixedExpense={updateFixedExpense}
@@ -8974,6 +9441,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateCategory={updateCategory}
@@ -8989,6 +9458,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateCategory={updateCategory}
@@ -9048,6 +9519,8 @@ const App: React.FC = () => {
                       enableDrag={enableDrag}
                       palette={palette}
                       currencyPreference={currencyPreference}
+                      bankAccountsEnabled={bankAccountsEnabled}
+                      bankAccounts={bankAccounts}
                       openExpenseWizard={openExpenseWizard}
                       openExpenseWizardForEdit={openExpenseWizardForEdit}
                       updateFixedExpense={updateFixedExpense}
@@ -9063,6 +9536,8 @@ const App: React.FC = () => {
                       enableDrag={enableDrag}
                       palette={palette}
                       currencyPreference={currencyPreference}
+                      bankAccountsEnabled={bankAccountsEnabled}
+                      bankAccounts={bankAccounts}
                       openExpenseWizard={openExpenseWizard}
                       openExpenseWizardForEdit={openExpenseWizardForEdit}
                       updateCategory={updateCategory}
@@ -9220,6 +9695,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateFixedExpense={updateFixedExpense}
@@ -9235,6 +9712,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateFixedExpense={updateFixedExpense}
@@ -9250,6 +9729,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateFixedExpense={updateFixedExpense}
@@ -9265,6 +9746,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateFixedExpense={updateFixedExpense}
@@ -9280,6 +9763,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateCategory={updateCategory}
@@ -9295,6 +9780,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateCategory={updateCategory}
@@ -9310,6 +9797,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateCategory={updateCategory}
@@ -9325,6 +9814,8 @@ const App: React.FC = () => {
                           enableDrag={enableDrag}
                           palette={palette}
                           currencyPreference={currencyPreference}
+                          bankAccountsEnabled={bankAccountsEnabled}
+                          bankAccounts={bankAccounts}
                           openExpenseWizard={openExpenseWizard}
                           openExpenseWizardForEdit={openExpenseWizardForEdit}
                           updateCategory={updateCategory}
@@ -9409,6 +9900,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateFixedExpense={updateFixedExpense}
@@ -9424,6 +9917,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateFixedExpense={updateFixedExpense}
@@ -9439,6 +9934,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateCategory={updateCategory}
@@ -9454,6 +9951,8 @@ const App: React.FC = () => {
                         enableDrag={enableDrag}
                         palette={palette}
                         currencyPreference={currencyPreference}
+                        bankAccountsEnabled={bankAccountsEnabled}
+                        bankAccounts={bankAccounts}
                         openExpenseWizard={openExpenseWizard}
                         openExpenseWizardForEdit={openExpenseWizardForEdit}
                         updateCategory={updateCategory}
@@ -9761,6 +10260,29 @@ const App: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  {bankAccountsEnabled && expenseWizardAccounts.length > 0 && (
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium" htmlFor="expense-account">{t('bankAccountLabel')}</label>
+                      <Select
+                        value={expenseWizardAccountId}
+                        onValueChange={(value) => updateExpenseWizard({ accountId: value })}
+                      >
+                        <SelectTrigger
+                          id="expense-account"
+                          className={`w-full ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200 text-slate-800'}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                          {expenseWizardAccounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -78,7 +78,12 @@ const defaultSettings = {
   oidcIssuer: '',
   oidcClientId: '',
   oidcClientSecret: '',
-  oidcRedirectUri: ''
+  oidcRedirectUri: '',
+  bankAccountsEnabled: true,
+  bankAccounts: {
+    person1: [{ id: 'person1-1', name: 'Compte 1' }],
+    person2: [{ id: 'person2-1', name: 'Compte 1' }]
+  }
 };
 
 const dockerHubRepo = process.env.DOCKERHUB_REPO || 'homynudget/homybudget';
@@ -227,6 +232,43 @@ const ensureThemePreferenceColumn = async () => {
 const normalizeSettings = (input) => {
   const next = {};
   const sessionHours = Number(input.sessionDurationHours);
+  const normalizeBankAccountList = (list) => {
+    if (!Array.isArray(list)) {
+      return null;
+    }
+    const nextList = [];
+    const used = new Set();
+    list.forEach((item) => {
+      if (nextList.length >= 3) {
+        return;
+      }
+      const name = typeof item?.name === 'string' ? item.name.trim() : '';
+      if (!name) {
+        return;
+      }
+      let id = typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : crypto.randomUUID();
+      if (used.has(id)) {
+        id = crypto.randomUUID();
+      }
+      used.add(id);
+      nextList.push({ id, name });
+    });
+    return nextList;
+  };
+  const normalizeBankAccounts = (value) => {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+    const person1 = normalizeBankAccountList(value.person1);
+    const person2 = normalizeBankAccountList(value.person2);
+    if (!person1 && !person2) {
+      return null;
+    }
+    return {
+      person1: person1 ?? [],
+      person2: person2 ?? []
+    };
+  };
   if (input.languagePreference === 'fr' || input.languagePreference === 'en') {
     next.languagePreference = input.languagePreference;
   }
@@ -262,6 +304,13 @@ const normalizeSettings = (input) => {
   }
   if (typeof input.oidcRedirectUri === 'string') {
     next.oidcRedirectUri = input.oidcRedirectUri.trim();
+  }
+  if (input.bankAccountsEnabled !== undefined) {
+    next.bankAccountsEnabled = Boolean(input.bankAccountsEnabled);
+  }
+  const bankAccounts = normalizeBankAccounts(input.bankAccounts);
+  if (bankAccounts) {
+    next.bankAccounts = bankAccounts;
   }
   return next;
 };
