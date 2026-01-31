@@ -253,7 +253,7 @@ const Sidebar = React.memo(({
       >
         <div className="flex items-center gap-3 px-2 mb-6">
           <img
-            src="/icons/icon-192.png"
+            src="/logo.svg"
             alt={appName}
             className="h-10 w-10 rounded-xl object-contain"
           />
@@ -281,7 +281,7 @@ const Sidebar = React.memo(({
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <img
-                src="/icons/icon-192.png"
+                src="/logo.svg"
                 alt={appName}
                 className="h-10 w-10 rounded-xl object-contain"
               />

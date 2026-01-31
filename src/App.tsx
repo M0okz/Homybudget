@@ -3804,7 +3804,7 @@ const LoginScreen = React.memo(({
         <div className="space-y-2 text-center">
           <div className="flex justify-center">
             <img
-              src="/icons/icon-192.png"
+              src="/logo.svg"
               alt={t('appName')}
               className="h-12 w-12 rounded-xl object-contain"
             />
