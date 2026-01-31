@@ -27,7 +27,7 @@ app.use(cors({
   origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
 const adminUsername = process.env.ADMIN_USERNAME;
@@ -920,6 +920,181 @@ app.patch('/api/settings', authRequired, async (req, res) => {
   } catch (error) {
     console.error('Failed to update settings', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+app.get('/api/backup/export', authRequired, requireAdmin, async (req, res) => {
+  const includeUsers = String(req.query.includeUsers ?? 'true').toLowerCase() !== 'false';
+  try {
+    const monthsResult = await pool.query('select month_key, data, updated_at from monthly_budgets order by month_key');
+    const settingsResult = await pool.query('select data, updated_at from app_settings where id = 1');
+    const usersResult = includeUsers
+      ? await pool.query(`
+          select id, username, display_name, avatar_url, theme_preference,
+                 password_hash, role, is_active, created_at, updated_at, last_login_at
+          from users
+          order by created_at
+        `)
+      : { rows: [] };
+    const oauthResult = includeUsers
+      ? await pool.query('select id, provider, issuer, subject, user_id, created_at from oauth_accounts')
+      : { rows: [] };
+
+    res.json({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      settings: settingsResult.rows[0]
+        ? { data: settingsResult.rows[0].data, updatedAt: settingsResult.rows[0].updated_at }
+        : null,
+      months: monthsResult.rows.map(row => ({
+        monthKey: row.month_key,
+        data: row.data,
+        updatedAt: row.updated_at
+      })),
+      users: includeUsers
+        ? usersResult.rows.map(row => ({
+            id: row.id,
+            username: row.username,
+            displayName: row.display_name,
+            avatarUrl: row.avatar_url,
+            themePreference: row.theme_preference,
+            passwordHash: row.password_hash,
+            role: row.role,
+            isActive: row.is_active,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            lastLoginAt: row.last_login_at
+          }))
+        : undefined,
+      oauthAccounts: includeUsers
+        ? oauthResult.rows.map(row => ({
+            id: row.id,
+            provider: row.provider,
+            issuer: row.issuer,
+            subject: row.subject,
+            userId: row.user_id,
+            createdAt: row.created_at
+          }))
+        : undefined
+    });
+  } catch (error) {
+    console.error('Failed to export backup', error);
+    res.status(500).json({ error: 'Failed to export backup' });
+  }
+});
+
+app.post('/api/backup/import', authRequired, requireAdmin, async (req, res) => {
+  const payload = req.body || {};
+  const mode = payload.mode === 'merge' ? 'merge' : 'replace';
+  const includeUsers = payload.includeUsers !== false;
+  if (mode !== 'replace') {
+    res.status(400).json({ error: 'Unsupported import mode' });
+    return;
+  }
+  const months = Array.isArray(payload.months) ? payload.months : null;
+  const settings = payload.settings ?? null;
+  const users = includeUsers && Array.isArray(payload.users) ? payload.users : null;
+  const oauthAccounts = includeUsers && Array.isArray(payload.oauthAccounts) ? payload.oauthAccounts : null;
+
+  if (!months) {
+    res.status(400).json({ error: 'Invalid backup payload' });
+    return;
+  }
+  if (includeUsers && !users) {
+    res.status(400).json({ error: 'Missing users in backup payload' });
+    return;
+  }
+  if (includeUsers && users && !users.some(user => user && user.role === 'admin')) {
+    res.status(400).json({ error: 'Backup must contain at least one admin user' });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+
+    await client.query('delete from monthly_budgets');
+    if (includeUsers) {
+      await client.query('delete from oauth_accounts');
+      await client.query('delete from password_reset_tokens');
+      if (users) {
+        await client.query('delete from users');
+      }
+    }
+    await client.query('delete from app_settings');
+
+    if (settings && settings.data) {
+      await client.query(
+        'insert into app_settings (id, data, updated_at) values (1, $1, $2)',
+        [JSON.stringify(settings.data), settings.updatedAt ? new Date(settings.updatedAt) : new Date()]
+      );
+    }
+
+    for (const month of months) {
+      if (!month || typeof month.monthKey !== 'string' || !isValidMonthKey(month.monthKey) || !month.data || typeof month.data !== 'object') {
+        throw new Error('Invalid month payload');
+      }
+      await client.query(
+        'insert into monthly_budgets (month_key, data, created_at, updated_at) values ($1, $2, now(), $3)',
+        [month.monthKey, JSON.stringify(month.data), month.updatedAt ? new Date(month.updatedAt) : new Date()]
+      );
+    }
+
+    if (users) {
+      for (const user of users) {
+        if (!user || !user.id || !user.username || !user.passwordHash) {
+          throw new Error('Invalid user payload');
+        }
+        await client.query(
+          `insert into users
+            (id, username, display_name, avatar_url, theme_preference, password_hash, role, is_active, created_at, updated_at, last_login_at)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            String(user.id),
+            String(user.username),
+            user.displayName ?? null,
+            user.avatarUrl ?? null,
+            user.themePreference === 'dark' ? 'dark' : 'light',
+            String(user.passwordHash),
+            user.role === 'admin' ? 'admin' : 'user',
+            user.isActive !== false,
+            user.createdAt ? new Date(user.createdAt) : new Date(),
+            user.updatedAt ? new Date(user.updatedAt) : new Date(),
+            user.lastLoginAt ? new Date(user.lastLoginAt) : null
+          ]
+        );
+      }
+    }
+
+    if (oauthAccounts) {
+      for (const account of oauthAccounts) {
+        if (!account || !account.id || !account.issuer || !account.subject || !account.userId) {
+          throw new Error('Invalid oauth account payload');
+        }
+        await client.query(
+          `insert into oauth_accounts
+            (id, provider, issuer, subject, user_id, created_at)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [
+            String(account.id),
+            account.provider ?? 'OIDC',
+            String(account.issuer),
+            String(account.subject),
+            String(account.userId),
+            account.createdAt ? new Date(account.createdAt) : new Date()
+          ]
+        );
+      }
+    }
+
+    await client.query('commit');
+    res.json({ status: 'ok' });
+  } catch (error) {
+    await client.query('rollback');
+    console.error('Failed to import backup', error);
+    res.status(500).json({ error: 'Failed to import backup' });
+  } finally {
+    client.release();
   }
 });
 

@@ -216,6 +216,50 @@ type LatestVersionResponse = {
   updatedAt: string | null;
 };
 
+type BackupSettingsPayload = {
+  data: AppSettings;
+  updatedAt: string | null;
+};
+
+type BackupMonthPayload = {
+  monthKey: string;
+  data: BudgetData;
+  updatedAt: string | null;
+};
+
+type BackupUserPayload = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  themePreference: 'light' | 'dark';
+  passwordHash: string;
+  role: 'admin' | 'user';
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+};
+
+type BackupOauthAccountPayload = {
+  id: string;
+  provider: string;
+  issuer: string;
+  subject: string;
+  userId: string;
+  createdAt: string;
+};
+
+type BackupPayload = {
+  version: number;
+  exportedAt: string;
+  settings: BackupSettingsPayload | null;
+  months: BackupMonthPayload[];
+  users?: BackupUserPayload[];
+  oauthAccounts?: BackupOauthAccountPayload[];
+  mode?: 'replace';
+};
+
 type OidcConfigResponse = {
   enabled: boolean;
   providerName: string;
@@ -1635,6 +1679,40 @@ const updateAppSettingsRequest = async (payload: Partial<AppSettings>): Promise<
   }
   const payloadResponse = await response.json() as SettingsResponse;
   return payloadResponse.settings;
+};
+
+const exportBackupRequest = async (includeUsers: boolean): Promise<BackupPayload> => {
+  const response = await fetch(apiUrl(`/api/backup/export?includeUsers=${includeUsers ? 'true' : 'false'}`), {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to export backup (${response.status})`);
+    throw createApiError(message, response.status);
+  }
+  return response.json() as Promise<BackupPayload>;
+};
+
+const importBackupRequest = async (payload: BackupPayload, includeUsers: boolean) => {
+  const response = await fetch(apiUrl('/api/backup/import'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({ ...payload, mode: 'replace', includeUsers })
+  });
+  if (response.status === 401) {
+    throw createApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    const message = await parseApiErrorMessage(response, `Failed to import backup (${response.status})`);
+    throw createApiError(message, response.status);
+  }
 };
 
 const fetchUsers = async (): Promise<AuthUser[]> => {
@@ -5287,6 +5365,11 @@ const SettingsView = ({
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const [oidcLinkLoading, setOidcLinkLoading] = useState(false);
   const [oidcLinkError, setOidcLinkError] = useState<string | null>(null);
+  const [backupExporting, setBackupExporting] = useState(false);
+  const [backupImporting, setBackupImporting] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [backupIncludeUsers, setBackupIncludeUsers] = useState(true);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -5434,6 +5517,79 @@ const SettingsView = ({
     } finally {
       setOidcLinkLoading(false);
     }
+  };
+
+  const handleBackupExport = async () => {
+    if (backupExporting) {
+      return;
+    }
+    setBackupStatus(null);
+    setBackupExporting(true);
+    try {
+      const payload = await exportBackupRequest(backupIncludeUsers);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const dateLabel = new Date().toISOString().slice(0, 10);
+      const scopeLabel = backupIncludeUsers ? 'full' : 'data';
+      const filename = `homybudget-backup-${scopeLabel}-${dateLabel}.json`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      setBackupStatus({ type: 'success', message: t('backupExportSuccess') });
+    } catch (error) {
+      if (!onAuthFailure(error)) {
+        setBackupStatus({ type: 'error', message: resolveErrorMessage(error, t('backupExportError')) });
+      }
+    } finally {
+      setBackupExporting(false);
+    }
+  };
+
+  const handleBackupImport = async (file: File) => {
+    if (backupImporting) {
+      return;
+    }
+    setBackupStatus(null);
+    const confirmLabel = backupIncludeUsers ? t('backupImportConfirmFull') : t('backupImportConfirmData');
+    const confirmed = window.confirm(confirmLabel);
+    if (!confirmed) {
+      return;
+    }
+    setBackupImporting(true);
+    try {
+      const content = await file.text();
+      let parsed: BackupPayload;
+      try {
+        parsed = JSON.parse(content) as BackupPayload;
+      } catch (error) {
+        throw new Error(t('backupImportInvalid'));
+      }
+      if (!parsed || !Array.isArray(parsed.months)) {
+        throw new Error(t('backupImportInvalid'));
+      }
+      await importBackupRequest(parsed, backupIncludeUsers);
+      setBackupStatus({ type: 'success', message: t('backupImportSuccess') });
+      window.setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+      if (!onAuthFailure(error)) {
+        setBackupStatus({ type: 'error', message: resolveErrorMessage(error, t('backupImportError')) });
+      }
+    } finally {
+      setBackupImporting(false);
+    }
+  };
+
+  const handleBackupFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    event.target.value = '';
+    void handleBackupImport(file);
   };
 
   const loadUsers = async () => {
@@ -5760,7 +5916,7 @@ const SettingsView = ({
       <div className={cardClassName}>
         <div className="space-y-6">
           <section className="space-y-3">
-            <h3 className="text-lg font-semibold">{t('settingsSectionTitle')}</h3>
+            <h3 className="text-lg font-semibold">{t('settingsExtrasTitle')}</h3>
             <div className="space-y-3">
               <ToggleRow
                 icon={ArrowUpDown}
@@ -5901,96 +6057,101 @@ const SettingsView = ({
                 </div>
               </div>
               )}
-              {isAdmin && (
-                <>
-                  <RangeRow
-                    icon={Clock}
-                    label={t('sessionDurationLabel')}
-                    hint={t('sessionDurationHint')}
-                    value={sessionDurationHours}
-                    min={1}
-                    max={24}
-                    step={1}
-                    onChange={onSessionDurationHoursChange}
-                    darkMode={darkMode}
-                  />
-                  <ToggleRow
-                    icon={KeyRound}
-                    label={t('oidcSectionTitle')}
-                    checked={oidcEnabled}
-                    onChange={onOidcEnabledChange}
-                    darkMode={darkMode}
-                  />
-                  {oidcEnabled && (
-                    <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-xs font-semibold">
-                          {t('oidcProviderLabel')}
-                          <input
-                            type="text"
-                            value={oidcProviderName}
-                            onChange={(event) => onOidcProviderNameChange(event.target.value)}
-                            placeholder="Keycloak / Authentik"
-                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
-                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
-                            }`}
-                          />
-                        </label>
-                        <label className="text-xs font-semibold">
-                          {t('oidcIssuerLabel')}
-                          <input
-                            type="text"
-                            value={oidcIssuer}
-                            onChange={(event) => onOidcIssuerChange(event.target.value)}
-                            placeholder="https://auth.example.com/realms/homybudget"
-                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
-                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
-                            }`}
-                          />
-                        </label>
-                        <label className="text-xs font-semibold">
-                          {t('oidcClientIdLabel')}
-                          <input
-                            type="text"
-                            value={oidcClientId}
-                            onChange={(event) => onOidcClientIdChange(event.target.value)}
-                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
-                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
-                            }`}
-                          />
-                        </label>
-                        <label className="text-xs font-semibold">
-                          {t('oidcClientSecretLabel')}
-                          <input
-                            type="password"
-                            value={oidcClientSecret}
-                            onChange={(event) => onOidcClientSecretChange(event.target.value)}
-                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
-                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
-                            }`}
-                          />
-                        </label>
-                        <label className="text-xs font-semibold sm:col-span-2">
-                          {t('oidcRedirectUriLabel')}
-                          <input
-                            type="text"
-                            value={oidcRedirectUri}
-                            onChange={(event) => onOidcRedirectUriChange(event.target.value)}
-                            placeholder="https://app.example.com/api/auth/oidc/callback"
-                            className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
-                              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
-                            }`}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           </section>
+        </div>
+      </div>
+      {isAdmin && (
+        <div className={cardClassName}>
+          <div className="space-y-6">
+            <section className="space-y-3">
+              <h3 className="text-lg font-semibold">{t('adminSectionTitle')}</h3>
+              <div className="space-y-3">
+                <RangeRow
+                  icon={Clock}
+                  label={t('sessionDurationLabel')}
+                  hint={t('sessionDurationHint')}
+                  value={sessionDurationHours}
+                  min={1}
+                  max={24}
+                  step={1}
+                  onChange={onSessionDurationHoursChange}
+                  darkMode={darkMode}
+                />
+                <ToggleRow
+                  icon={KeyRound}
+                  label={t('oidcSectionTitle')}
+                  checked={oidcEnabled}
+                  onChange={onOidcEnabledChange}
+                  darkMode={darkMode}
+                />
+                {oidcEnabled && (
+                  <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="text-xs font-semibold">
+                        {t('oidcProviderLabel')}
+                        <input
+                          type="text"
+                          value={oidcProviderName}
+                          onChange={(event) => onOidcProviderNameChange(event.target.value)}
+                          placeholder="Keycloak / Authentik"
+                          className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                            darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
+                          }`}
+                        />
+                      </label>
+                      <label className="text-xs font-semibold">
+                        {t('oidcIssuerLabel')}
+                        <input
+                          type="text"
+                          value={oidcIssuer}
+                          onChange={(event) => onOidcIssuerChange(event.target.value)}
+                          placeholder="https://auth.example.com/realms/homybudget"
+                          className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                            darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
+                          }`}
+                        />
+                      </label>
+                      <label className="text-xs font-semibold">
+                        {t('oidcClientIdLabel')}
+                        <input
+                          type="text"
+                          value={oidcClientId}
+                          onChange={(event) => onOidcClientIdChange(event.target.value)}
+                          className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                            darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
+                          }`}
+                        />
+                      </label>
+                      <label className="text-xs font-semibold">
+                        {t('oidcClientSecretLabel')}
+                        <input
+                          type="password"
+                          value={oidcClientSecret}
+                          onChange={(event) => onOidcClientSecretChange(event.target.value)}
+                          className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                            darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
+                          }`}
+                        />
+                      </label>
+                      <label className="text-xs font-semibold sm:col-span-2">
+                        {t('oidcRedirectUriLabel')}
+                        <input
+                          type="text"
+                          value={oidcRedirectUri}
+                          onChange={(event) => onOidcRedirectUriChange(event.target.value)}
+                          placeholder="https://app.example.com/api/auth/oidc/callback"
+                          className={`mt-1 w-full px-3 py-2 rounded-lg border text-sm font-semibold ${
+                            darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200'
+                          }`}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
 
-          {isAdmin && (
             <section className="space-y-3">
               <h3 className="text-lg font-semibold">{t('personLinkSectionTitle')}</h3>
               <div className="space-y-3">
@@ -6065,9 +6226,77 @@ const SettingsView = ({
                 </div>
               </div>
             </section>
-          )}
 
-          {isAdmin && (
+            <section className="space-y-3">
+              <h3 className="text-lg font-semibold">{t('backupSectionTitle')}</h3>
+              <div className={`rounded-xl border px-4 py-3 text-sm ${
+                darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{t('backupSectionSubtitle')}</div>
+                    <div className={darkMode ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+                      {t('backupSectionHint')}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleBackupExport}
+                      disabled={backupExporting || backupImporting}
+                      className={`px-4 py-2 rounded-full text-xs font-semibold ${
+                        darkMode ? 'bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      } ${(backupExporting || backupImporting) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      {backupExporting ? t('backupExportingLabel') : t('backupExportButton')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => backupFileInputRef.current?.click()}
+                      disabled={backupImporting || backupExporting}
+                      className={`px-4 py-2 rounded-full text-xs font-semibold ${
+                        darkMode ? 'bg-rose-500/90 text-white hover:bg-rose-500' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                      } ${(backupImporting || backupExporting) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      {backupImporting ? t('backupImportingLabel') : t('backupImportButton')}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold">{t('backupIncludeUsersLabel')}</div>
+                    <div className={darkMode ? 'text-[11px] text-slate-400' : 'text-[11px] text-slate-500'}>
+                      {t('backupIncludeUsersHint')}
+                    </div>
+                  </div>
+                  <AnimatedSwitch
+                    checked={backupIncludeUsers}
+                    onChange={setBackupIncludeUsers}
+                    darkMode={darkMode}
+                  />
+                </div>
+                <div className={`mt-3 text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {backupIncludeUsers ? t('backupImportWarningFull') : t('backupImportWarningData')}
+                </div>
+                {backupStatus && (
+                  <div className={`mt-3 text-sm ${
+                    backupStatus.type === 'success'
+                      ? (darkMode ? 'text-emerald-300' : 'text-emerald-600')
+                      : (darkMode ? 'text-red-300' : 'text-red-600')
+                  }`}>
+                    {backupStatus.message}
+                  </div>
+                )}
+                <input
+                  ref={backupFileInputRef}
+                  type="file"
+                  accept="application/json"
+                  onChange={handleBackupFileChange}
+                  className="hidden"
+                />
+              </div>
+            </section>
+
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{t('userManagementTitle')}</h3>
@@ -6310,9 +6539,9 @@ const SettingsView = ({
                 </div>
               </div>
             </section>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
