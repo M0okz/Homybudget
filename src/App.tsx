@@ -117,6 +117,7 @@ type SyncQueue = {
 type BankAccount = {
   id: string;
   name: string;
+  color: string;
 };
 
 type BankAccountSettings = {
@@ -538,6 +539,14 @@ const PALETTES: Palette[] = [
   }
 ];
 
+const getInitialPaletteId = (mode: 'light' | 'dark') => {
+  if (typeof window === 'undefined') {
+    return PALETTES[0].id;
+  }
+  const key = mode === 'dark' ? 'paletteIdDark' : 'paletteIdLight';
+  return localStorage.getItem(key) ?? localStorage.getItem('paletteId') ?? PALETTES[0].id;
+};
+
 const getCurrentMonthKey = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -729,14 +738,22 @@ const createTemplateId = () => {
 };
 
 const BANK_ACCOUNT_LIMIT = 3;
+const BANK_ACCOUNT_COLORS = ['#6366F1', '#10B981', '#F97316'];
+
+const isValidHexColor = (value: unknown) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim());
 
 const getBankAccountBaseLabel = (language: LanguageCode) => (
   TRANSLATIONS[language]?.bankAccountBaseLabel ?? 'Compte'
 );
 
-const createBankAccount = (name: string): BankAccount => ({
+const getDefaultAccountColor = (index: number) => (
+  BANK_ACCOUNT_COLORS[index % BANK_ACCOUNT_COLORS.length]
+);
+
+const createBankAccount = (name: string, color: string): BankAccount => ({
   id: createTemplateId(),
-  name
+  name,
+  color
 });
 
 const normalizeBankAccountList = (input: unknown, language: LanguageCode): BankAccount[] => {
@@ -744,7 +761,7 @@ const normalizeBankAccountList = (input: unknown, language: LanguageCode): BankA
   const next: BankAccount[] = [];
   const usedIds = new Set<string>();
   if (Array.isArray(input)) {
-    input.forEach((raw) => {
+    input.forEach((raw, index) => {
       if (next.length >= BANK_ACCOUNT_LIMIT) {
         return;
       }
@@ -757,11 +774,14 @@ const normalizeBankAccountList = (input: unknown, language: LanguageCode): BankA
         id = createTemplateId();
       }
       usedIds.add(id);
-      next.push({ id, name });
+      const color = isValidHexColor(raw?.color)
+        ? raw.color.trim()
+        : getDefaultAccountColor(index);
+      next.push({ id, name, color });
     });
   }
   if (next.length === 0) {
-    next.push(createBankAccount(`${baseLabel} 1`));
+    next.push(createBankAccount(`${baseLabel} 1`, getDefaultAccountColor(0)));
   }
   return next;
 };
@@ -774,41 +794,20 @@ const normalizeBankAccounts = (input: unknown, language: LanguageCode): BankAcco
   };
 };
 
-const ACCOUNT_TONES = [
-  {
-    lightBg: '#EEF2FF',
-    lightText: '#312E81',
-    lightBorder: '#C7D2FE',
-    darkBg: 'rgba(99, 102, 241, 0.18)',
-    darkText: '#C7D2FE',
-    darkBorder: 'rgba(99, 102, 241, 0.45)'
-  },
-  {
-    lightBg: '#ECFDF3',
-    lightText: '#065F46',
-    lightBorder: '#A7F3D0',
-    darkBg: 'rgba(16, 185, 129, 0.18)',
-    darkText: '#A7F3D0',
-    darkBorder: 'rgba(16, 185, 129, 0.45)'
-  },
-  {
-    lightBg: '#FFF7ED',
-    lightText: '#9A3412',
-    lightBorder: '#FED7AA',
-    darkBg: 'rgba(251, 146, 60, 0.18)',
-    darkText: '#FDBA74',
-    darkBorder: 'rgba(251, 146, 60, 0.45)'
-  }
-];
-
-const getAccountChipStyle = (index: number, darkMode: boolean) => {
-  const tone = ACCOUNT_TONES[index % ACCOUNT_TONES.length];
-  return {
-    backgroundColor: darkMode ? tone.darkBg : tone.lightBg,
-    color: darkMode ? tone.darkText : tone.lightText,
-    border: `1px solid ${darkMode ? tone.darkBorder : tone.lightBorder}`
-  } as React.CSSProperties;
+const getReadableTextColor = (hexColor: string) => {
+  const value = hexColor.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+  return luminance > 160 ? '#0F172A' : '#FFFFFF';
 };
+
+const getAccountChipStyle = (color: string) => ({
+  backgroundColor: color,
+  color: getReadableTextColor(color),
+  border: `1px solid ${color}`
+}) as React.CSSProperties;
 
 type AutoCategory = {
   id: string;
@@ -1240,7 +1239,13 @@ const useAnimatedNumber = (value: number, duration = 350) => {
 };
 
 const useMediaQuery = (query: string) => {
-  const [matches, setMatches] = useState(false);
+  const getMatch = () => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return window.matchMedia(query).matches;
+  };
+  const [matches, setMatches] = useState(getMatch);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -2352,13 +2357,16 @@ const BudgetFixedSection = React.memo(({
     [darkMode]
   );
   const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
+  const isCompactAccountLabel = useMediaQuery('(display-mode: standalone)');
   const resolveAccount = useCallback((accountId?: string) => {
-    if (accountsForPerson.length === 0) {
+    if (!accountId || accountsForPerson.length === 0) {
       return null;
     }
-    const account = accountsForPerson.find(item => item.id === accountId) ?? accountsForPerson[0];
-    const index = Math.max(0, accountsForPerson.findIndex(item => item.id === account.id));
-    return { account, index };
+    const account = accountsForPerson.find(item => item.id === accountId);
+    if (!account) {
+      return null;
+    }
+    return { account };
   }, [accountsForPerson]);
   const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -2433,9 +2441,11 @@ const BudgetFixedSection = React.memo(({
                       {bankAccountsEnabled && accountMeta && (
                         <span
                           className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={getAccountChipStyle(accountMeta.index, darkMode)}
+                          style={getAccountChipStyle(accountMeta.account.color)}
                         >
-                          {accountMeta.account.name}
+                          {isCompactAccountLabel
+                            ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
+                            : accountMeta.account.name}
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
@@ -2547,9 +2557,11 @@ const BudgetFixedSection = React.memo(({
                     {bankAccountsEnabled && accountMeta && (
                       <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={getAccountChipStyle(accountMeta.index, darkMode)}
+                        style={getAccountChipStyle(accountMeta.account.color)}
                       >
-                        {accountMeta.account.name}
+                        {isCompactAccountLabel
+                          ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
+                          : accountMeta.account.name}
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
@@ -2666,13 +2678,16 @@ const BudgetFreeSection = React.memo(({
     [darkMode]
   );
   const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
+  const isCompactAccountLabel = useMediaQuery('(display-mode: standalone)');
   const resolveAccount = useCallback((accountId?: string) => {
-    if (accountsForPerson.length === 0) {
+    if (!accountId || accountsForPerson.length === 0) {
       return null;
     }
-    const account = accountsForPerson.find(item => item.id === accountId) ?? accountsForPerson[0];
-    const index = Math.max(0, accountsForPerson.findIndex(item => item.id === account.id));
-    return { account, index };
+    const account = accountsForPerson.find(item => item.id === accountId);
+    if (!account) {
+      return null;
+    }
+    return { account };
   }, [accountsForPerson]);
   const canDrag = enableDrag && !sortByCost && !readOnly;
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -2749,9 +2764,11 @@ const BudgetFreeSection = React.memo(({
                       {bankAccountsEnabled && accountMeta && (
                         <span
                           className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={getAccountChipStyle(accountMeta.index, darkMode)}
+                          style={getAccountChipStyle(accountMeta.account.color)}
                         >
-                          {accountMeta.account.name}
+                          {isCompactAccountLabel
+                            ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
+                            : accountMeta.account.name}
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
@@ -2882,9 +2899,11 @@ const BudgetFreeSection = React.memo(({
                     {bankAccountsEnabled && accountMeta && (
                       <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={getAccountChipStyle(accountMeta.index, darkMode)}
+                        style={getAccountChipStyle(accountMeta.account.color)}
                       >
-                        {accountMeta.account.name}
+                        {isCompactAccountLabel
+                          ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
+                          : accountMeta.account.name}
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
@@ -3330,20 +3349,14 @@ const DashboardView = ({
     const buildTotals = (person: PersonBudget, accounts: BankAccount[]) => {
       const totals = new Map<string, number>();
       accounts.forEach(account => totals.set(account.id, 0));
-      const resolveId = (accountId?: string) => {
-        if (accountId && totals.has(accountId)) {
-          return accountId;
-        }
-        return accounts[0]?.id;
-      };
       const addAmount = (accountId: string | undefined, value: number) => {
-        if (!accountId) {
+        if (!accountId || !totals.has(accountId)) {
           return;
         }
         totals.set(accountId, (totals.get(accountId) ?? 0) + coerceNumber(value));
       };
-      person.fixedExpenses.forEach(expense => addAmount(resolveId(expense.accountId), expense.amount));
-      person.categories.forEach(category => addAmount(resolveId(category.accountId), category.amount));
+      person.fixedExpenses.forEach(expense => addAmount(expense.accountId, expense.amount));
+      person.categories.forEach(category => addAmount(category.accountId, category.amount));
       return accounts.map(account => ({
         ...account,
         total: totals.get(account.id) ?? 0
@@ -3486,11 +3499,11 @@ const DashboardView = ({
                   {data.person1.name || t('person1Label')}
                 </div>
                 <div className="mt-2 space-y-2">
-                  {accountTotals.person1.map((account, index) => (
+                  {accountTotals.person1.map((account) => (
                     <div key={account.id} className="flex items-center justify-between text-sm">
                       <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={getAccountChipStyle(index, darkMode)}
+                        style={getAccountChipStyle(account.color)}
                       >
                         {account.name}
                       </span>
@@ -3505,14 +3518,14 @@ const DashboardView = ({
                     {data.person2.name || t('person2Label')}
                   </div>
                   <div className="mt-2 space-y-2">
-                    {accountTotals.person2.map((account, index) => (
-                      <div key={account.id} className="flex items-center justify-between text-sm">
-                        <span
-                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={getAccountChipStyle(index, darkMode)}
-                        >
-                          {account.name}
-                        </span>
+                  {accountTotals.person2.map((account) => (
+                    <div key={account.id} className="flex items-center justify-between text-sm">
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        style={getAccountChipStyle(account.color)}
+                      >
+                        {account.name}
+                      </span>
                         <span className="font-semibold">{formatCurrency(account.total, currencyPreference)}</span>
                       </div>
                     ))}
@@ -4634,7 +4647,9 @@ const SettingsView = ({
 
   const updateBankAccountsForPerson = useCallback((personKey: 'person1' | 'person2', nextList: BankAccount[]) => {
     const trimmedList = nextList.slice(0, BANK_ACCOUNT_LIMIT);
-    const ensured = trimmedList.length > 0 ? trimmedList : [createBankAccount(`${accountBaseLabel} 1`)];
+    const ensured = trimmedList.length > 0
+      ? trimmedList
+      : [createBankAccount(`${accountBaseLabel} 1`, getDefaultAccountColor(0))];
     onBankAccountsChange({
       ...bankAccounts,
       [personKey]: ensured
@@ -4656,13 +4671,21 @@ const SettingsView = ({
     updateBankAccountsForPerson(personKey, nextList);
   }, [accountBaseLabel, bankAccounts, updateBankAccountsForPerson]);
 
+  const handleAccountColorChange = useCallback((personKey: 'person1' | 'person2', accountId: string, value: string) => {
+    const nextColor = isValidHexColor(value) ? value.trim() : getDefaultAccountColor(0);
+    const nextList = (bankAccounts[personKey] ?? []).map(account => (
+      account.id === accountId ? { ...account, color: nextColor } : account
+    ));
+    updateBankAccountsForPerson(personKey, nextList);
+  }, [bankAccounts, updateBankAccountsForPerson]);
+
   const handleAddAccount = useCallback((personKey: 'person1' | 'person2') => {
     const currentList = bankAccounts[personKey] ?? [];
     if (currentList.length >= BANK_ACCOUNT_LIMIT) {
       return;
     }
     const nextIndex = currentList.length + 1;
-    const nextAccount = createBankAccount(`${accountBaseLabel} ${nextIndex}`);
+    const nextAccount = createBankAccount(`${accountBaseLabel} ${nextIndex}`, getDefaultAccountColor(currentList.length));
     updateBankAccountsForPerson(personKey, [...currentList, nextAccount]);
   }, [accountBaseLabel, bankAccounts, updateBankAccountsForPerson]);
 
@@ -5178,6 +5201,15 @@ const SettingsView = ({
                           {accounts.map((account, index) => (
                             <div key={account.id} className="flex items-center gap-2">
                               <input
+                                type="color"
+                                value={account.color || getDefaultAccountColor(index)}
+                                onChange={(event) => handleAccountColorChange(personKey, account.id, event.target.value)}
+                                className={`h-10 w-10 cursor-pointer rounded-lg border ${
+                                  darkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'
+                                }`}
+                                aria-label={t('bankAccountColorLabel')}
+                              />
+                              <input
                                 type="text"
                                 value={account.name}
                                 onChange={(event) => handleAccountNameChange(personKey, account.id, event.target.value)}
@@ -5680,12 +5712,8 @@ const App: React.FC = () => {
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [oidcLoginConfig, setOidcLoginConfig] = useState<OidcConfigResponse | null>(null);
-  const [paletteId, setPaletteId] = useState(() => {
-    if (typeof window === 'undefined') {
-      return PALETTES[0].id;
-    }
-    return localStorage.getItem('paletteId') ?? PALETTES[0].id;
-  });
+  const [paletteIdLight, setPaletteIdLight] = useState(() => getInitialPaletteId('light'));
+  const [paletteIdDark, setPaletteIdDark] = useState(() => getInitialPaletteId('dark'));
   const [expenseWizard, setExpenseWizard] = useState<ExpenseWizardState | null>(null);
   const [jointWizard, setJointWizard] = useState<JointWizardState | null>(null);
   const [jointDeleteArmed, setJointDeleteArmed] = useState(false);
@@ -5717,7 +5745,8 @@ const App: React.FC = () => {
   const syncInFlightRef = useRef(false);
   const lastViewedMonthUserRef = useRef<string | null>(null);
 
-  const palette = useMemo(() => getPaletteById(paletteId), [paletteId]);
+  const activePaletteId = darkMode ? paletteIdDark : paletteIdLight;
+  const palette = useMemo(() => getPaletteById(activePaletteId), [activePaletteId]);
   const jointTone = useMemo(() => getPaletteTone(palette, 3, darkMode), [palette, darkMode]);
   const isDefaultPalette = palette.id === 'default';
   const t = useMemo(() => createTranslator(languagePreference), [languagePreference]);
@@ -5826,7 +5855,16 @@ const App: React.FC = () => {
   }, [isOnline, syncNotice]);
   const selectedCalendarDate = expenseWizard?.date || null;
   const expenseWizardAccounts = expenseWizard ? (bankAccounts[expenseWizard.personKey] ?? []) : [];
-  const expenseWizardAccountId = expenseWizard?.accountId || expenseWizardAccounts[0]?.id || '';
+  const expenseWizardAccountId = expenseWizard?.accountId ? expenseWizard.accountId : 'none';
+  const compactWizardHeight = useMediaQuery('(max-height: 720px)');
+  const compactWizardWidth = useMediaQuery('(max-width: 640px)');
+  const isCompactWizard = compactWizardWidth;
+  const isTightWizard = compactWizardWidth || compactWizardHeight;
+  const wizardDialogSpacing = isTightWizard ? 'p-4 space-y-3' : 'p-6 space-y-4';
+  const wizardDialogScroll = isTightWizard ? 'max-h-[85dvh] overflow-y-auto' : '';
+  const wizardLabelClass = isTightWizard ? 'text-xs font-medium' : 'text-sm font-medium';
+  const wizardInputPadding = isTightWizard ? 'py-1.5' : 'py-2';
+  const wizardButtonPadding = isTightWizard ? 'px-3 py-1.5' : 'px-3 py-2';
   const calendarWidget = (
     <BudgetCalendarWidget
       monthKey={currentMonthKey}
@@ -6044,8 +6082,15 @@ const App: React.FC = () => {
     if (typeof window === 'undefined') {
       return;
     }
-    localStorage.setItem('paletteId', palette.id);
-  }, [palette.id]);
+    localStorage.setItem('paletteIdLight', paletteIdLight);
+  }, [paletteIdLight]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    localStorage.setItem('paletteIdDark', paletteIdDark);
+  }, [paletteIdDark]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -7322,7 +7367,7 @@ const App: React.FC = () => {
       categoryOverrideId: overrides.categoryOverrideId ?? '',
       isChecked: overrides.isChecked ?? false,
       date: overrides.date,
-      accountId: overrides.accountId
+      accountId: overrides.accountId || undefined
     };
     setMonthlyBudgets(prev => {
       const currentData = prev[currentMonthKey] ?? getDefaultBudgetData();
@@ -7511,7 +7556,7 @@ const App: React.FC = () => {
       const nextAmount = updates.amount;
       const nextCategoryOverrideId = updates.categoryOverrideId;
       const nextDate = updates.date;
-      const nextAccountId = updates.accountId;
+      const nextAccountId = updates.accountId || '';
       const shouldPropagate = shouldPropagateFixedExpense(nextName);
       const templateId = targetExpense.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
       const updatedExpense = {
@@ -7520,7 +7565,7 @@ const App: React.FC = () => {
         amount: nextAmount,
         categoryOverrideId: nextCategoryOverrideId,
         date: nextDate,
-        accountId: nextAccountId,
+        accountId: nextAccountId || undefined,
         ...(templateId ? { templateId } : {})
       };
       const updatedExpenses = currentExpenses.map(exp =>
@@ -7562,7 +7607,7 @@ const App: React.FC = () => {
             || coerceNumber(exp.amount) !== coerceNumber(nextAmount)
             || (exp.categoryOverrideId || '') !== (nextCategoryOverrideId || '')
             || (exp.date || '') !== (nextDate || '')
-            || (exp.accountId || '') !== (nextAccountId || '')
+            || (exp.accountId || '') !== nextAccountId
           ));
         });
 
@@ -7613,7 +7658,7 @@ const App: React.FC = () => {
               amount: nextAmount,
               categoryOverrideId: nextCategoryOverrideId,
               date: nextDate,
-              accountId: nextAccountId,
+              accountId: nextAccountId || undefined,
               ...(templateId ? { templateId } : {})
             };
           });
@@ -7724,7 +7769,7 @@ const App: React.FC = () => {
       recurringMonths: isRecurring ? (overrides.recurringMonths ?? 3) : overrides.recurringMonths,
       startMonth: isRecurring ? (overrides.startMonth ?? currentMonthKey) : overrides.startMonth,
       date: overrides.date,
-      accountId: overrides.accountId,
+      accountId: overrides.accountId || undefined,
       propagate: overrides.propagate ?? true
     };
     const normalizedName = normalizeIconLabel(newCategory.name);
@@ -8013,7 +8058,7 @@ const App: React.FC = () => {
         amount: updates.amount,
         categoryOverrideId: updates.categoryOverrideId,
         date: updates.date,
-        accountId: updates.accountId,
+        accountId: updates.accountId || undefined,
         isRecurring: nextIsRecurring,
         recurringMonths: nextRecurringMonths,
         startMonth: nextStartMonth,
@@ -8485,7 +8530,6 @@ const App: React.FC = () => {
   };
 
   const openExpenseWizard = (personKey: 'person1' | 'person2', type: 'fixed' | 'free') => {
-    const defaultAccountId = bankAccounts[personKey]?.[0]?.id ?? '';
     setExpenseWizard({
       mode: 'create',
       step: 1,
@@ -8499,7 +8543,7 @@ const App: React.FC = () => {
       recurringMonths: 3,
       startMonth: currentMonthKey,
       propagate: true,
-      accountId: defaultAccountId
+      accountId: ''
     });
   };
 
@@ -8515,7 +8559,6 @@ const App: React.FC = () => {
     const propagate = isRecurring
       ? true
       : (type === 'free' && 'propagate' in payload ? payload.propagate !== false : true);
-    const defaultAccountId = bankAccounts[personKey]?.[0]?.id ?? '';
     setExpenseWizard({
       mode: 'edit',
       step: 1,
@@ -8530,7 +8573,7 @@ const App: React.FC = () => {
       recurringMonths,
       startMonth,
       propagate,
-      accountId: ('accountId' in payload && payload.accountId) ? payload.accountId : defaultAccountId
+      accountId: ('accountId' in payload && payload.accountId) ? payload.accountId : ''
     });
   };
 
@@ -8572,6 +8615,7 @@ const App: React.FC = () => {
     );
     const amount = parseNumberInput(expenseWizard.amount);
     const dateValue = expenseWizard.date.trim() || undefined;
+    const accountIdValue = expenseWizard.accountId.trim();
     if (expenseWizard.mode === 'edit' && expenseWizard.targetId) {
       if (expenseWizard.type === 'fixed') {
         updateFixedExpenseDetails(expenseWizard.personKey, expenseWizard.targetId, {
@@ -8579,7 +8623,7 @@ const App: React.FC = () => {
           amount,
           categoryOverrideId: expenseWizard.categoryOverrideId,
           date: dateValue,
-          accountId: expenseWizard.accountId
+          accountId: accountIdValue
         });
       } else {
         updateCategoryDetails(expenseWizard.personKey, expenseWizard.targetId, {
@@ -8591,7 +8635,7 @@ const App: React.FC = () => {
           recurringMonths: expenseWizard.recurringMonths,
           startMonth: expenseWizard.startMonth,
           propagate: expenseWizard.propagate,
-          accountId: expenseWizard.accountId
+          accountId: accountIdValue
         });
       }
     } else if (expenseWizard.type === 'fixed') {
@@ -8600,7 +8644,7 @@ const App: React.FC = () => {
         amount,
         categoryOverrideId: expenseWizard.categoryOverrideId,
         date: dateValue,
-        accountId: expenseWizard.accountId
+        accountId: accountIdValue
       });
     } else {
       addCategory(expenseWizard.personKey, {
@@ -8612,7 +8656,7 @@ const App: React.FC = () => {
         recurringMonths: expenseWizard.isRecurring ? expenseWizard.recurringMonths : undefined,
         startMonth: expenseWizard.isRecurring ? expenseWizard.startMonth : undefined,
         propagate: expenseWizard.propagate,
-        accountId: expenseWizard.accountId
+        accountId: accountIdValue
       });
     }
     setExpenseWizard(null);
@@ -9151,7 +9195,13 @@ const App: React.FC = () => {
                 <PaletteSelector
                   palettes={PALETTES}
                   value={palette.id}
-                  onChange={setPaletteId}
+                  onChange={(nextId) => {
+                    if (darkMode) {
+                      setPaletteIdDark(nextId);
+                    } else {
+                      setPaletteIdLight(nextId);
+                    }
+                  }}
                   darkMode={darkMode}
                 />
               )}
@@ -10203,12 +10253,14 @@ const App: React.FC = () => {
             }}
           >
             <DialogContent
-              className={`w-full max-w-md rounded-2xl p-6 space-y-4 shadow-lg ${
+              className={`w-full max-w-md rounded-2xl shadow-lg ${wizardDialogSpacing} ${wizardDialogScroll} ${
                 darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
-              }`}
+              } ${isCompactWizard ? 'left-0 top-0 translate-x-0 translate-y-0 max-w-none w-full h-[100dvh] max-h-none rounded-none' : ''}`}
             >
               <div className="space-y-1">
-                <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
+                {!isCompactWizard && (
+                  <p className="text-sm uppercase tracking-wide text-slate-500">{t('appName')}</p>
+                )}
                 <h2 className="text-xl font-semibold">
                   {expenseWizard.mode === 'edit' ? t('expenseWizardEditTitle') : t('expenseWizardTitle')}
                 </h2>
@@ -10221,35 +10273,35 @@ const App: React.FC = () => {
               {expenseWizard.step === 1 && (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-sm font-medium" htmlFor="expense-name">{t('expenseNameLabel')}</label>
+                    <label className={wizardLabelClass} htmlFor="expense-name">{t('expenseNameLabel')}</label>
                     <input
                       id="expense-name"
                       type="text"
                       value={expenseWizard.name}
                       onChange={(e) => updateExpenseWizard({ name: e.target.value })}
                       placeholder={expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel')}
-                      className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                      className={`w-full px-3 ${wizardInputPadding} border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium" htmlFor="expense-amount">{t('amountLabel')}</label>
+                    <label className={wizardLabelClass} htmlFor="expense-amount">{t('amountLabel')}</label>
                     <input
                       id="expense-amount"
                       type="number"
                       value={expenseWizard.amount}
                       onChange={(e) => updateExpenseWizard({ amount: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                      className={`w-full px-3 ${wizardInputPadding} border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium" htmlFor="expense-date">{t('dateLabel')}</label>
+                    <label className={wizardLabelClass} htmlFor="expense-date">{t('dateLabel')}</label>
                     <div className="relative">
                       <input
                         id="expense-date"
                         type="date"
                         value={expenseWizard.date}
                         onChange={(e) => updateExpenseWizard({ date: e.target.value })}
-                        className={`w-full px-3 py-2 pr-10 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                        className={`w-full px-3 ${wizardInputPadding} pr-10 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                       />
                       {expenseWizard.date && (
                         <button
@@ -10268,10 +10320,10 @@ const App: React.FC = () => {
                   </div>
                   {bankAccountsEnabled && expenseWizardAccounts.length > 0 && (
                     <div className="space-y-1">
-                      <label className="text-sm font-medium" htmlFor="expense-account">{t('bankAccountLabel')}</label>
+                      <label className={wizardLabelClass} htmlFor="expense-account">{t('bankAccountLabel')}</label>
                       <Select
                         value={expenseWizardAccountId}
-                        onValueChange={(value) => updateExpenseWizard({ accountId: value })}
+                        onValueChange={(value) => updateExpenseWizard({ accountId: value === 'none' ? '' : value })}
                       >
                         <SelectTrigger
                           id="expense-account"
@@ -10280,6 +10332,7 @@ const App: React.FC = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                          <SelectItem value="none">{t('bankAccountNoneLabel')}</SelectItem>
                           {expenseWizardAccounts.map((account) => (
                             <SelectItem key={account.id} value={account.id}>
                               {account.name}
@@ -10295,7 +10348,7 @@ const App: React.FC = () => {
               {expenseWizard.step === 2 && (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-sm font-medium" htmlFor="expense-category">{t('categoryLabel')}</label>
+                    <label className={wizardLabelClass} htmlFor="expense-category">{t('categoryLabel')}</label>
                     <Select
                       value={expenseWizard.categoryOverrideId || 'auto'}
                       onValueChange={(value) => updateExpenseWizard({ categoryOverrideId: value === 'auto' ? '' : value })}
@@ -10374,7 +10427,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleExpenseWizardDelete}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      className={`${wizardButtonPadding} rounded-lg text-sm font-semibold ${
                         darkMode ? 'bg-rose-500/20 text-rose-200 hover:bg-rose-500/30' : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
                       }`}
                     >
@@ -10384,7 +10437,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={closeExpenseWizard}
-                    className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                    className={`${wizardButtonPadding} rounded-lg text-sm font-semibold ${
                       darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -10396,7 +10449,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleExpenseWizardBack}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      className={`${wizardButtonPadding} rounded-lg text-sm font-semibold ${
                         darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
@@ -10406,7 +10459,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={expenseWizard.step === 1 ? handleExpenseWizardNext : handleExpenseWizardSubmit}
-                    className="px-3 py-2 rounded-lg text-sm font-semibold btn-gradient"
+                    className={`${wizardButtonPadding} rounded-lg text-sm font-semibold btn-gradient`}
                   >
                     {expenseWizard.step === 1
                       ? t('onboardingNext')
@@ -10427,29 +10480,31 @@ const App: React.FC = () => {
             }}
           >
             <DialogContent
-              className={`w-full max-w-md rounded-2xl p-6 space-y-4 shadow-lg ${
+              className={`w-full max-w-md rounded-2xl shadow-lg ${wizardDialogSpacing} ${wizardDialogScroll} ${
                 darkMode ? 'bg-slate-950/90 border border-slate-800 text-slate-100' : 'card-float text-slate-900'
-              }`}
+              } ${isCompactWizard ? 'left-0 top-0 translate-x-0 translate-y-0 max-w-none w-full h-[100dvh] max-h-none rounded-none' : ''}`}
             >
               <div className="space-y-1">
-                <p className="text-sm uppercase tracking-wide text-slate-500">{t('jointAccountTitle')}</p>
+                {!isCompactWizard && (
+                  <p className="text-sm uppercase tracking-wide text-slate-500">{t('jointAccountTitle')}</p>
+                )}
                 <h2 className="text-xl font-semibold">
                   {jointWizard.mode === 'edit' ? t('jointWizardEditTitle') : t('jointWizardTitle')}
                 </h2>
               </div>
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="joint-date">{t('dateLabel')}</label>
+                  <label className={wizardLabelClass} htmlFor="joint-date">{t('dateLabel')}</label>
                   <input
                     id="joint-date"
                     type="date"
                     value={jointWizard.date}
                     onChange={(e) => updateJointWizardField('date', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                    className={`w-full px-3 ${wizardInputPadding} border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">{t('typeLabel')}</label>
+                  <label className={wizardLabelClass}>{t('typeLabel')}</label>
                   <Select
                     value={jointWizard.type}
                     onValueChange={(value) => updateJointWizardField('type', value)}
@@ -10468,29 +10523,29 @@ const App: React.FC = () => {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="joint-description">{t('descriptionLabel')}</label>
+                  <label className={wizardLabelClass} htmlFor="joint-description">{t('descriptionLabel')}</label>
                   <input
                     id="joint-description"
                     type="text"
                     value={jointWizard.description}
                     onChange={(e) => updateJointWizardField('description', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
+                    className={`w-full px-3 ${wizardInputPadding} border rounded-lg ${darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white border-slate-200'}`}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="joint-amount">{t('amountLabel')}</label>
+                  <label className={wizardLabelClass} htmlFor="joint-amount">{t('amountLabel')}</label>
                   <input
                     id="joint-amount"
                     type="number"
                     value={jointWizard.amount}
                     onChange={(e) => updateJointWizardField('amount', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg text-right ${
+                    className={`w-full px-3 ${wizardInputPadding} border rounded-lg text-right ${
                       jointWizard.type === 'deposit' ? 'text-emerald-600' : 'text-rose-500'
                     } ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">{t('personLabel')}</label>
+                  <label className={wizardLabelClass}>{t('personLabel')}</label>
                   <Select
                     value={jointWizard.person}
                     onValueChange={(value) => updateJointWizardField('person', value)}
@@ -10513,7 +10568,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleJointWizardDelete}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      className={`${wizardButtonPadding} rounded-lg text-sm font-semibold ${
                         jointDeleteArmed
                           ? (darkMode ? 'bg-rose-500 text-white hover:bg-rose-400' : 'bg-rose-500 text-white hover:bg-rose-600')
                           : (darkMode ? 'bg-rose-500/20 text-rose-200 hover:bg-rose-500/30' : 'bg-rose-100 text-rose-600 hover:bg-rose-200')
@@ -10525,7 +10580,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={closeJointWizard}
-                    className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                    className={`${wizardButtonPadding} rounded-lg text-sm font-semibold ${
                       darkMode ? 'bg-slate-900 text-slate-100 hover:bg-slate-800' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -10535,7 +10590,7 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleJointWizardSubmit}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold btn-gradient"
+                  className={`${wizardButtonPadding} rounded-lg text-sm font-semibold btn-gradient`}
                 >
                   {jointWizard.mode === 'edit' ? t('updateButton') : t('addLabel')}
                 </button>

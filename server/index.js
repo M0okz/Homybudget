@@ -65,6 +65,8 @@ const normalizeAvatarUrl = (value) => {
   return trimmed || null;
 };
 
+const DEFAULT_ACCOUNT_COLORS = ['#6366F1', '#10B981', '#F97316'];
+
 const defaultSettings = {
   languagePreference: 'fr',
   soloModeEnabled: false,
@@ -81,8 +83,8 @@ const defaultSettings = {
   oidcRedirectUri: '',
   bankAccountsEnabled: true,
   bankAccounts: {
-    person1: [{ id: 'person1-1', name: 'Compte 1' }],
-    person2: [{ id: 'person2-1', name: 'Compte 1' }]
+    person1: [{ id: 'person1-1', name: 'Compte 1', color: DEFAULT_ACCOUNT_COLORS[0] }],
+    person2: [{ id: 'person2-1', name: 'Compte 1', color: DEFAULT_ACCOUNT_COLORS[0] }]
   }
 };
 
@@ -238,7 +240,7 @@ const normalizeSettings = (input) => {
     }
     const nextList = [];
     const used = new Set();
-    list.forEach((item) => {
+    list.forEach((item, index) => {
       if (nextList.length >= 3) {
         return;
       }
@@ -251,7 +253,11 @@ const normalizeSettings = (input) => {
         id = crypto.randomUUID();
       }
       used.add(id);
-      nextList.push({ id, name });
+      const rawColor = typeof item?.color === 'string' ? item.color.trim() : '';
+      const color = /^#[0-9a-f]{6}$/i.test(rawColor)
+        ? rawColor
+        : DEFAULT_ACCOUNT_COLORS[index % DEFAULT_ACCOUNT_COLORS.length];
+      nextList.push({ id, name, color });
     });
     return nextList;
   };
