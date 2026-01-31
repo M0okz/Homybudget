@@ -9168,7 +9168,9 @@ const App: React.FC = () => {
             activeMonthKey={currentMonthKey}
             monthListLabel={t('monthSelectLabel')}
             onSelectMonth={(monthKey) => {
-              setActivePage('budget');
+              if (activePage !== 'dashboard') {
+                setActivePage('budget');
+              }
               trySelectMonthKey(monthKey);
             }}
           />
