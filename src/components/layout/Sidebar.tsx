@@ -252,11 +252,11 @@ const Sidebar = React.memo(({
         } backdrop-blur-lg`}
       >
         <div className="flex items-center gap-3 px-2 mb-6">
-          <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-            darkMode ? 'bg-slate-800 text-white' : 'bg-[var(--brand-primary-soft)] text-[color:var(--brand-primary)]'
-          }`}>
-            HB
-          </div>
+          <img
+            src="/icons/icon-192.png"
+            alt={appName}
+            className="h-10 w-10 rounded-xl object-contain"
+          />
           <div className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
             {appName}
           </div>
@@ -280,11 +280,11 @@ const Sidebar = React.memo(({
         >
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                darkMode ? 'bg-slate-800 text-white' : 'bg-[var(--brand-primary-soft)] text-[color:var(--brand-primary)]'
-              }`}>
-                HB
-              </div>
+              <img
+                src="/icons/icon-192.png"
+                alt={appName}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <div className="text-lg font-semibold">{appName}</div>
             </div>
           </div>
