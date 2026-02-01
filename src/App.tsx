@@ -8302,6 +8302,7 @@ const App: React.FC = () => {
             }
           : source
       );
+      const updatedSource = updatedSources.find(source => source.id === id) ?? targetSource;
       const updated: MonthlyBudget = {
         ...prev,
         [currentMonthKey]: {
@@ -8314,76 +8315,103 @@ const App: React.FC = () => {
       };
 
       const normalizedName = normalizeIconLabel(targetSource.name);
-      if (normalizedName) {
-        if (field === 'propagate') {
-          Object.keys(updated)
-            .filter(monthKey => monthKey > currentMonthKey)
-            .forEach(monthKey => {
-              const monthData = updated[monthKey];
-              if (!monthData) {
-                return;
+      if (!normalizedName) {
+        return applyJointBalanceCarryover(updated, currentMonthKey);
+      }
+
+      if (field === 'propagate') {
+        const shouldSeed = nextPropagate && shouldPropagateIncomeSource(updatedSource.name);
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            let matched = false;
+            let changed = false;
+            const nextSources = monthData[personKey].incomeSources.map(source => {
+              const matchesTemplate = templateId && source.templateId === templateId;
+              const matchesName = !matchesTemplate && normalizeIconLabel(source.name) === normalizedName;
+              if (!matchesTemplate && !matchesName) {
+                return source;
               }
-              let changed = false;
-              const nextSources = monthData[personKey].incomeSources.map(source => {
-                const matchesTemplate = templateId && source.templateId === templateId;
-                const matchesName = !matchesTemplate && normalizeIconLabel(source.name) === normalizedName;
-                if (!matchesTemplate && !matchesName) {
-                  return source;
-                }
-                changed = true;
-                const base = templateId ? { ...source, templateId } : { ...source };
-                return {
-                  ...base,
-                  propagate: nextPropagate
-                };
-              });
-              if (!changed) {
-                return;
-              }
-              updated[monthKey] = {
-                ...monthData,
-                [personKey]: {
-                  ...monthData[personKey],
-                  incomeSources: nextSources
-                }
+              matched = true;
+              changed = true;
+              const base = templateId ? { ...source, templateId } : { ...source };
+              return {
+                ...base,
+                propagate: nextPropagate
               };
             });
-        } else if (shouldPropagate) {
-          Object.keys(updated)
-            .filter(monthKey => monthKey > currentMonthKey)
-            .forEach(monthKey => {
-              const monthData = updated[monthKey];
-              if (!monthData) {
-                return;
-              }
-              let changed = false;
-              const nextSources = monthData[personKey].incomeSources.map(source => {
-                if (source.propagate === false) {
-                  return source;
-                }
-                const matchesTemplate = templateId && source.templateId === templateId;
-                const matchesName = !matchesTemplate && normalizeIconLabel(source.name) === normalizedName;
-                if (!matchesTemplate && !matchesName) {
-                  return source;
-                }
-                changed = true;
-                const base = templateId ? { ...source, templateId } : { ...source };
-                return field === 'name'
-                  ? { ...base, name: nextName }
-                  : { ...base, [field]: value };
-              });
-              if (!changed) {
-                return;
-              }
-              updated[monthKey] = {
-                ...monthData,
-                [personKey]: {
-                  ...monthData[personKey],
-                  incomeSources: nextSources
-                }
+            let finalSources = nextSources;
+            if (!matched && shouldSeed) {
+              const propagatedSource: IncomeSource = {
+                ...updatedSource,
+                id: `${Date.now()}-${Math.random()}`,
+                ...(templateId ? { templateId } : {})
               };
+              finalSources = [...nextSources, propagatedSource];
+              changed = true;
+            }
+            if (!changed) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                incomeSources: finalSources
+              }
+            };
+          });
+      } else if (shouldPropagate) {
+        Object.keys(updated)
+          .filter(monthKey => monthKey > currentMonthKey)
+          .forEach(monthKey => {
+            const monthData = updated[monthKey];
+            if (!monthData) {
+              return;
+            }
+            let matched = false;
+            let changed = false;
+            const nextSources = monthData[personKey].incomeSources.map(source => {
+              const matchesTemplate = templateId && source.templateId === templateId;
+              const matchesName = !matchesTemplate && normalizeIconLabel(source.name) === normalizedName;
+              if (!matchesTemplate && !matchesName) {
+                return source;
+              }
+              matched = true;
+              if (source.propagate === false) {
+                return source;
+              }
+              changed = true;
+              const base = templateId ? { ...source, templateId } : { ...source };
+              return field === 'name'
+                ? { ...base, name: nextName }
+                : { ...base, [field]: value };
             });
-        }
+            let finalSources = nextSources;
+            if (!matched) {
+              const propagatedSource: IncomeSource = {
+                ...updatedSource,
+                id: `${Date.now()}-${Math.random()}`,
+                ...(templateId ? { templateId } : {})
+              };
+              finalSources = [...nextSources, propagatedSource];
+              changed = true;
+            }
+            if (!changed) {
+              return;
+            }
+            updated[monthKey] = {
+              ...monthData,
+              [personKey]: {
+                ...monthData[personKey],
+                incomeSources: finalSources
+              }
+            };
+          });
       }
 
       return applyJointBalanceCarryover(updated, currentMonthKey);
