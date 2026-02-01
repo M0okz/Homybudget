@@ -391,11 +391,106 @@ const loadBudgetCache = (): MonthlyBudget | null => {
     return null;
   }
 };
+type AuthStorageSnapshot = {
+  token: string | null;
+  user: string;
+  profile: AuthUser | null;
+  storage: 'local' | 'session';
+};
+
+const getStoredAuthSnapshot = (): AuthStorageSnapshot => {
+  if (typeof window === 'undefined') {
+    return {
+      token: null,
+      user: '',
+      profile: null,
+      storage: 'local'
+    };
+  }
+  const parseProfile = (raw: string | null) => {
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as AuthUser;
+    } catch (error) {
+      return null;
+    }
+  };
+  const localToken = localStorage.getItem('authToken');
+  if (localToken) {
+    return {
+      token: localToken,
+      user: localStorage.getItem('authUser') ?? '',
+      profile: parseProfile(localStorage.getItem('authProfile')),
+      storage: 'local'
+    };
+  }
+  const sessionToken = sessionStorage.getItem('authToken');
+  if (sessionToken) {
+    return {
+      token: sessionToken,
+      user: sessionStorage.getItem('authUser') ?? '',
+      profile: parseProfile(sessionStorage.getItem('authProfile')),
+      storage: 'session'
+    };
+  }
+  return {
+    token: null,
+    user: '',
+    profile: null,
+    storage: 'local'
+  };
+};
+
 const getAuthToken = () => {
   if (typeof window === 'undefined') {
     return null;
   }
-  return localStorage.getItem('authToken');
+  return localStorage.getItem('authToken') ?? sessionStorage.getItem('authToken');
+};
+
+const persistAuthStorage = (
+  storage: 'local' | 'session',
+  token: string | null,
+  user: string,
+  profile: AuthUser | null
+) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const primary = storage === 'local' ? localStorage : sessionStorage;
+  const secondary = storage === 'local' ? sessionStorage : localStorage;
+  if (token) {
+    primary.setItem('authToken', token);
+  } else {
+    primary.removeItem('authToken');
+  }
+  if (user) {
+    primary.setItem('authUser', user);
+  } else {
+    primary.removeItem('authUser');
+  }
+  if (profile) {
+    primary.setItem('authProfile', JSON.stringify(profile));
+  } else {
+    primary.removeItem('authProfile');
+  }
+  secondary.removeItem('authToken');
+  secondary.removeItem('authUser');
+  secondary.removeItem('authProfile');
+};
+
+const clearAuthStorage = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('authUser');
+  localStorage.removeItem('authProfile');
+  sessionStorage.removeItem('authToken');
+  sessionStorage.removeItem('authUser');
+  sessionStorage.removeItem('authProfile');
 };
 
 const getAuthHeaders = (): Record<string, string> => {
@@ -4582,7 +4677,7 @@ const PaletteSelector = React.memo(({ palettes, value, onChange, darkMode }: Pal
 PaletteSelector.displayName = 'PaletteSelector';
 
 type LoginScreenProps = {
-  onLogin: (username: string, password: string) => Promise<void> | void;
+  onLogin: (username: string, password: string, remember: boolean) => Promise<void> | void;
   error: string | null;
   loading: boolean;
   darkMode: boolean;
@@ -4606,12 +4701,13 @@ const LoginScreen = React.memo(({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [waveKey, setWaveKey] = useState(0);
   const resolvedProviderName = oidcProviderName.trim() || 'OIDC';
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    void onLogin(username.trim(), password);
+    void onLogin(username.trim(), password, rememberMe);
   };
 
   return (
@@ -4718,6 +4814,16 @@ const LoginScreen = React.memo(({
             {error}
           </div>
         )}
+
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="h-4 w-4"
+          />
+          {t('rememberMeLabel')}
+        </label>
 
         <button
           type="submit"
@@ -6620,32 +6726,11 @@ const App: React.FC = () => {
   const [themePreference, setThemePreference] = useState<'light' | 'dark'>(() => getInitialThemePreference());
   const [darkMode, setDarkMode] = useState(() => getInitialThemePreference() === 'dark');
   const [currentDate, setCurrentDate] = useState<Date>(() => getInitialCurrentDate());
-  const [authToken, setAuthToken] = useState<string | null>(() => {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    return localStorage.getItem('authToken');
-  });
-  const [authUser, setAuthUser] = useState(() => {
-    if (typeof window === 'undefined') {
-      return '';
-    }
-    return localStorage.getItem('authUser') ?? '';
-  });
-  const [authProfile, setAuthProfile] = useState<AuthUser | null>(() => {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    const cached = localStorage.getItem('authProfile');
-    if (!cached) {
-      return null;
-    }
-    try {
-      return JSON.parse(cached) as AuthUser;
-    } catch (error) {
-      return null;
-    }
-  });
+  const authSnapshotRef = useRef<AuthStorageSnapshot>(getStoredAuthSnapshot());
+  const [authToken, setAuthToken] = useState<string | null>(() => authSnapshotRef.current.token);
+  const [authUser, setAuthUser] = useState(() => authSnapshotRef.current.user);
+  const [authProfile, setAuthProfile] = useState<AuthUser | null>(() => authSnapshotRef.current.profile);
+  const [authStorage, setAuthStorage] = useState<'local' | 'session'>(() => authSnapshotRef.current.storage);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [activePage, setActivePage] = useState<'dashboard' | 'budget' | 'reports' | 'settings'>('budget');
@@ -6843,11 +6928,6 @@ const App: React.FC = () => {
       : 'radial-gradient(1200px circle at 12% -18%, rgba(58,63,143,0.14), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(210,74,106,0.12), transparent 50%), radial-gradient(700px circle at 45% 115%, rgba(242,140,56,0.10), transparent 55%), radial-gradient(900px circle at 0% 100%, rgba(122,76,159,0.12), transparent 55%)'
   }) as React.CSSProperties, [darkMode]);
   const enableDrag = useMediaQuery('(min-width: 768px)');
-  const isStandaloneMedia = useMediaQuery('(display-mode: standalone)');
-  const isStandalone = useMemo(
-    () => isStandaloneMedia || (typeof window !== 'undefined' && (window.navigator as { standalone?: boolean }).standalone === true),
-    [isStandaloneMedia]
-  );
 
   const oidcLoginEnabled = Boolean(oidcLoginConfig?.enabled);
   const oidcLoginProviderName = (oidcLoginConfig?.providerName || 'OIDC').trim() || 'OIDC';
@@ -6875,11 +6955,9 @@ const App: React.FC = () => {
     ...overrides
   });
 
-  const applyLoginResult = (result: LoginResponse) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('authToken', result.token);
-      localStorage.setItem('authUser', result.user.username);
-    }
+  const applyLoginResult = (result: LoginResponse, remember = true) => {
+    const nextStorage: 'local' | 'session' = remember ? 'local' : 'session';
+    setAuthStorage(nextStorage);
     setAuthToken(result.token);
     setAuthUser(result.user.username);
     setAuthProfile(result.user);
@@ -6902,11 +6980,7 @@ const App: React.FC = () => {
     if (!isAuthError(error)) {
       return false;
     }
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
-      localStorage.removeItem('authProfile');
-    }
+    clearAuthStorage();
     if (saveTimeoutRef.current !== null) {
       window.clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
@@ -6914,6 +6988,7 @@ const App: React.FC = () => {
     setAuthToken(null);
     setAuthUser('');
     setAuthProfile(null);
+    setAuthStorage('local');
     setAuthError(t('sessionExpiredError'));
     setAuthLoading(false);
     setShowOnboarding(false);
@@ -6960,7 +7035,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleLogin = async (username: string, password: string) => {
+  const handleLogin = async (username: string, password: string, remember: boolean) => {
     if (!username || !password) {
       setAuthError(t('authRequiredError'));
       return;
@@ -6969,7 +7044,7 @@ const App: React.FC = () => {
     setAuthError(null);
     try {
       const result = await loginRequest(username, password);
-      applyLoginResult(result);
+      applyLoginResult(result, remember);
     } catch (error) {
       if (isAuthError(error)) {
         setAuthError(t('authInvalidError'));
@@ -7023,6 +7098,7 @@ const App: React.FC = () => {
     if (token) {
       setAuthError(null);
       setAuthLoading(false);
+      setAuthStorage('local');
       setAuthToken(token);
       setAuthUser('');
       setAuthProfile(null);
@@ -7210,21 +7286,11 @@ const App: React.FC = () => {
       return;
     }
     if (authToken) {
-      localStorage.setItem('authToken', authToken);
+      persistAuthStorage(authStorage, authToken, authUser, authProfile);
     } else {
-      localStorage.removeItem('authToken');
+      clearAuthStorage();
     }
-    if (authUser) {
-      localStorage.setItem('authUser', authUser);
-    } else {
-      localStorage.removeItem('authUser');
-    }
-    if (authProfile) {
-      localStorage.setItem('authProfile', JSON.stringify(authProfile));
-    } else {
-      localStorage.removeItem('authProfile');
-    }
-  }, [authToken, authUser, authProfile]);
+  }, [authToken, authUser, authProfile, authStorage]);
 
   useEffect(() => {
     let isActive = true;
@@ -7664,14 +7730,11 @@ const App: React.FC = () => {
       window.clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
-      localStorage.removeItem('authProfile');
-    }
+    clearAuthStorage();
     setAuthToken(null);
     setAuthUser('');
     setAuthProfile(null);
+    setAuthStorage('local');
     setActivePage('budget');
     setMonthlyBudgets({});
     setIsHydrated(false);
@@ -10195,7 +10258,6 @@ const App: React.FC = () => {
               breadcrumbItems={breadcrumbItems}
               syncBadgeLabel={syncBadgeLabel}
               syncBadgeTone={syncBadgeTone}
-              isStandalone={isStandalone}
             />
 
       {isBudgetView && selectorError && (

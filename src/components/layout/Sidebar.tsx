@@ -69,7 +69,7 @@ const Sidebar = React.memo(({
   const sidebarNav = (
     <LayoutGroup>
       <nav
-        className="flex flex-col gap-1"
+        className="flex flex-col gap-1 pl-2"
         onMouseEnter={() => setIsNavHovering(true)}
         onMouseLeave={() => {
           setIsNavHovering(false);
@@ -131,7 +131,7 @@ const Sidebar = React.memo(({
   );
 
   const sidebarFooter = (
-    <div className={`mt-auto pt-4 pb-4 border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+    <div className={`mt-auto pt-4 pb-4 border-t pl-2 ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -203,7 +203,7 @@ const Sidebar = React.memo(({
   );
 
   const sidebarMonths = showMonthList && monthItems.length > 0 ? (
-    <div className="mt-6">
+    <div className="mt-6 pl-2">
       <div className="flex items-center justify-between">
         <div className={`text-xs uppercase tracking-wide font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
           {monthListLabel}
@@ -247,11 +247,11 @@ const Sidebar = React.memo(({
   return (
     <>
       <aside
-        className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:pt-6 sm:pb-0 sm:px-4 sm:border-r transition-colors sm:fixed sm:left-0 sm:top-0 sm:h-[100dvh] sm:z-40 sidebar-float ${
+        className={`hidden sm:flex sm:flex-col sm:w-64 sm:shrink-0 sm:pt-6 sm:pb-0 sm:px-4 sm:border-r transition-colors sm:fixed sm:left-0 sm:top-0 sm:h-[100dvh] sm:z-40 sidebar-float sidebar-pwa ${
           darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/70 border-slate-100'
         } backdrop-blur-lg`}
       >
-        <div className="flex items-center gap-3 px-2 mb-6">
+        <div className="flex flex-col items-center text-center gap-2 mb-6 pt-2">
           <img
             src="/logo.svg"
             alt={appName}
@@ -270,16 +270,16 @@ const Sidebar = React.memo(({
 
       <div className={`fixed inset-0 z-40 sm:hidden transition-opacity ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div
-          className="absolute inset-0 bg-black/40"
+          className="absolute inset-0 bg-transparent"
           onClick={onCloseMobile}
         />
         <aside
-          className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 safe-area-inset sidebar-float ${
+          className={`absolute left-0 top-0 h-full w-64 p-4 flex flex-col transition-transform duration-300 safe-area-inset sidebar-float sidebar-pwa ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
           } ${darkMode ? 'bg-slate-950 text-white' : 'bg-white/90 text-slate-800'} backdrop-blur-lg`}
         >
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center mb-6 pt-2">
+            <div className="flex flex-col items-center text-center gap-2">
               <img
                 src="/logo.svg"
                 alt={appName}
