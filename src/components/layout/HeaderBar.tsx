@@ -29,6 +29,7 @@ type HeaderBarProps = {
   breadcrumbItems: string[];
   syncBadgeLabel?: string | null;
   syncBadgeTone?: 'info' | 'warning' | 'error';
+  isStandalone: boolean;
 };
 
 const HeaderBar = React.memo(({
@@ -57,9 +58,21 @@ const HeaderBar = React.memo(({
   userAvatarUrl,
   breadcrumbItems,
   syncBadgeLabel,
-  syncBadgeTone = 'info'
+  syncBadgeTone = 'info',
+  isStandalone
 }: HeaderBarProps) => (
-  <div className="flex flex-col gap-3 mb-4 sm:mb-6 sm:static sticky top-0 z-30 pb-2 sm:pb-0 bg-transparent">
+  <div
+    className={`flex flex-col gap-3 mb-4 sm:mb-6 sm:static sticky top-0 z-30 pb-2 sm:pb-0 ${
+      isStandalone
+        ? `border-b backdrop-blur ${
+            darkMode
+              ? 'bg-slate-950/85 border-slate-900/70'
+              : 'bg-white/85 border-slate-200/70'
+          }`
+        : 'bg-transparent'
+    }`}
+    style={isStandalone ? { paddingTop: 'calc(var(--safe-top) + 0.25rem)', marginTop: 'calc(-1 * var(--safe-top))' } : undefined}
+  >
     <div className="sm:hidden flex items-center justify-between gap-2">
       <button
         type="button"

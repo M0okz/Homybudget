@@ -2436,6 +2436,7 @@ const BudgetFixedSection = React.memo(({
   );
   const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
   const isCompactAccountLabel = useMediaQuery('(display-mode: standalone)');
+  const enableTapToEdit = isCompactAccountLabel && !readOnly;
   const resolveAccount = useCallback((accountId?: string) => {
     if (!accountId || accountsForPerson.length === 0) {
       return null;
@@ -2482,9 +2483,16 @@ const BudgetFixedSection = React.memo(({
                     className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
                     style={dragProvided.draggableProps.style}
                   >
-                    <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                    <div
+                      className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                        darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
+                      } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
+                      onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'fixed', expense) : undefined}
+                      role={enableTapToEdit ? 'button' : undefined}
+                    >
                       <span
                         {...dragProvided.dragHandleProps}
+                        onClick={(event) => event.stopPropagation()}
                         className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
                         aria-label={t('dragHandleLabel')}
                       >
@@ -2499,12 +2507,13 @@ const BudgetFixedSection = React.memo(({
                           }
                           updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked);
                         }}
+                        onClick={(event) => event.stopPropagation()}
                         disabled={readOnly}
                         className="h-4 w-4"
                         style={{ accentColor: fixedTone.border }}
                         aria-label={t('validateExpenseLabel')}
                       />
-                      <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
+                      <span className={`flex-1 min-w-0 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                         {expense.name || t('newFixedExpenseLabel')}
                       </span>
                       {expense.date && (
@@ -2527,25 +2536,33 @@ const BudgetFixedSection = React.memo(({
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
-                        <span className={badgeClass}>
+                        <span
+                          className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                          title={categoryLabel || undefined}
+                        >
                           <span>{resolvedCategory.emoji}</span>
-                          <span>{categoryLabel}</span>
+                          <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
                         </span>
                       )}
                       <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                         {formatCurrency(amountValue, currencyPreference)}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
-                        disabled={readOnly}
-                        className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
-                          readOnly ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                        aria-label={t('editLabel')}
-                      >
-                        <Edit2 size={14} />
-                      </button>
+                      {!isCompactAccountLabel && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openExpenseWizardForEdit(personKey, 'fixed', expense);
+                          }}
+                          disabled={readOnly}
+                          className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                            readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          aria-label={t('editLabel')}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2605,7 +2622,13 @@ const BudgetFixedSection = React.memo(({
               const accountMeta = resolveAccount(expense.accountId);
               return (
                 <div key={expense.id} className="px-2 py-2">
-                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                  <div
+                    className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                      darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
+                    } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
+                    onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'fixed', expense) : undefined}
+                    role={enableTapToEdit ? 'button' : undefined}
+                  >
                     <input
                       type="checkbox"
                       checked={expense.isChecked || false}
@@ -2615,12 +2638,13 @@ const BudgetFixedSection = React.memo(({
                         }
                         updateFixedExpense(personKey, expense.id, 'isChecked', e.target.checked);
                       }}
+                      onClick={(event) => event.stopPropagation()}
                       disabled={readOnly}
                       className="h-4 w-4"
                       style={{ accentColor: fixedTone.border }}
                       aria-label={t('validateExpenseLabel')}
                     />
-                    <span className={`flex-1 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
+                    <span className={`flex-1 min-w-0 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                       {expense.name || t('newFixedExpenseLabel')}
                     </span>
                     {expense.date && (
@@ -2643,25 +2667,33 @@ const BudgetFixedSection = React.memo(({
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
-                      <span className={badgeClass}>
+                      <span
+                        className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                        title={categoryLabel || undefined}
+                      >
                         <span>{resolvedCategory.emoji}</span>
-                        <span>{categoryLabel}</span>
+                        <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
                       </span>
                     )}
                     <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => openExpenseWizardForEdit(personKey, 'fixed', expense)}
-                      disabled={readOnly}
-                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
-                        readOnly ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      aria-label={t('editLabel')}
-                    >
-                      <Edit2 size={14} />
-                    </button>
+                    {!isCompactAccountLabel && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openExpenseWizardForEdit(personKey, 'fixed', expense);
+                        }}
+                        disabled={readOnly}
+                        className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                          readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        aria-label={t('editLabel')}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -2757,6 +2789,7 @@ const BudgetFreeSection = React.memo(({
   );
   const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
   const isCompactAccountLabel = useMediaQuery('(display-mode: standalone)');
+  const enableTapToEdit = isCompactAccountLabel && !readOnly;
   const resolveAccount = useCallback((accountId?: string) => {
     if (!accountId || accountsForPerson.length === 0) {
       return null;
@@ -2805,9 +2838,16 @@ const BudgetFreeSection = React.memo(({
                     className={`px-2 py-2 ${snapshot.isDragging ? (darkMode ? 'bg-slate-900/80' : 'bg-slate-50') : ''}`}
                     style={dragProvided.draggableProps.style}
                   >
-                    <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                    <div
+                      className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                        darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
+                      } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
+                      onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'free', category) : undefined}
+                      role={enableTapToEdit ? 'button' : undefined}
+                    >
                       <span
                         {...dragProvided.dragHandleProps}
+                        onClick={(event) => event.stopPropagation()}
                         className={`cursor-grab select-none ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}
                         aria-label={t('dragHandleLabel')}
                       >
@@ -2822,12 +2862,13 @@ const BudgetFreeSection = React.memo(({
                           }
                           updateCategory(personKey, category.id, 'isChecked', e.target.checked);
                         }}
+                        onClick={(event) => event.stopPropagation()}
                         disabled={readOnly}
                         className="h-4 w-4"
                         style={{ accentColor: freeTone.border }}
                         aria-label={t('validateExpenseLabel')}
                       />
-                      <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
+                      <span className={`flex-1 min-w-0 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                         {category.name || t('newCategoryLabel')}
                       </span>
                       {category.date && (
@@ -2850,9 +2891,12 @@ const BudgetFreeSection = React.memo(({
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
-                        <span className={badgeClass}>
+                        <span
+                          className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                          title={categoryLabel || undefined}
+                        >
                           <span>{resolvedCategory.emoji}</span>
-                          <span>{categoryLabel}</span>
+                          <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
                         </span>
                       )}
                       {recurringLabel && (
@@ -2865,7 +2909,10 @@ const BudgetFreeSection = React.memo(({
                       </span>
                       <button
                         type="button"
-                        onClick={() => updateCategory(personKey, category.id, 'propagate', !isLinked)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updateCategory(personKey, category.id, 'propagate', !isLinked);
+                        }}
                         disabled={readOnly || category.isRecurring}
                         className={`p-1 rounded-full border ${
                           darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
@@ -2875,17 +2922,22 @@ const BudgetFreeSection = React.memo(({
                       >
                         {isLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
-                        disabled={readOnly}
-                        className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
-                          readOnly ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                        aria-label={t('editLabel')}
-                      >
-                        <Edit2 size={14} />
-                      </button>
+                      {!isCompactAccountLabel && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openExpenseWizardForEdit(personKey, 'free', category);
+                          }}
+                          disabled={readOnly}
+                          className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                            readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          aria-label={t('editLabel')}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2947,7 +2999,13 @@ const BudgetFreeSection = React.memo(({
               const accountMeta = resolveAccount(category.accountId);
               return (
                 <div key={category.id} className="px-2 py-2">
-                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition ${darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'}`}>
+                  <div
+                    className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                      darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
+                    } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
+                    onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'free', category) : undefined}
+                    role={enableTapToEdit ? 'button' : undefined}
+                  >
                     <input
                       type="checkbox"
                       checked={category.isChecked || false}
@@ -2957,12 +3015,13 @@ const BudgetFreeSection = React.memo(({
                         }
                         updateCategory(personKey, category.id, 'isChecked', e.target.checked);
                       }}
+                      onClick={(event) => event.stopPropagation()}
                       disabled={readOnly}
                       className="h-4 w-4"
                       style={{ accentColor: freeTone.border }}
                       aria-label={t('validateExpenseLabel')}
                     />
-                    <span className={`flex-1 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
+                    <span className={`flex-1 min-w-0 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                       {category.name || t('newCategoryLabel')}
                     </span>
                     {category.date && (
@@ -2985,9 +3044,12 @@ const BudgetFreeSection = React.memo(({
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
-                      <span className={badgeClass}>
+                      <span
+                        className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                        title={categoryLabel || undefined}
+                      >
                         <span>{resolvedCategory.emoji}</span>
-                        <span>{categoryLabel}</span>
+                        <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
                       </span>
                     )}
                     {recurringLabel && (
@@ -3000,7 +3062,10 @@ const BudgetFreeSection = React.memo(({
                     </span>
                     <button
                       type="button"
-                      onClick={() => updateCategory(personKey, category.id, 'propagate', !isLinked)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        updateCategory(personKey, category.id, 'propagate', !isLinked);
+                      }}
                       disabled={readOnly || category.isRecurring}
                       className={`p-1 rounded-full border ${
                         darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
@@ -3010,17 +3075,22 @@ const BudgetFreeSection = React.memo(({
                     >
                       {isLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => openExpenseWizardForEdit(personKey, 'free', category)}
-                      disabled={readOnly}
-                      className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
-                        readOnly ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      aria-label={t('editLabel')}
-                    >
-                      <Edit2 size={14} />
-                    </button>
+                    {!isCompactAccountLabel && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openExpenseWizardForEdit(personKey, 'free', category);
+                        }}
+                        disabled={readOnly}
+                        className={`p-1 rounded ${darkMode ? 'text-slate-200' : 'text-slate-500'} hover:opacity-80 ${
+                          readOnly ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        aria-label={t('editLabel')}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -6773,6 +6843,11 @@ const App: React.FC = () => {
       : 'radial-gradient(1200px circle at 12% -18%, rgba(58,63,143,0.14), transparent 45%), radial-gradient(900px circle at 90% 5%, rgba(210,74,106,0.12), transparent 50%), radial-gradient(700px circle at 45% 115%, rgba(242,140,56,0.10), transparent 55%), radial-gradient(900px circle at 0% 100%, rgba(122,76,159,0.12), transparent 55%)'
   }) as React.CSSProperties, [darkMode]);
   const enableDrag = useMediaQuery('(min-width: 768px)');
+  const isStandaloneMedia = useMediaQuery('(display-mode: standalone)');
+  const isStandalone = useMemo(
+    () => isStandaloneMedia || (typeof window !== 'undefined' && (window.navigator as { standalone?: boolean }).standalone === true),
+    [isStandaloneMedia]
+  );
 
   const oidcLoginEnabled = Boolean(oidcLoginConfig?.enabled);
   const oidcLoginProviderName = (oidcLoginConfig?.providerName || 'OIDC').trim() || 'OIDC';
@@ -7109,6 +7184,17 @@ const App: React.FC = () => {
     html.style.setProperty('--card-border', darkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(15, 23, 42, 0.08)');
     html.style.setProperty('--brand-primary', darkMode ? '#F28C38' : '#3A3F8F');
     html.style.setProperty('--brand-primary-soft', darkMode ? 'rgba(242, 140, 56, 0.2)' : '#EEF0FB');
+    const updateMeta = (name: string, content: string) => {
+      let tag = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+      if (!tag) {
+        tag = document.createElement('meta');
+        tag.setAttribute('name', name);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute('content', content);
+    };
+    updateMeta('theme-color', darkMode ? '#0b1220' : '#fbf7f2');
+    updateMeta('apple-mobile-web-app-status-bar-style', darkMode ? 'black-translucent' : 'default');
     root.classList.add('theme-transition');
     const timeout = window.setTimeout(() => {
       root.classList.remove('theme-transition');
@@ -10109,6 +10195,7 @@ const App: React.FC = () => {
               breadcrumbItems={breadcrumbItems}
               syncBadgeLabel={syncBadgeLabel}
               syncBadgeTone={syncBadgeTone}
+              isStandalone={isStandalone}
             />
 
       {isBudgetView && selectorError && (
