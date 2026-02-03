@@ -877,6 +877,7 @@ const createTemplateId = () => {
 };
 
 const BANK_ACCOUNT_LIMIT = 3;
+const UNASSIGNED_ACCOUNT_ID = 'unassigned';
 const BANK_ACCOUNT_COLORS = ['#6366F1', '#10B981', '#F97316'];
 
 const isValidHexColor = (value: unknown) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim());
@@ -3220,6 +3221,18 @@ type BudgetCalendarWidgetProps = {
   selectedDate?: string | null;
 };
 
+type BudgetAccountCalendarWidgetProps = {
+  monthKey: string;
+  darkMode: boolean;
+  currencyPreference: 'EUR' | 'USD';
+  formatMonthKey: (value: string) => string;
+  data: BudgetData;
+  bankAccountsEnabled: boolean;
+  bankAccounts: BankAccountSettings;
+  soloModeEnabled: boolean;
+  activePersonKey: 'person1' | 'person2';
+};
+
 type ExpenseSeriesPoint = {
   key: string;
   label: string;
@@ -4095,6 +4108,138 @@ const BudgetCalendarWidget = React.memo(({
   );
 });
 BudgetCalendarWidget.displayName = 'BudgetCalendarWidget';
+
+const BudgetAccountCalendarWidget = React.memo(({
+  monthKey,
+  darkMode,
+  currencyPreference,
+  formatMonthKey,
+  data,
+  bankAccountsEnabled,
+  bankAccounts,
+  soloModeEnabled,
+  activePersonKey
+}: BudgetAccountCalendarWidgetProps) => {
+  const { t } = useTranslation();
+  const [personKey, setPersonKey] = useState<'person1' | 'person2'>(
+    soloModeEnabled ? 'person1' : activePersonKey
+  );
+
+  useEffect(() => {
+    if (soloModeEnabled) {
+      setPersonKey('person1');
+    } else {
+      setPersonKey(activePersonKey);
+    }
+  }, [activePersonKey, soloModeEnabled]);
+
+  if (!bankAccountsEnabled) {
+    return null;
+  }
+
+  const accounts = bankAccounts[personKey] ?? [];
+  if (accounts.length === 0) {
+    return null;
+  }
+
+  const accountIdSet = useMemo(() => new Set(accounts.map(account => account.id)), [accounts]);
+
+  const { accountTotals, total } = useMemo(() => {
+    const totals = new Map<string, number>();
+    accounts.forEach(account => totals.set(account.id, 0));
+    totals.set(UNASSIGNED_ACCOUNT_ID, 0);
+    let sum = 0;
+    const addExpense = (amountValue: number, accountId?: string) => {
+      const resolvedAccountId = accountId && accountIdSet.has(accountId)
+        ? accountId
+        : UNASSIGNED_ACCOUNT_ID;
+      const nextAmount = coerceNumber(amountValue);
+      totals.set(resolvedAccountId, (totals.get(resolvedAccountId) ?? 0) + nextAmount);
+      sum += nextAmount;
+    };
+    const person = data[personKey];
+    person.fixedExpenses.forEach(exp => addExpense(exp.amount, exp.accountId));
+    person.categories.forEach(cat => addExpense(cat.amount, cat.accountId));
+    return { accountTotals: totals, total: sum };
+  }, [accountIdSet, accounts, data, personKey]);
+
+  const hasUnassigned = (accountTotals.get(UNASSIGNED_ACCOUNT_ID) ?? 0) > 0;
+  const accountList = useMemo(() => {
+    const list = [...accounts];
+    if (hasUnassigned) {
+      list.push({
+        id: UNASSIGNED_ACCOUNT_ID,
+        name: t('bankAccountUnassignedLabel'),
+        color: darkMode ? '#64748B' : '#94A3B8'
+      });
+    }
+    return list
+      .map(account => ({
+        ...account,
+        total: accountTotals.get(account.id) ?? 0
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [accounts, accountTotals, darkMode, hasUnassigned, t]);
+
+  return (
+    <div className="w-60 shrink-0 self-start mt-4 sm:ml-4">
+      <div
+        className={`rounded-2xl border p-4 shadow-sm backdrop-blur ${
+          darkMode ? 'bg-slate-950/70 border-slate-800 text-slate-200' : 'bg-white/80 border-slate-200 text-slate-700'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold">{t('accountsBreakdownTitle')}</div>
+            <div className="text-xs text-slate-400">{formatMonthKey(monthKey)}</div>
+          </div>
+          <div className="text-xs font-semibold">{formatCurrency(total, currencyPreference)}</div>
+        </div>
+        {!soloModeEnabled && (
+          <div className="mt-3 flex items-center gap-2 rounded-full border p-1 text-[11px] font-semibold">
+            <button
+              type="button"
+              onClick={() => setPersonKey('person1')}
+              className={`flex-1 rounded-full px-2 py-1 transition ${
+                personKey === 'person1'
+                  ? (darkMode ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-white')
+                  : (darkMode ? 'text-slate-200 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100')
+              }`}
+            >
+              {data.person1.name || t('person1Label')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPersonKey('person2')}
+              className={`flex-1 rounded-full px-2 py-1 transition ${
+                personKey === 'person2'
+                  ? (darkMode ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-white')
+                  : (darkMode ? 'text-slate-200 hover:bg-slate-900/60' : 'text-slate-600 hover:bg-slate-100')
+              }`}
+            >
+              {data.person2.name || t('person2Label')}
+            </button>
+          </div>
+        )}
+        <div className="mt-3 space-y-2 text-sm">
+          {accountList.map(account => (
+            <div key={account.id} className="flex items-center justify-between gap-2">
+              <span
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                style={getAccountChipStyle(account.color)}
+              >
+                {account.name}
+              </span>
+              <span className="font-semibold tabular-nums">{formatCurrency(account.total, currencyPreference)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+BudgetAccountCalendarWidget.displayName = 'BudgetAccountCalendarWidget';
 
 type DashboardViewProps = {
   monthlyBudgets: MonthlyBudget;
@@ -6913,14 +7058,6 @@ const App: React.FC = () => {
   const wizardLabelClass = isTightWizard ? 'text-xs font-medium' : 'text-sm font-medium';
   const wizardInputPadding = isTightWizard ? 'py-1.5' : 'py-2';
   const wizardButtonPadding = isTightWizard ? 'px-3 py-1.5' : 'px-3 py-2';
-  const calendarWidget = (
-    <BudgetCalendarWidget
-      monthKey={currentMonthKey}
-      darkMode={darkMode}
-      formatMonthKey={formatMonthKey}
-      selectedDate={selectedCalendarDate}
-    />
-  );
   const pageStyle = useMemo(() => ({
     backgroundColor: darkMode ? '#0b1220' : '#fbf7f2',
     backgroundImage: darkMode
@@ -7970,6 +8107,34 @@ const App: React.FC = () => {
       setTempName('');
     }
   }, [editingName, isPerson1Linked, isPerson2Linked]);
+
+  const calendarWidget = (
+    <BudgetCalendarWidget
+      monthKey={currentMonthKey}
+      darkMode={darkMode}
+      formatMonthKey={formatMonthKey}
+      selectedDate={selectedCalendarDate}
+    />
+  );
+  const accountCalendarWidget = (
+    <BudgetAccountCalendarWidget
+      monthKey={currentMonthKey}
+      darkMode={darkMode}
+      currencyPreference={currencyPreference}
+      formatMonthKey={formatMonthKey}
+      data={data}
+      bankAccountsEnabled={bankAccountsEnabled}
+      bankAccounts={bankAccounts}
+      soloModeEnabled={soloModeEnabled}
+      activePersonKey={activePersonKey}
+    />
+  );
+  const calendarWidgets = (
+    <div className="flex flex-col items-start">
+      {calendarWidget}
+      {accountCalendarWidget}
+    </div>
+  );
 
   const toggleDarkMode = () => {
     const next = !darkMode;
@@ -10463,7 +10628,7 @@ const App: React.FC = () => {
                   exit={{ opacity: 0, y: 8 }}
                   transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
-                  {calendarWidget}
+                  {calendarWidgets}
                   <div className="flex-1 min-w-0">
                     <div className="w-full max-w-screen-2xl mx-auto">
                       <div className="relative grid grid-cols-2 gap-8">
@@ -10619,7 +10784,7 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
               >
-                {calendarWidget}
+                {calendarWidgets}
                 <div className="flex-1 min-w-0">
                   <div className="max-w-2xl mx-auto">
                   <PersonColumnHeader
@@ -10700,7 +10865,7 @@ const App: React.FC = () => {
                   exit={{ opacity: 0, y: 8 }}
                   transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
-                  {calendarWidget}
+                  {calendarWidgets}
                   <div className="flex-1 min-w-0">
                     <div className="relative grid grid-cols-4 gap-8 w-full max-w-screen-2xl mx-auto">
                       <div
@@ -10974,7 +11139,7 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
               >
-                {calendarWidget}
+                {calendarWidgets}
                 <div className="flex-1 min-w-0">
                   <div className="grid grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
                     <PersonColumnHeader
