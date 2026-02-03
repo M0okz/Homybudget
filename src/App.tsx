@@ -96,6 +96,7 @@ type AppSettings = {
   jointAccountEnabled: boolean;
   sortByCost: boolean;
   showSidebarMonths: boolean;
+  dashboardWidgetsEnabled: boolean;
   currencyPreference: 'EUR' | 'USD';
   sessionDurationHours: number;
   oidcEnabled: boolean;
@@ -305,6 +306,13 @@ const getInitialSidebarMonths = (): boolean => {
     return true;
   }
   return localStorage.getItem('showSidebarMonths') !== 'false';
+};
+
+const getInitialDashboardWidgetsEnabled = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  return localStorage.getItem('dashboardWidgetsEnabled') !== 'false';
 };
 
 const getInitialLanguagePreference = (): LanguageCode => {
@@ -4193,7 +4201,6 @@ const BudgetAccountCalendarWidget = React.memo(({
             <div className="text-sm font-semibold">{t('accountsBreakdownTitle')}</div>
             <div className="text-xs text-slate-400">{formatMonthKey(monthKey)}</div>
           </div>
-          <div className="text-xs font-semibold">{formatCurrency(total, currencyPreference)}</div>
         </div>
         {!soloModeEnabled && (
           <div className="mt-3 flex items-center gap-2 rounded-full border p-1 text-[11px] font-semibold">
@@ -5591,6 +5598,8 @@ type SettingsViewProps = {
   onToggleSortByCost: (value: boolean) => void;
   showSidebarMonths: boolean;
   onToggleShowSidebarMonths: (value: boolean) => void;
+  dashboardWidgetsEnabled: boolean;
+  onToggleDashboardWidgetsEnabled: (value: boolean) => void;
   languagePreference: LanguageCode;
   onLanguagePreferenceChange: (value: LanguageCode) => void;
   jointAccountEnabled: boolean;
@@ -5635,6 +5644,8 @@ const SettingsView = ({
   onToggleSortByCost,
   showSidebarMonths,
   onToggleShowSidebarMonths,
+  dashboardWidgetsEnabled,
+  onToggleDashboardWidgetsEnabled,
   languagePreference,
   onLanguagePreferenceChange,
   jointAccountEnabled,
@@ -6253,6 +6264,14 @@ const SettingsView = ({
                 hint={t('sidebarMonthsSettingHint')}
                 checked={showSidebarMonths}
                 onChange={onToggleShowSidebarMonths}
+                darkMode={darkMode}
+              />
+              <ToggleRow
+                icon={LayoutDashboard}
+                label={t('dashboardWidgetsSettingLabel')}
+                hint={t('dashboardWidgetsSettingHint')}
+                checked={dashboardWidgetsEnabled}
+                onChange={onToggleDashboardWidgetsEnabled}
                 darkMode={darkMode}
               />
               <ToggleRow
@@ -6889,6 +6908,7 @@ const App: React.FC = () => {
   const [jointAccountEnabled, setJointAccountEnabled] = useState<boolean>(() => getInitialJointAccountEnabled());
   const [soloModeEnabled, setSoloModeEnabled] = useState<boolean>(() => getInitialSoloModeEnabled());
   const [showSidebarMonths, setShowSidebarMonths] = useState<boolean>(() => getInitialSidebarMonths());
+  const [dashboardWidgetsEnabled, setDashboardWidgetsEnabled] = useState<boolean>(() => getInitialDashboardWidgetsEnabled());
   const [currencyPreference, setCurrencyPreference] = useState<'EUR' | 'USD'>(() => getInitialCurrencyPreference());
   const [bankAccountsEnabled, setBankAccountsEnabled] = useState<boolean>(() => getInitialBankAccountsEnabled());
   const [bankAccounts, setBankAccounts] = useState<BankAccountSettings>(() => (
@@ -7079,6 +7099,7 @@ const App: React.FC = () => {
     jointAccountEnabled,
     sortByCost,
     showSidebarMonths,
+    dashboardWidgetsEnabled,
     currencyPreference,
     bankAccountsEnabled,
     bankAccounts,
@@ -7312,6 +7333,13 @@ const App: React.FC = () => {
     if (typeof window === 'undefined') {
       return;
     }
+    localStorage.setItem('dashboardWidgetsEnabled', dashboardWidgetsEnabled ? 'true' : 'false');
+  }, [dashboardWidgetsEnabled]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     localStorage.setItem('languagePreference', languagePreference);
   }, [languagePreference]);
 
@@ -7374,6 +7402,7 @@ const App: React.FC = () => {
     jointAccountEnabled,
     sortByCost,
     showSidebarMonths,
+    dashboardWidgetsEnabled,
     currencyPreference,
     bankAccountsEnabled,
     bankAccounts,
@@ -7540,6 +7569,7 @@ const App: React.FC = () => {
         setJointAccountEnabled(settings.jointAccountEnabled);
         setSoloModeEnabled(settings.soloModeEnabled);
         setShowSidebarMonths(settings.showSidebarMonths ?? true);
+        setDashboardWidgetsEnabled(settings.dashboardWidgetsEnabled ?? true);
         setLanguagePreference(settings.languagePreference);
         setCurrencyPreference(settings.currencyPreference ?? 'EUR');
         setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
@@ -8108,33 +8138,31 @@ const App: React.FC = () => {
     }
   }, [editingName, isPerson1Linked, isPerson2Linked]);
 
-  const calendarWidget = (
-    <BudgetCalendarWidget
-      monthKey={currentMonthKey}
-      darkMode={darkMode}
-      formatMonthKey={formatMonthKey}
-      selectedDate={selectedCalendarDate}
-    />
-  );
-  const accountCalendarWidget = (
-    <BudgetAccountCalendarWidget
-      monthKey={currentMonthKey}
-      darkMode={darkMode}
-      currencyPreference={currencyPreference}
-      formatMonthKey={formatMonthKey}
-      data={data}
-      bankAccountsEnabled={bankAccountsEnabled}
-      bankAccounts={bankAccounts}
-      soloModeEnabled={soloModeEnabled}
-      activePersonKey={activePersonKey}
-    />
-  );
-  const calendarWidgets = (
+  const showBudgetWidgets = dashboardWidgetsEnabled;
+  const budgetGridClass = `hidden sm:grid sm:gap-6 sm:mb-6 ${
+    showBudgetWidgets ? 'sm:grid-cols-[15rem_minmax(0,1fr)_15rem]' : 'sm:grid-cols-[minmax(0,1fr)]'
+  }`;
+  const calendarWidgets = showBudgetWidgets ? (
     <div className="flex flex-col items-start">
-      {calendarWidget}
-      {accountCalendarWidget}
+      <BudgetCalendarWidget
+        monthKey={currentMonthKey}
+        darkMode={darkMode}
+        formatMonthKey={formatMonthKey}
+        selectedDate={selectedCalendarDate}
+      />
+      <BudgetAccountCalendarWidget
+        monthKey={currentMonthKey}
+        darkMode={darkMode}
+        currencyPreference={currencyPreference}
+        formatMonthKey={formatMonthKey}
+        data={data}
+        bankAccountsEnabled={bankAccountsEnabled}
+        bankAccounts={bankAccounts}
+        soloModeEnabled={soloModeEnabled}
+        activePersonKey={activePersonKey}
+      />
     </div>
-  );
+  ) : null;
 
   const toggleDarkMode = () => {
     const next = !darkMode;
@@ -10310,6 +10338,7 @@ const App: React.FC = () => {
                 setJointAccountEnabled(settings.jointAccountEnabled);
                 setSoloModeEnabled(settings.soloModeEnabled);
                 setShowSidebarMonths(settings.showSidebarMonths ?? true);
+                setDashboardWidgetsEnabled(settings.dashboardWidgetsEnabled ?? true);
                 setLanguagePreference(settings.languagePreference);
                 setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
               })
@@ -10474,6 +10503,8 @@ const App: React.FC = () => {
           onToggleSortByCost={setSortByCost}
           showSidebarMonths={showSidebarMonths}
           onToggleShowSidebarMonths={setShowSidebarMonths}
+          dashboardWidgetsEnabled={dashboardWidgetsEnabled}
+          onToggleDashboardWidgetsEnabled={setDashboardWidgetsEnabled}
           languagePreference={languagePreference}
           onLanguagePreferenceChange={setLanguagePreference}
           currencyPreference={currencyPreference}
@@ -10622,7 +10653,7 @@ const App: React.FC = () => {
               {showNextMonthPanel && nextMonthData ? (
                 <motion.div
                   key="solo-compare"
-                  className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
+                  className={budgetGridClass}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
@@ -10778,7 +10809,7 @@ const App: React.FC = () => {
             ) : (
               <motion.div
                 key="solo-single"
-                className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
+                className={budgetGridClass}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
@@ -10859,7 +10890,7 @@ const App: React.FC = () => {
               {showNextMonthPanel && nextMonthData ? (
                 <motion.div
                   key="duo-compare"
-                  className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
+                  className={budgetGridClass}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
@@ -11133,7 +11164,7 @@ const App: React.FC = () => {
             ) : (
               <motion.div
                 key="duo-single"
-                className="hidden sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_15rem] sm:gap-6 sm:mb-6"
+                className={budgetGridClass}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
