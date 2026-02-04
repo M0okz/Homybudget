@@ -720,6 +720,36 @@ const getDefaultDateForMonthKey = (monthKey: string, baseDate = new Date()) => {
   return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 };
 
+const alignDateToMonthKey = (dateValue: string | undefined, monthKey: string) => {
+  if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    return dateValue;
+  }
+  const day = Number(dateValue.slice(8, 10));
+  if (!Number.isFinite(day)) {
+    return dateValue;
+  }
+  const [yearValue, monthValue] = monthKey.split('-');
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return dateValue;
+  }
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const safeDay = Math.min(Math.max(day, 1), daysInMonth);
+  return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+};
+
+const getLegacyDashboardWidgetsEnabled = (settings: AppSettings) => {
+  if (!settings || typeof settings !== 'object') {
+    return undefined;
+  }
+  if (!('dashboardWidgetsEnabled' in (settings as Record<string, unknown>))) {
+    return undefined;
+  }
+  const value = (settings as { dashboardWidgetsEnabled?: unknown }).dashboardWidgetsEnabled;
+  return typeof value === 'boolean' ? value : undefined;
+};
+
 const calculateTotalIncome = (incomeSources: IncomeSource[]) => {
   return incomeSources.reduce((sum, source) => sum + coerceNumber(source.amount), 0);
 };
@@ -6426,7 +6456,8 @@ const App: React.FC = () => {
         setJointAccountEnabled(settings.jointAccountEnabled);
         setSoloModeEnabled(settings.soloModeEnabled);
         setShowSidebarMonths(settings.showSidebarMonths ?? true);
-        setBudgetWidgetsEnabled(settings.budgetWidgetsEnabled ?? settings.dashboardWidgetsEnabled ?? true);
+        const legacyWidgetsEnabled = getLegacyDashboardWidgetsEnabled(settings);
+        setBudgetWidgetsEnabled(settings.budgetWidgetsEnabled ?? legacyWidgetsEnabled ?? true);
         setLanguagePreference(settings.languagePreference);
         setCurrencyPreference(settings.currencyPreference ?? 'EUR');
         setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
@@ -6784,7 +6815,8 @@ const App: React.FC = () => {
     const nonRecurringCategories = categories.filter(cat => !cat.isRecurring && cat.propagate !== false).map(cat => ({
       ...cat,
       id: Date.now().toString() + Math.random(),
-      templateId: cat.templateId ?? createTemplateId()
+      templateId: cat.templateId ?? createTemplateId(),
+      date: alignDateToMonthKey(cat.date, targetMonth)
     }));
 
     categories.forEach(cat => {
@@ -6801,7 +6833,8 @@ const App: React.FC = () => {
           recurringCategories.push({
             ...cat,
             id: Date.now().toString() + Math.random(),
-            templateId: cat.templateId ?? createTemplateId()
+            templateId: cat.templateId ?? createTemplateId(),
+            date: alignDateToMonthKey(cat.date, targetMonth)
           });
         }
       }
@@ -6828,12 +6861,14 @@ const App: React.FC = () => {
     newData.person1.fixedExpenses = previousData.person1.fixedExpenses.map(exp => ({
       ...exp,
       id: Date.now().toString() + Math.random(),
-      templateId: exp.templateId ?? createTemplateId()
+      templateId: exp.templateId ?? createTemplateId(),
+      date: alignDateToMonthKey(exp.date, monthKey)
     }));
     newData.person2.fixedExpenses = previousData.person2.fixedExpenses.map(exp => ({
       ...exp,
       id: Date.now().toString() + Math.random(),
-      templateId: exp.templateId ?? createTemplateId()
+      templateId: exp.templateId ?? createTemplateId(),
+      date: alignDateToMonthKey(exp.date, monthKey)
     }));
 
     newData.person1.categories = copyRecurringCategories(previousData.person1.categories, monthKey);
@@ -7523,7 +7558,8 @@ const App: React.FC = () => {
               ...newExpense,
               id: `${Date.now()}-${Math.random()}`,
               templateId,
-              isChecked: false
+              isChecked: false,
+              date: alignDateToMonthKey(newExpense.date, monthKey)
             };
             updated[monthKey] = {
               ...monthData,
@@ -7714,6 +7750,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return false;
           }
+          const alignedDate = alignDateToMonthKey(nextDate, monthKey);
           const matches = monthData[personKey].fixedExpenses.filter(exp => {
             const matchesTemplate = templateId && exp.templateId === templateId;
             const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
@@ -7726,7 +7763,7 @@ const App: React.FC = () => {
             exp.name !== nextName
             || coerceNumber(exp.amount) !== coerceNumber(nextAmount)
             || (exp.categoryOverrideId || '') !== (nextCategoryOverrideId || '')
-            || (exp.date || '') !== (nextDate || '')
+            || (exp.date || '') !== (alignedDate || '')
             || (exp.accountId || '') !== nextAccountId
           ));
         });
@@ -7745,6 +7782,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return;
           }
+          const alignedDate = alignDateToMonthKey(nextDate, monthKey);
           const matches = monthData[personKey].fixedExpenses.filter(exp => {
             const matchesTemplate = templateId && exp.templateId === templateId;
             const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
@@ -7755,6 +7793,7 @@ const App: React.FC = () => {
               ...updatedExpense,
               id: `${Date.now()}-${Math.random()}`,
               isChecked: false,
+              date: alignedDate,
               ...(templateId ? { templateId } : {})
             };
             updated[monthKey] = {
@@ -7777,7 +7816,7 @@ const App: React.FC = () => {
               name: nextName,
               amount: nextAmount,
               categoryOverrideId: nextCategoryOverrideId,
-              date: nextDate,
+              date: alignedDate,
               accountId: nextAccountId || undefined,
               ...(templateId ? { templateId } : {})
             };
@@ -7932,6 +7971,7 @@ const App: React.FC = () => {
               ...seededCategory,
               id: `${Date.now()}-${Math.random()}`,
               isChecked: false,
+              date: alignDateToMonthKey(seededCategory.date, monthKey),
               ...(templateId ? { templateId } : {})
             };
             updated[monthKey] = {
@@ -8211,6 +8251,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return false;
           }
+          const alignedDate = alignDateToMonthKey(updatedCategory.date, monthKey);
           const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
           const matches = monthData[personKey].categories.filter(cat => {
             const matchesTemplate = templateId && cat.templateId === templateId;
@@ -8227,7 +8268,7 @@ const App: React.FC = () => {
             cat.name !== nextName
             || coerceNumber(cat.amount) !== coerceNumber(updatedCategory.amount)
             || (cat.categoryOverrideId || '') !== (updatedCategory.categoryOverrideId || '')
-            || (cat.date || '') !== (updatedCategory.date || '')
+            || (cat.date || '') !== (alignedDate || '')
             || (cat.accountId || '') !== (updatedCategory.accountId || '')
             || Boolean(cat.isRecurring) !== Boolean(updatedCategory.isRecurring)
             || (cat.recurringMonths || 0) !== (updatedCategory.recurringMonths || 0)
@@ -8250,6 +8291,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return;
           }
+          const alignedDate = alignDateToMonthKey(updatedCategory.date, monthKey);
           const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
           const isMatch = (cat: Category) => {
             const matchesTemplate = templateId && cat.templateId === templateId;
@@ -8276,6 +8318,7 @@ const App: React.FC = () => {
               ...updatedCategory,
               id: `${Date.now()}-${Math.random()}`,
               isChecked: false,
+              date: alignedDate,
               ...(templateId ? { templateId } : {})
             };
             updated[monthKey] = {
@@ -8299,7 +8342,7 @@ const App: React.FC = () => {
               name: updatedCategory.name,
               amount: updatedCategory.amount,
               categoryOverrideId: updatedCategory.categoryOverrideId,
-              date: updatedCategory.date,
+              date: alignedDate,
               accountId: updatedCategory.accountId,
               isRecurring: updatedCategory.isRecurring,
               recurringMonths: updatedCategory.recurringMonths,
@@ -9195,7 +9238,8 @@ const App: React.FC = () => {
                 setJointAccountEnabled(settings.jointAccountEnabled);
                 setSoloModeEnabled(settings.soloModeEnabled);
                 setShowSidebarMonths(settings.showSidebarMonths ?? true);
-                setBudgetWidgetsEnabled(settings.budgetWidgetsEnabled ?? settings.dashboardWidgetsEnabled ?? true);
+                const legacyWidgetsEnabled = getLegacyDashboardWidgetsEnabled(settings);
+                setBudgetWidgetsEnabled(settings.budgetWidgetsEnabled ?? legacyWidgetsEnabled ?? true);
                 setLanguagePreference(settings.languagePreference);
                 setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
               })
