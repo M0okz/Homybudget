@@ -73,7 +73,7 @@ const defaultSettings = {
   jointAccountEnabled: true,
   sortByCost: false,
   showSidebarMonths: true,
-  dashboardWidgetsEnabled: true,
+  budgetWidgetsEnabled: true,
   currencyPreference: 'EUR',
   sessionDurationHours: 12,
   oidcEnabled: false,
