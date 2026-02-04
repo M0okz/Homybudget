@@ -13,6 +13,7 @@ import {
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { LanguageCode, MONTH_LABELS, TRANSLATIONS, TranslationContext, createTranslator, useTranslation } from './i18n';
+import { FRENCH_BANKS, US_BANKS, resolveBankDefinition, resolveBankDefinitionByLabel } from './banks';
 import Sidebar from './components/layout/Sidebar';
 import HeaderBar from './components/layout/HeaderBar';
 import packageJson from '../package.json';
@@ -110,6 +111,7 @@ export type AppSettings = {
   oidcRedirectUri: string;
   bankAccountsEnabled: boolean;
   bankAccounts: BankAccountSettings;
+  bankHolidaysByYear?: BankHolidaysByYear;
 };
 
 type SyncQueue = {
@@ -122,12 +124,18 @@ export type BankAccount = {
   id: string;
   name: string;
   color: string;
+  bankId?: string;
+  shortName?: string;
+  logo?: string;
+  logoTone?: string;
 };
 
 export type BankAccountSettings = {
   person1: BankAccount[];
   person2: BankAccount[];
 };
+
+type BankHolidaysByYear = Record<string, string[]>;
 
 type ExpenseWizardState = {
   mode: 'create' | 'edit';
@@ -707,7 +715,96 @@ const getCurrentMonthKey = (date: Date) => {
   return `${year}-${month}`;
 };
 
-const getDefaultDateForMonthKey = (monthKey: string, baseDate = new Date()) => {
+const toIsoDate = (value: Date) => value.toISOString().slice(0, 10);
+
+const normalizeBankHolidaysByYear = (value: unknown): BankHolidaysByYear => {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  const input = value as Record<string, unknown>;
+  const result: BankHolidaysByYear = {};
+  Object.entries(input).forEach(([year, dates]) => {
+    if (!/^\d{4}$/.test(year) || !Array.isArray(dates)) {
+      return;
+    }
+    const cleaned = dates
+      .filter((item): item is string => typeof item === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item))
+      .map(item => item.trim())
+      .filter(Boolean);
+    if (cleaned.length === 0) {
+      return;
+    }
+    const unique = Array.from(new Set(cleaned)).sort();
+    result[year] = unique;
+  });
+  return result;
+};
+
+const getEasterSunday = (year: number) => {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+};
+
+const getDefaultBankHolidaysForYear = (year: number) => {
+  const easter = getEasterSunday(year);
+  const goodFriday = new Date(easter);
+  goodFriday.setDate(easter.getDate() - 2);
+  const easterMonday = new Date(easter);
+  easterMonday.setDate(easter.getDate() + 1);
+  return [
+    `${year}-01-01`,
+    toIsoDate(goodFriday),
+    toIsoDate(easterMonday),
+    `${year}-05-01`,
+    `${year}-12-25`
+  ];
+};
+
+const getBankHolidaysForYear = (year: number, overrides?: BankHolidaysByYear) => {
+  const key = String(year);
+  const configured = overrides?.[key];
+  if (configured && configured.length > 0) {
+    return configured;
+  }
+  return getDefaultBankHolidaysForYear(year);
+};
+
+const isNonBusinessDay = (date: Date, overrides?: BankHolidaysByYear) => {
+  const day = date.getDay();
+  if (day === 0 || day === 6) {
+    return true;
+  }
+  const iso = toIsoDate(date);
+  const holidays = getBankHolidaysForYear(date.getFullYear(), overrides);
+  return holidays.includes(iso);
+};
+
+const nextBusinessDay = (date: Date, overrides?: BankHolidaysByYear) => {
+  const candidate = new Date(date);
+  while (isNonBusinessDay(candidate, overrides)) {
+    candidate.setDate(candidate.getDate() + 1);
+  }
+  return candidate;
+};
+
+const getDefaultDateForMonthKey = (
+  monthKey: string,
+  baseDate = new Date(),
+  bankHolidaysByYear?: BankHolidaysByYear
+) => {
   const [yearValue, monthValue] = monthKey.split('-');
   const year = Number(yearValue);
   const month = Number(monthValue);
@@ -717,10 +814,15 @@ const getDefaultDateForMonthKey = (monthKey: string, baseDate = new Date()) => {
   const day = baseDate.getDate();
   const daysInMonth = new Date(year, month, 0).getDate();
   const safeDay = Math.min(Math.max(day, 1), daysInMonth);
-  return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+  const candidate = nextBusinessDay(new Date(year, month - 1, safeDay), bankHolidaysByYear);
+  return `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, '0')}-${String(candidate.getDate()).padStart(2, '0')}`;
 };
 
-const alignDateToMonthKey = (dateValue: string | undefined, monthKey: string) => {
+const alignDateToMonthKey = (
+  dateValue: string | undefined,
+  monthKey: string,
+  bankHolidaysByYear?: BankHolidaysByYear
+) => {
   if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
     return dateValue;
   }
@@ -736,7 +838,8 @@ const alignDateToMonthKey = (dateValue: string | undefined, monthKey: string) =>
   }
   const daysInMonth = new Date(year, month, 0).getDate();
   const safeDay = Math.min(Math.max(day, 1), daysInMonth);
-  return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+  const candidate = nextBusinessDay(new Date(year, month - 1, safeDay), bankHolidaysByYear);
+  return `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, '0')}-${String(candidate.getDate()).padStart(2, '0')}`;
 };
 
 const getLegacyDashboardWidgetsEnabled = (settings: AppSettings) => {
@@ -941,6 +1044,16 @@ const createBankAccount = (name: string, color: string): BankAccount => ({
   color
 });
 
+const createBankAccountFromBank = (bank: { id: string; name: string; shortName: string; logo: string }, color: string): BankAccount => ({
+  id: createTemplateId(),
+  name: bank.name,
+  shortName: bank.shortName,
+  logo: bank.logo,
+  bankId: bank.id,
+  color,
+  logoTone: undefined
+});
+
 const normalizeBankAccountList = (input: unknown, language: LanguageCode): BankAccount[] => {
   const baseLabel = getBankAccountBaseLabel(language);
   const next: BankAccount[] = [];
@@ -950,19 +1063,38 @@ const normalizeBankAccountList = (input: unknown, language: LanguageCode): BankA
       if (next.length >= BANK_ACCOUNT_LIMIT) {
         return;
       }
-      const name = typeof raw?.name === 'string' ? raw.name.trim() : '';
-      if (!name) {
-        return;
-      }
+      const bankId = typeof raw?.bankId === 'string' ? raw.bankId.trim() : '';
+      const rawName = typeof raw?.name === 'string' ? raw.name.trim() : '';
+      const rawShort = typeof raw?.shortName === 'string' ? raw.shortName.trim() : '';
+      const fallbackBankDef = (!bankId && (rawName || rawShort))
+        ? (resolveBankDefinitionByLabel(rawName || rawShort) ?? resolveBankDefinitionByLabel(rawShort || rawName))
+        : null;
+      const bankDef = bankId ? resolveBankDefinition(bankId) : fallbackBankDef;
+      const name = rawName || bankDef?.name || `${baseLabel} ${index + 1}`;
       let id = typeof raw?.id === 'string' && raw.id.trim() ? raw.id.trim() : createTemplateId();
       if (usedIds.has(id)) {
         id = createTemplateId();
       }
       usedIds.add(id);
+      const shortName = rawShort || (bankDef?.shortName ?? '');
+      const logo = typeof raw?.logo === 'string' && raw.logo.trim()
+        ? raw.logo.trim()
+        : (bankDef?.logo ?? '');
+      const logoTone = isValidHexColor(raw?.logoTone)
+        ? raw.logoTone.trim()
+        : '';
       const color = isValidHexColor(raw?.color)
         ? raw.color.trim()
         : getDefaultAccountColor(index);
-      next.push({ id, name, color });
+      next.push({
+        id,
+        name,
+        color,
+        bankId: bankDef?.id,
+        shortName: shortName || undefined,
+        logo: logo || undefined,
+        logoTone: logoTone || undefined
+      });
     });
   }
   if (next.length === 0) {
@@ -988,11 +1120,197 @@ const getReadableTextColor = (hexColor: string) => {
   return luminance > 160 ? '#0F172A' : '#FFFFFF';
 };
 
+const clampColor = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+
+const hexToRgb = (hex: string) => {
+  if (!isValidHexColor(hex)) {
+    return null;
+  }
+  const value = hex.replace('#', '');
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16)
+  };
+};
+
+const rgbToHex = (r: number, g: number, b: number) => (
+  `#${clampColor(r).toString(16).padStart(2, '0')}${clampColor(g).toString(16).padStart(2, '0')}${clampColor(b).toString(16).padStart(2, '0')}`
+);
+
+const mixHexColors = (hexA: string, hexB: string, ratioB: number) => {
+  const rgbA = hexToRgb(hexA);
+  const rgbB = hexToRgb(hexB);
+  if (!rgbA || !rgbB) {
+    return hexA;
+  }
+  const ratio = Math.max(0, Math.min(1, ratioB));
+  const r = rgbA.r * (1 - ratio) + rgbB.r * ratio;
+  const g = rgbA.g * (1 - ratio) + rgbB.g * ratio;
+  const b = rgbA.b * (1 - ratio) + rgbB.b * ratio;
+  return rgbToHex(r, g, b);
+};
+
+const toRgba = (hex: string, alpha: number) => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return `rgba(15, 23, 42, ${alpha})`;
+  }
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+};
+
+const extractLogoTone = (src: string): Promise<string | null> => {
+  if (typeof document === 'undefined') {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 32;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.drawImage(image, 0, 0, size, size);
+      const { data } = ctx.getImageData(0, 0, size, size);
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3];
+        if (alpha < 20) {
+          continue;
+        }
+        const rr = data[i];
+        const gg = data[i + 1];
+        const bb = data[i + 2];
+        if (rr > 245 && gg > 245 && bb > 245) {
+          continue;
+        }
+        r += rr;
+        g += gg;
+        b += bb;
+        count += 1;
+      }
+      if (count === 0) {
+        resolve(null);
+        return;
+      }
+      r /= count;
+      g /= count;
+      b /= count;
+      const mix = 0.45;
+      const pastel = rgbToHex(
+        r * (1 - mix) + 255 * mix,
+        g * (1 - mix) + 255 * mix,
+        b * (1 - mix) + 255 * mix
+      );
+      resolve(pastel);
+    };
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+};
+
 const getAccountChipStyle = (color: string) => ({
   backgroundColor: color,
   color: getReadableTextColor(color),
   border: `1px solid ${color}`
 }) as React.CSSProperties;
+
+const getAccountLogo = (account: BankAccount) => (
+  resolveBankDefinition(account.bankId ?? '')?.logo || account.logo || ''
+);
+
+const getAccountDisplayName = (account: BankAccount, compact = false, preferFullName = false) => {
+  const baseSource = preferFullName
+    ? (account.name || account.shortName || '')
+    : (account.shortName || account.name || '');
+  const base = baseSource.trim();
+  if (!base) {
+    return '?';
+  }
+  if (compact) {
+    return base[0]?.toUpperCase() ?? '?';
+  }
+  return base;
+};
+
+const renderAccountChipContent = (
+  account: BankAccount,
+  compact: boolean,
+  darkMode: boolean,
+  preferFullName = false,
+  iconOnly = false,
+  labelOverride?: string
+) => {
+  const label = labelOverride ?? getAccountDisplayName(account, compact, preferFullName);
+  const logo = getAccountLogo(account);
+  if (iconOnly) {
+    if (!logo) {
+      return label;
+    }
+    return (
+      <span
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-sm ring-1 ${
+          darkMode ? 'bg-slate-900/70 ring-slate-800' : 'bg-white/90 ring-slate-200'
+        }`}
+      >
+        <img src={logo} alt="" className="h-4 w-4 object-contain" />
+      </span>
+    );
+  }
+  if (compact) {
+    return label;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {logo && (
+        <span
+          className={`inline-flex h-4 w-4 items-center justify-center rounded-sm ring-1 ${
+            darkMode ? 'bg-slate-900/70 ring-slate-800' : 'bg-white/90 ring-slate-200'
+          }`}
+        >
+          <img src={logo} alt="" className="h-3.5 w-3.5 object-contain" />
+        </span>
+      )}
+      <span>{label}</span>
+    </span>
+  );
+};
+
+const getAccountSlug = (account: BankAccount, length = 3) => {
+  const base = (account.shortName || account.name || '').trim();
+  if (!base) {
+    return '?';
+  }
+  const compacted = base.replace(/\s+/g, '');
+  return compacted.slice(0, length).toUpperCase() || '?';
+};
+
+const getAccountNeutralChipClass = (darkMode: boolean) => (
+  `inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+    darkMode ? 'border-slate-800 bg-slate-900/60 text-slate-200' : 'border-slate-200 bg-white/90 text-slate-600'
+  }`
+);
+
+const getAccountPastelChipStyle = (tone: string | undefined, darkMode: boolean) => {
+  if (!tone || !isValidHexColor(tone)) {
+    return undefined;
+  }
+  const themedTone = darkMode ? mixHexColors(tone, '#0F172A', 0.15) : tone;
+  return {
+    backgroundColor: themedTone,
+    border: `1px solid ${toRgba(themedTone, darkMode ? 0.7 : 0.85)}`,
+    color: getReadableTextColor(themedTone)
+  } as React.CSSProperties;
+};
 
 type AutoCategory = {
   id: string;
@@ -2668,12 +2986,17 @@ const BudgetFixedSection = React.memo(({
                       )}
                       {bankAccountsEnabled && accountMeta && (
                         <span
-                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={getAccountChipStyle(accountMeta.account.color)}
+                          className={getAccountNeutralChipClass(darkMode)}
+                          style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
                         >
-                          {isCompactAccountLabel
-                            ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
-                            : accountMeta.account.name}
+                          {renderAccountChipContent(
+                            accountMeta.account,
+                            false,
+                            darkMode,
+                            false,
+                            false,
+                            getAccountSlug(accountMeta.account, 3)
+                          )}
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
@@ -2797,14 +3120,19 @@ const BudgetFixedSection = React.memo(({
                         {formatExpenseDate(expense.date, language)}
                       </span>
                     )}
-                    {bankAccountsEnabled && accountMeta && (
+                      {bankAccountsEnabled && accountMeta && (
                       <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={getAccountChipStyle(accountMeta.account.color)}
+                        className={getAccountNeutralChipClass(darkMode)}
+                        style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
                       >
-                        {isCompactAccountLabel
-                          ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
-                          : accountMeta.account.name}
+                        {renderAccountChipContent(
+                          accountMeta.account,
+                          false,
+                          darkMode,
+                          false,
+                          false,
+                          getAccountSlug(accountMeta.account, 3)
+                        )}
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
@@ -3023,12 +3351,17 @@ const BudgetFreeSection = React.memo(({
                       )}
                       {bankAccountsEnabled && accountMeta && (
                         <span
-                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={getAccountChipStyle(accountMeta.account.color)}
+                          className={getAccountNeutralChipClass(darkMode)}
+                          style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
                         >
-                          {isCompactAccountLabel
-                            ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
-                            : accountMeta.account.name}
+                          {renderAccountChipContent(
+                            accountMeta.account,
+                            false,
+                            darkMode,
+                            false,
+                            false,
+                            getAccountSlug(accountMeta.account, 3)
+                          )}
                         </span>
                       )}
                       {resolvedCategory && badgeClass && (
@@ -3176,12 +3509,17 @@ const BudgetFreeSection = React.memo(({
                     )}
                     {bankAccountsEnabled && accountMeta && (
                       <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={getAccountChipStyle(accountMeta.account.color)}
+                        className={getAccountNeutralChipClass(darkMode)}
+                        style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
                       >
-                        {isCompactAccountLabel
-                          ? (accountMeta.account.name.trim()[0]?.toUpperCase() || '?')
-                          : accountMeta.account.name}
+                        {renderAccountChipContent(
+                          accountMeta.account,
+                          false,
+                          darkMode,
+                          false,
+                          false,
+                          getAccountSlug(accountMeta.account, 3)
+                        )}
                       </span>
                     )}
                     {resolvedCategory && badgeClass && (
@@ -3510,10 +3848,10 @@ const BudgetAccountCalendarWidget = React.memo(({
           {accountList.map(account => (
             <div key={account.id} className="flex items-center justify-between gap-2">
               <span
-                className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                style={getAccountChipStyle(account.color)}
+                className={getAccountNeutralChipClass(darkMode)}
+                style={getAccountPastelChipStyle(account.logoTone, darkMode)}
               >
-                {account.name}
+                {renderAccountChipContent(account, false, darkMode, true)}
               </span>
               <span className="font-semibold tabular-nums">{formatCurrency(account.total, currencyPreference)}</span>
             </div>
@@ -4501,6 +4839,9 @@ type SettingsViewProps = {
   onToggleBankAccountsEnabled: (value: boolean) => void;
   bankAccounts: BankAccountSettings;
   onBankAccountsChange: (value: BankAccountSettings) => void;
+  bankHolidaysByYear: BankHolidaysByYear;
+  onBankHolidaysByYearChange: (value: BankHolidaysByYear) => void;
+  onCreateNextYear: () => void;
   oidcEnabled: boolean;
   oidcProviderName: string;
   oidcIssuer: string;
@@ -4547,6 +4888,9 @@ const SettingsView = ({
   onToggleBankAccountsEnabled,
   bankAccounts,
   onBankAccountsChange,
+  bankHolidaysByYear,
+  onBankHolidaysByYearChange,
+  onCreateNextYear,
   oidcEnabled,
   oidcProviderName,
   oidcIssuer,
@@ -4609,6 +4953,14 @@ const SettingsView = ({
   const [createLoading, setCreateLoading] = useState(false);
   const makeUserLabel = (item: AuthUser) => item.displayName || item.username;
   const accountBaseLabel = getBankAccountBaseLabel(language);
+  const customBankLabel = t('bankAccountCustomLabel');
+  const bankRegionFranceLabel = t('bankAccountRegionFrance');
+  const bankRegionUsLabel = t('bankAccountRegionUs');
+  const bankSelectPlaceholder = t('bankAccountSelectPlaceholder');
+  const bankLogoWrapBase = `inline-flex items-center justify-center rounded-md ring-1 ${
+    darkMode ? 'bg-slate-900/70 ring-slate-800' : 'bg-white/90 ring-slate-200'
+  }`;
+  const bankLogoImgBase = 'object-contain';
 
   const updateBankAccountsForPerson = useCallback((personKey: 'person1' | 'person2', nextList: BankAccount[]) => {
     const trimmedList = nextList.slice(0, BANK_ACCOUNT_LIMIT);
@@ -4644,6 +4996,30 @@ const SettingsView = ({
     updateBankAccountsForPerson(personKey, nextList);
   }, [bankAccounts, updateBankAccountsForPerson]);
 
+  const handleAccountBankSelect = useCallback((personKey: 'person1' | 'person2', accountId: string, bankId: string) => {
+    const nextList = (bankAccounts[personKey] ?? []).map(account => {
+      if (account.id !== accountId) {
+        return account;
+      }
+      if (bankId === 'custom') {
+        return { ...account, bankId: undefined, shortName: undefined, logo: undefined, logoTone: undefined };
+      }
+      const bank = resolveBankDefinition(bankId);
+      if (!bank) {
+        return account;
+      }
+      return {
+        ...account,
+        bankId: bank.id,
+        name: bank.name,
+        shortName: bank.shortName,
+        logo: bank.logo,
+        logoTone: undefined
+      };
+    });
+    updateBankAccountsForPerson(personKey, nextList);
+  }, [bankAccounts, updateBankAccountsForPerson]);
+
   const handleAddAccount = useCallback((personKey: 'person1' | 'person2') => {
     const currentList = bankAccounts[personKey] ?? [];
     if (currentList.length >= BANK_ACCOUNT_LIMIT) {
@@ -4660,9 +5036,30 @@ const SettingsView = ({
     updateBankAccountsForPerson(personKey, nextList);
   }, [bankAccounts, updateBankAccountsForPerson]);
 
+  const [bankHolidaysDraft, setBankHolidaysDraft] = useState(() => (
+    JSON.stringify(bankHolidaysByYear, null, 2)
+  ));
+  const [bankHolidaysError, setBankHolidaysError] = useState<string | null>(null);
+
   useEffect(() => {
     setAvatarInput(user?.avatarUrl ?? '');
   }, [user?.avatarUrl]);
+
+  useEffect(() => {
+    setBankHolidaysDraft(JSON.stringify(bankHolidaysByYear, null, 2));
+  }, [bankHolidaysByYear]);
+
+  const handleApplyBankHolidays = () => {
+    setBankHolidaysError(null);
+    const trimmed = bankHolidaysDraft.trim();
+    try {
+      const parsed = trimmed ? JSON.parse(trimmed) as unknown : {};
+      const normalized = normalizeBankHolidaysByYear(parsed);
+      onBankHolidaysByYearChange(normalized);
+    } catch (error) {
+      setBankHolidaysError(t('bankHolidaysSettingError'));
+    }
+  };
 
   const formatTimestamp = (value: string | null) => {
     if (!value) {
@@ -5255,6 +5652,93 @@ const SettingsView = ({
                                 }`}
                                 aria-label={t('bankAccountColorLabel')}
                               />
+                              <Select
+                                value={resolveBankDefinition(account.bankId ?? '') ? (account.bankId as string) : 'custom'}
+                                onValueChange={(value) => handleAccountBankSelect(personKey, account.id, value)}
+                              >
+                                <SelectTrigger
+                                  aria-label={t('bankAccountBankLabel')}
+                                  className={`min-w-[12rem] ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <span className={`${bankLogoWrapBase} h-5 w-5`}>
+                                      <img
+                                        src={resolveBankDefinition(account.bankId ?? '')?.logo || account.logo || '/assets/banks/custom.svg'}
+                                        alt=""
+                                        className={`${bankLogoImgBase} h-4 w-4`}
+                                      />
+                                    </span>
+                                    <SelectValue placeholder={bankSelectPlaceholder} />
+                                  </span>
+                                </SelectTrigger>
+                                <SelectContent className={darkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}>
+                                  {FRENCH_BANKS.length > 0 && (
+                                    <>
+                                      <div className={`px-2 py-1 text-[10px] uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                        {bankRegionFranceLabel}
+                                      </div>
+                                      {FRENCH_BANKS.map((bank) => (
+                                        <SelectItem
+                                          key={bank.id}
+                                          value={bank.id}
+                                          textValue={bank.name}
+                                          className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'brand-focus'}
+                                        >
+                                          <span className="flex items-center gap-2">
+                                            <span className={`${bankLogoWrapBase} h-6 w-6`}>
+                                              <img src={bank.logo} alt="" className={`${bankLogoImgBase} h-5 w-5`} />
+                                            </span>
+                                            <span className="truncate">{bank.name}</span>
+                                            <span className={`text-[10px] uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                              {bank.shortName}
+                                            </span>
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </>
+                                  )}
+                                  {US_BANKS.length > 0 && (
+                                    <>
+                                      <div className={`mt-1 px-2 py-1 text-[10px] uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                        {bankRegionUsLabel}
+                                      </div>
+                                      {US_BANKS.map((bank) => (
+                                        <SelectItem
+                                          key={bank.id}
+                                          value={bank.id}
+                                          textValue={bank.name}
+                                          className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'brand-focus'}
+                                        >
+                                          <span className="flex items-center gap-2">
+                                            <span className={`${bankLogoWrapBase} h-6 w-6`}>
+                                              <img src={bank.logo} alt="" className={`${bankLogoImgBase} h-5 w-5`} />
+                                            </span>
+                                            <span className="truncate">{bank.name}</span>
+                                            <span className={`text-[10px] uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                              {bank.shortName}
+                                            </span>
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </>
+                                  )}
+                                  <div className={`mt-1 px-2 py-1 text-[10px] uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    {t('bankAccountCustomLabel')}
+                                  </div>
+                                  <SelectItem
+                                    value="custom"
+                                    textValue={customBankLabel}
+                                    className={darkMode ? 'focus:bg-slate-800 focus:text-slate-100' : 'brand-focus'}
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <span className={`${bankLogoWrapBase} h-6 w-6`}>
+                                        <img src="/assets/banks/custom.svg" alt="" className={`${bankLogoImgBase} h-5 w-5`} />
+                                      </span>
+                                      <span className="truncate">{customBankLabel}</span>
+                                    </span>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
                               <input
                                 type="text"
                                 value={account.name}
@@ -5284,6 +5768,59 @@ const SettingsView = ({
                 </div>
               </div>
               )}
+              {isAdmin && (
+                <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{t('bankHolidaysSettingLabel')}</div>
+                      <div className={darkMode ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+                        {t('bankHolidaysSettingHint')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleApplyBankHolidays}
+                      className="px-4 py-2 rounded-full text-xs font-semibold pill-emerald"
+                    >
+                      {t('bankHolidaysSettingApply')}
+                    </button>
+                  </div>
+                  <div className="mt-3">
+                    <textarea
+                      value={bankHolidaysDraft}
+                      onChange={(event) => setBankHolidaysDraft(event.target.value)}
+                      rows={6}
+                      className={`w-full rounded-lg border px-3 py-2 text-xs font-mono ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-700'}`}
+                      spellCheck={false}
+                    />
+                  </div>
+                  {bankHolidaysError && (
+                    <div className={`mt-2 text-sm ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                      {bankHolidaysError}
+                    </div>
+                  )}
+                  <div className={darkMode ? 'mt-2 text-xs text-slate-400' : 'mt-2 text-xs text-slate-500'}>
+                    {t('bankHolidaysSettingNote')}
+                  </div>
+                </div>
+              )}
+              <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-slate-800 bg-slate-950/40 text-slate-200' : 'border-slate-100 bg-white/90 text-slate-700'}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{t('createNextYearLabel')}</div>
+                    <div className={darkMode ? 'text-xs text-slate-400' : 'text-xs text-slate-500'}>
+                      {t('createNextYearHint')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onCreateNextYear}
+                    className="px-4 py-2 rounded-full text-xs font-semibold pill-emerald"
+                  >
+                    {t('createNextYearAction')}
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -5802,6 +6339,7 @@ const App: React.FC = () => {
     normalizeBankAccounts(null, getInitialLanguagePreference())
   ));
   const [sessionDurationHours, setSessionDurationHours] = useState<number>(12);
+  const [bankHolidaysByYear, setBankHolidaysByYear] = useState<BankHolidaysByYear>({});
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcProviderName, setOidcProviderName] = useState('');
   const [oidcIssuer, setOidcIssuer] = useState('');
@@ -5843,6 +6381,55 @@ const App: React.FC = () => {
   const syncQueueRef = useRef<SyncQueue>(syncQueue);
   const syncInFlightRef = useRef(false);
   const lastViewedMonthUserRef = useRef<string | null>(null);
+  const logoToneCacheRef = useRef<Record<string, string>>({});
+  const logoTonePromiseRef = useRef<Record<string, Promise<string | null>>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const applyLogoTones = async () => {
+      const nextSettings: BankAccountSettings = {
+        person1: bankAccounts.person1.map(account => ({ ...account })),
+        person2: bankAccounts.person2.map(account => ({ ...account }))
+      };
+      let changed = false;
+      for (const personKey of ['person1', 'person2'] as const) {
+        const list = nextSettings[personKey];
+        for (let i = 0; i < list.length; i += 1) {
+          const account = list[i];
+          if (account.logoTone) {
+            continue;
+          }
+          const logo = getAccountLogo(account);
+          if (!logo) {
+            continue;
+          }
+          let tone = logoToneCacheRef.current[logo];
+          if (!tone) {
+            let pending = logoTonePromiseRef.current[logo];
+            if (!pending) {
+              pending = extractLogoTone(logo);
+              logoTonePromiseRef.current[logo] = pending;
+            }
+            tone = await pending;
+            if (tone) {
+              logoToneCacheRef.current[logo] = tone;
+            }
+          }
+          if (tone && !account.logoTone) {
+            account.logoTone = tone;
+            changed = true;
+          }
+        }
+      }
+      if (!cancelled && changed) {
+        setBankAccounts(nextSettings);
+      }
+    };
+    applyLogoTones();
+    return () => {
+      cancelled = true;
+    };
+  }, [bankAccounts]);
 
   const activePaletteId = darkMode ? paletteIdDark : paletteIdLight;
   const palette = useMemo(() => getPaletteById(activePaletteId), [activePaletteId]);
@@ -5991,6 +6578,7 @@ const App: React.FC = () => {
     bankAccountsEnabled,
     bankAccounts,
     sessionDurationHours,
+    bankHolidaysByYear,
     oidcEnabled,
     oidcProviderName,
     oidcIssuer,
@@ -6294,6 +6882,7 @@ const App: React.FC = () => {
     bankAccountsEnabled,
     bankAccounts,
     sessionDurationHours,
+    bankHolidaysByYear,
     oidcEnabled,
     oidcProviderName,
     oidcIssuer,
@@ -6463,6 +7052,7 @@ const App: React.FC = () => {
         setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
         setSessionDurationHours(settings.sessionDurationHours ?? 12);
         setBankAccounts(normalizeBankAccounts(settings.bankAccounts, settings.languagePreference ?? languagePreference));
+        setBankHolidaysByYear(normalizeBankHolidaysByYear(settings.bankHolidaysByYear));
         setOidcEnabled(settings.oidcEnabled ?? false);
         setOidcProviderName(settings.oidcProviderName ?? '');
         setOidcIssuer(settings.oidcIssuer ?? '');
@@ -6816,7 +7406,7 @@ const App: React.FC = () => {
       ...cat,
       id: Date.now().toString() + Math.random(),
       templateId: cat.templateId ?? createTemplateId(),
-      date: alignDateToMonthKey(cat.date, targetMonth)
+      date: alignDateToMonthKey(cat.date, targetMonth, bankHolidaysByYear)
     }));
 
     categories.forEach(cat => {
@@ -6834,7 +7424,7 @@ const App: React.FC = () => {
             ...cat,
             id: Date.now().toString() + Math.random(),
             templateId: cat.templateId ?? createTemplateId(),
-            date: alignDateToMonthKey(cat.date, targetMonth)
+            date: alignDateToMonthKey(cat.date, targetMonth, bankHolidaysByYear)
           });
         }
       }
@@ -6862,13 +7452,13 @@ const App: React.FC = () => {
       ...exp,
       id: Date.now().toString() + Math.random(),
       templateId: exp.templateId ?? createTemplateId(),
-      date: alignDateToMonthKey(exp.date, monthKey)
+      date: alignDateToMonthKey(exp.date, monthKey, bankHolidaysByYear)
     }));
     newData.person2.fixedExpenses = previousData.person2.fixedExpenses.map(exp => ({
       ...exp,
       id: Date.now().toString() + Math.random(),
       templateId: exp.templateId ?? createTemplateId(),
-      date: alignDateToMonthKey(exp.date, monthKey)
+      date: alignDateToMonthKey(exp.date, monthKey, bankHolidaysByYear)
     }));
 
     newData.person1.categories = copyRecurringCategories(previousData.person1.categories, monthKey);
@@ -6890,7 +7480,12 @@ const App: React.FC = () => {
     return newData;
   };
 
-  const ensureYearMonths = (budgets: MonthlyBudget, year: number, seedData: BudgetData) => {
+  const ensureYearMonths = (
+    budgets: MonthlyBudget,
+    year: number,
+    seedData: BudgetData,
+    includeSeedTemplate = false
+  ) => {
     const monthKeys = Array.from({ length: 12 }, (_, index) => (
       `${year}-${String(index + 1).padStart(2, '0')}`
     ));
@@ -6904,7 +7499,7 @@ const App: React.FC = () => {
         return;
       }
       const source = previousData ?? seedData;
-      const includeTemplate = Boolean(previousData);
+      const includeTemplate = Boolean(previousData) || (!previousData && includeSeedTemplate);
       updated[monthKey] = buildMonthDataFromPrevious(source, monthKey, includeTemplate);
       previousData = updated[monthKey];
       changed = true;
@@ -7012,6 +7607,29 @@ const App: React.FC = () => {
       setShowNextMonth(false);
     }
   }, [nextMonthAvailable, showNextMonth]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+    const [yearValue, monthValue] = currentMonthKey.split('-');
+    if (monthValue !== '12') {
+      return;
+    }
+    const year = Number(yearValue);
+    if (!Number.isFinite(year)) {
+      return;
+    }
+    const nextYear = year + 1;
+    setMonthlyBudgets(prev => {
+      const seed = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const updated = ensureYearMonths(prev, nextYear, seed, true);
+      if (updated === prev) {
+        return prev;
+      }
+      return applyJointBalanceCarryover(updated, `${nextYear}-01`);
+    });
+  }, [currentMonthKey, isHydrated]);
 
   useEffect(() => {
     if (soloModeEnabled && activePersonKey !== 'person1') {
@@ -7559,7 +8177,7 @@ const App: React.FC = () => {
               id: `${Date.now()}-${Math.random()}`,
               templateId,
               isChecked: false,
-              date: alignDateToMonthKey(newExpense.date, monthKey)
+              date: alignDateToMonthKey(newExpense.date, monthKey, bankHolidaysByYear)
             };
             updated[monthKey] = {
               ...monthData,
@@ -7711,7 +8329,7 @@ const App: React.FC = () => {
       const nextName = updates.name;
       const nextAmount = updates.amount;
       const nextCategoryOverrideId = updates.categoryOverrideId;
-      const nextDate = updates.date;
+      const nextDate = alignDateToMonthKey(updates.date, currentMonthKey, bankHolidaysByYear);
       const nextAccountId = updates.accountId || '';
       const shouldPropagate = shouldPropagateFixedExpense(nextName);
       const templateId = targetExpense.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
@@ -7750,7 +8368,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return false;
           }
-          const alignedDate = alignDateToMonthKey(nextDate, monthKey);
+          const alignedDate = alignDateToMonthKey(nextDate, monthKey, bankHolidaysByYear);
           const matches = monthData[personKey].fixedExpenses.filter(exp => {
             const matchesTemplate = templateId && exp.templateId === templateId;
             const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
@@ -7782,7 +8400,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return;
           }
-          const alignedDate = alignDateToMonthKey(nextDate, monthKey);
+          const alignedDate = alignDateToMonthKey(nextDate, monthKey, bankHolidaysByYear);
           const matches = monthData[personKey].fixedExpenses.filter(exp => {
             const matchesTemplate = templateId && exp.templateId === templateId;
             const matchesName = !matchesTemplate && normalizeIconLabel(exp.name) === normalizedName;
@@ -7971,7 +8589,7 @@ const App: React.FC = () => {
               ...seededCategory,
               id: `${Date.now()}-${Math.random()}`,
               isChecked: false,
-              date: alignDateToMonthKey(seededCategory.date, monthKey),
+              date: alignDateToMonthKey(seededCategory.date, monthKey, bankHolidaysByYear),
               ...(templateId ? { templateId } : {})
             };
             updated[monthKey] = {
@@ -8212,12 +8830,13 @@ const App: React.FC = () => {
       const shouldPropagate = nextPropagate
         && (Boolean(targetCategory.templateId) || shouldPropagateCategory(nextName));
       const templateId = targetCategory.templateId ?? (shouldPropagate ? createTemplateId() : undefined);
+      const alignedDate = alignDateToMonthKey(updates.date, currentMonthKey, bankHolidaysByYear);
       const updatedCategory: Category = {
         ...targetCategory,
         name: nextName,
         amount: updates.amount,
         categoryOverrideId: updates.categoryOverrideId,
-        date: updates.date,
+        date: alignedDate,
         accountId: updates.accountId || undefined,
         isRecurring: nextIsRecurring,
         recurringMonths: nextRecurringMonths,
@@ -8251,7 +8870,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return false;
           }
-          const alignedDate = alignDateToMonthKey(updatedCategory.date, monthKey);
+          const alignedDate = alignDateToMonthKey(updatedCategory.date, monthKey, bankHolidaysByYear);
           const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
           const matches = monthData[personKey].categories.filter(cat => {
             const matchesTemplate = templateId && cat.templateId === templateId;
@@ -8291,7 +8910,7 @@ const App: React.FC = () => {
           if (!monthData) {
             return;
           }
-          const alignedDate = alignDateToMonthKey(updatedCategory.date, monthKey);
+          const alignedDate = alignDateToMonthKey(updatedCategory.date, monthKey, bankHolidaysByYear);
           const shouldExist = isCategoryActiveInMonth(updatedCategory, monthKey);
           const isMatch = (cat: Category) => {
             const matchesTemplate = templateId && cat.templateId === templateId;
@@ -8700,7 +9319,7 @@ const App: React.FC = () => {
       personKey,
       name: '',
       amount: '',
-      date: getDefaultDateForMonthKey(currentMonthKey),
+      date: getDefaultDateForMonthKey(currentMonthKey, new Date(), bankHolidaysByYear),
       categoryOverrideId: '',
       isRecurring: false,
       recurringMonths: 3,
@@ -8777,7 +9396,8 @@ const App: React.FC = () => {
         || (expenseWizard.type === 'fixed' ? t('newFixedExpenseLabel') : t('newCategoryLabel'))
     );
     const amount = parseNumberInput(expenseWizard.amount);
-    const dateValue = expenseWizard.date.trim() || undefined;
+    const rawDateValue = expenseWizard.date.trim() || undefined;
+    const dateValue = alignDateToMonthKey(rawDateValue, currentMonthKey, bankHolidaysByYear);
     const accountIdValue = expenseWizard.accountId.trim();
     if (expenseWizard.mode === 'edit' && expenseWizard.targetId) {
       if (expenseWizard.type === 'fixed') {
@@ -8856,6 +9476,24 @@ const App: React.FC = () => {
       setToast(null);
       toastTimeoutRef.current = null;
     }, durationMs);
+  };
+
+  const handleCreateNextYear = () => {
+    const [yearValue] = currentMonthKey.split('-');
+    const year = Number(yearValue);
+    if (!Number.isFinite(year)) {
+      return;
+    }
+    const nextYear = year + 1;
+    setMonthlyBudgets(prev => {
+      const seed = prev[currentMonthKey] ?? getDefaultBudgetData();
+      const updated = ensureYearMonths(prev, nextYear, seed, true);
+      if (updated === prev) {
+        return prev;
+      }
+      return applyJointBalanceCarryover(updated, `${nextYear}-01`);
+    });
+    showToast(`${t('nextYearCreatedLabel')} ${nextYear}`);
   };
 
   const showUndoToast = (message: string, onUndo: () => void) => {
@@ -9242,6 +9880,7 @@ const App: React.FC = () => {
                 setBudgetWidgetsEnabled(settings.budgetWidgetsEnabled ?? legacyWidgetsEnabled ?? true);
                 setLanguagePreference(settings.languagePreference);
                 setBankAccountsEnabled(settings.bankAccountsEnabled ?? true);
+                setBankHolidaysByYear(normalizeBankHolidaysByYear(settings.bankHolidaysByYear));
               })
               .catch((error) => {
                 console.error('Failed to save onboarding settings', error);
@@ -9423,6 +10062,9 @@ const App: React.FC = () => {
           onToggleBankAccountsEnabled={setBankAccountsEnabled}
           bankAccounts={bankAccounts}
           onBankAccountsChange={setBankAccounts}
+          bankHolidaysByYear={bankHolidaysByYear}
+          onBankHolidaysByYearChange={setBankHolidaysByYear}
+          onCreateNextYear={handleCreateNextYear}
           oidcEnabled={oidcEnabled}
           oidcProviderName={oidcProviderName}
           oidcIssuer={oidcIssuer}
@@ -9467,7 +10109,9 @@ const App: React.FC = () => {
           formatCurrency={formatCurrency}
           formatExpenseDate={formatExpenseDate}
           coerceNumber={coerceNumber}
-          getAccountChipStyle={getAccountChipStyle}
+          renderAccountChipContent={renderAccountChipContent}
+          getAccountNeutralChipClass={getAccountNeutralChipClass}
+          getAccountPastelChipStyle={getAccountPastelChipStyle}
           getPaletteTone={getPaletteTone}
         />
       ) : isReportsView ? (
@@ -10537,7 +11181,7 @@ const App: React.FC = () => {
                           <SelectItem value="none">{t('bankAccountNoneLabel')}</SelectItem>
                           {expenseWizardAccounts.map((account) => (
                             <SelectItem key={account.id} value={account.id}>
-                              {account.name}
+                              {getAccountDisplayName(account, false)}
                             </SelectItem>
                           ))}
                         </SelectContent>

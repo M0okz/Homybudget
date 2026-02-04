@@ -76,6 +76,7 @@ const defaultSettings = {
   budgetWidgetsEnabled: true,
   currencyPreference: 'EUR',
   sessionDurationHours: 12,
+  bankHolidaysByYear: {},
   oidcEnabled: false,
   oidcProviderName: '',
   oidcIssuer: '',

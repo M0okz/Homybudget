@@ -166,7 +166,9 @@ type DashboardViewProps = {
   formatCurrency: (value: number, currencyPreference: 'EUR' | 'USD') => string;
   formatExpenseDate: (value: string, language: LanguageCode) => string;
   coerceNumber: (value: number | string) => number;
-  getAccountChipStyle: (color: string) => CSSProperties;
+  renderAccountChipContent: (account: BankAccount, compact: boolean, darkMode: boolean, preferFullName?: boolean, iconOnly?: boolean) => React.ReactNode;
+  getAccountNeutralChipClass: (darkMode: boolean) => string;
+  getAccountPastelChipStyle: (tone: string | undefined, darkMode: boolean) => React.CSSProperties | undefined;
   getPaletteTone: (palette: Palette, slotIndex: number, darkMode: boolean) => {
     background: string;
     text: string;
@@ -195,7 +197,9 @@ const DashboardView = ({
   formatCurrency,
   formatExpenseDate,
   coerceNumber,
-  getAccountChipStyle,
+  renderAccountChipContent,
+  getAccountNeutralChipClass,
+  getAccountPastelChipStyle,
   getPaletteTone
 }: DashboardViewProps) => {
   const { t, language } = useTranslation();
@@ -454,10 +458,10 @@ const DashboardView = ({
                   {accountTotals.person1.map((account) => (
                     <div key={account.id} className="flex items-center justify-between text-sm">
                       <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={getAccountChipStyle(account.color)}
+                        className={getAccountNeutralChipClass(darkMode)}
+                        style={getAccountPastelChipStyle(account.logoTone, darkMode)}
                       >
-                        {account.name}
+                        {renderAccountChipContent(account, false, darkMode, true)}
                       </span>
                       <span className="font-semibold">{formatCurrency(account.total, currencyPreference)}</span>
                     </div>
@@ -472,12 +476,12 @@ const DashboardView = ({
                   <div className="mt-2 space-y-2">
                     {accountTotals.person2.map((account) => (
                       <div key={account.id} className="flex items-center justify-between text-sm">
-                        <span
-                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={getAccountChipStyle(account.color)}
-                        >
-                          {account.name}
-                        </span>
+                      <span
+                        className={getAccountNeutralChipClass(darkMode)}
+                        style={getAccountPastelChipStyle(account.logoTone, darkMode)}
+                      >
+                        {renderAccountChipContent(account, false, darkMode, true)}
+                      </span>
                         <span className="font-semibold">{formatCurrency(account.total, currencyPreference)}</span>
                       </div>
                     ))}
