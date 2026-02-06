@@ -1205,7 +1205,7 @@ const extractLogoTone = (src: string): Promise<string | null> => {
       r /= count;
       g /= count;
       b /= count;
-      const mix = 0.45;
+      const mix = 0.3;
       const pastel = rgbToHex(
         r * (1 - mix) + 255 * mix,
         g * (1 - mix) + 255 * mix,
@@ -1294,6 +1294,14 @@ const getAccountSlug = (account: BankAccount, length = 3) => {
   return compacted.slice(0, length).toUpperCase() || '?';
 };
 
+const renderAccountLogoOnly = (account: BankAccount) => {
+  const logo = getAccountLogo(account);
+  if (logo) {
+    return <img src={logo} alt="" className="h-4 w-4 object-contain" />;
+  }
+  return <span className="text-[10px] font-semibold">{getAccountSlug(account, 1)}</span>;
+};
+
 const getAccountNeutralChipClass = (darkMode: boolean) => (
   `inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
     darkMode ? 'border-slate-800 bg-slate-900/60 text-slate-200' : 'border-slate-200 bg-white/90 text-slate-600'
@@ -1304,11 +1312,10 @@ const getAccountPastelChipStyle = (tone: string | undefined, darkMode: boolean) 
   if (!tone || !isValidHexColor(tone)) {
     return undefined;
   }
-  const themedTone = darkMode ? mixHexColors(tone, '#0F172A', 0.15) : tone;
+  const themedTone = darkMode ? mixHexColors(tone, '#0F172A', 0.08) : tone;
   return {
-    backgroundColor: themedTone,
-    border: `1px solid ${toRgba(themedTone, darkMode ? 0.7 : 0.85)}`,
-    color: getReadableTextColor(themedTone)
+    backgroundColor: darkMode ? '#0F172A' : '#ffffff',
+    border: `1px solid ${themedTone}`
   } as React.CSSProperties;
 };
 
@@ -2985,19 +2992,7 @@ const BudgetFixedSection = React.memo(({
                         </span>
                       )}
                       {bankAccountsEnabled && accountMeta && (
-                        <span
-                          className={getAccountNeutralChipClass(darkMode)}
-                          style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
-                        >
-                          {renderAccountChipContent(
-                            accountMeta.account,
-                            false,
-                            darkMode,
-                            false,
-                            false,
-                            getAccountSlug(accountMeta.account, 3)
-                          )}
-                        </span>
+                        <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                       )}
                       {resolvedCategory && badgeClass && (
                         <span
@@ -3120,20 +3115,8 @@ const BudgetFixedSection = React.memo(({
                         {formatExpenseDate(expense.date, language)}
                       </span>
                     )}
-                      {bankAccountsEnabled && accountMeta && (
-                      <span
-                        className={getAccountNeutralChipClass(darkMode)}
-                        style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
-                      >
-                        {renderAccountChipContent(
-                          accountMeta.account,
-                          false,
-                          darkMode,
-                          false,
-                          false,
-                          getAccountSlug(accountMeta.account, 3)
-                        )}
-                      </span>
+                    {bankAccountsEnabled && accountMeta && (
+                      <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                     )}
                     {resolvedCategory && badgeClass && (
                       <span
@@ -3350,19 +3333,7 @@ const BudgetFreeSection = React.memo(({
                         </span>
                       )}
                       {bankAccountsEnabled && accountMeta && (
-                        <span
-                          className={getAccountNeutralChipClass(darkMode)}
-                          style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
-                        >
-                          {renderAccountChipContent(
-                            accountMeta.account,
-                            false,
-                            darkMode,
-                            false,
-                            false,
-                            getAccountSlug(accountMeta.account, 3)
-                          )}
-                        </span>
+                        <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                       )}
                       {resolvedCategory && badgeClass && (
                         <span
@@ -3508,19 +3479,7 @@ const BudgetFreeSection = React.memo(({
                       </span>
                     )}
                     {bankAccountsEnabled && accountMeta && (
-                      <span
-                        className={getAccountNeutralChipClass(darkMode)}
-                        style={getAccountPastelChipStyle(accountMeta.account.logoTone, darkMode)}
-                      >
-                        {renderAccountChipContent(
-                          accountMeta.account,
-                          false,
-                          darkMode,
-                          false,
-                          false,
-                          getAccountSlug(accountMeta.account, 3)
-                        )}
-                      </span>
+                      <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                     )}
                     {resolvedCategory && badgeClass && (
                       <span
@@ -6403,7 +6362,7 @@ const App: React.FC = () => {
           if (!logo) {
             continue;
           }
-          let tone = logoToneCacheRef.current[logo];
+          let tone: string | null = logoToneCacheRef.current[logo] ?? null;
           if (!tone) {
             let pending = logoTonePromiseRef.current[logo];
             if (!pending) {
