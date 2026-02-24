@@ -9,15 +9,15 @@ services:
       - uploads-data:/app/server/uploads
     environment:
       PORT: 3001
-      CORS_ORIGIN: http://localhost:8080
-      JWT_SECRET: < openssl rand -base64 32 >
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8787}
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       PASSWORD_MIN_LENGTH: 8
       PASSWORD_RESET_TOKEN_TTL_MINUTES: 60
       PGHOST: db
       PGPORT: 5432
-      PGUSER: homybudget
-      PGPASSWORD: P@ssw0rd123
-      PGDATABASE: homybudget
+      PGUSER: ${PGUSER:-homybudget}
+      PGPASSWORD: ${PGPASSWORD:-change_me_db_password}
+      PGDATABASE: ${PGDATABASE:-homybudget}
     depends_on:
       db:
         condition: service_healthy
@@ -27,9 +27,9 @@ services:
     container_name: homybudget-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: homybudget
-      POSTGRES_PASSWORD: P@ssw0rd123
-      POSTGRES_DB: homybudget
+      POSTGRES_USER: ${PGUSER:-homybudget}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-change_me_db_password}
+      POSTGRES_DB: ${PGDATABASE:-homybudget}
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:

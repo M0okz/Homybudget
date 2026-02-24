@@ -33,10 +33,29 @@ app.use('/uploads', express.static(uploadsDir));
 const adminUsername = process.env.ADMIN_USERNAME;
 const adminPassword = process.env.ADMIN_PASSWORD;
 const jwtSecret = process.env.JWT_SECRET;
+const exposeResetTokens = process.env.EXPOSE_RESET_TOKENS === 'true' || process.env.NODE_ENV !== 'production';
 const passwordResetTtlEnv = Number(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES);
 const passwordMinLengthEnv = Number(process.env.PASSWORD_MIN_LENGTH);
 const passwordResetTtlMinutes = Number.isFinite(passwordResetTtlEnv) ? passwordResetTtlEnv : 60;
 const passwordMinLength = Number.isFinite(passwordMinLengthEnv) ? passwordMinLengthEnv : 8;
+const loginRateLimitWindowEnv = Number(process.env.RATE_LIMIT_LOGIN_WINDOW_MS);
+const loginRateLimitMaxEnv = Number(process.env.RATE_LIMIT_LOGIN_MAX);
+const bootstrapRateLimitWindowEnv = Number(process.env.RATE_LIMIT_BOOTSTRAP_WINDOW_MS);
+const bootstrapRateLimitMaxEnv = Number(process.env.RATE_LIMIT_BOOTSTRAP_MAX);
+const requestResetRateLimitWindowEnv = Number(process.env.RATE_LIMIT_REQUEST_RESET_WINDOW_MS);
+const requestResetRateLimitMaxEnv = Number(process.env.RATE_LIMIT_REQUEST_RESET_MAX);
+const resetRateLimitWindowEnv = Number(process.env.RATE_LIMIT_RESET_WINDOW_MS);
+const resetRateLimitMaxEnv = Number(process.env.RATE_LIMIT_RESET_MAX);
+const loginRateLimitWindowMs = Number.isFinite(loginRateLimitWindowEnv) ? loginRateLimitWindowEnv : 15 * 60 * 1000;
+const loginRateLimitMax = Number.isFinite(loginRateLimitMaxEnv) ? loginRateLimitMaxEnv : 10;
+const bootstrapRateLimitWindowMs = Number.isFinite(bootstrapRateLimitWindowEnv) ? bootstrapRateLimitWindowEnv : 60 * 60 * 1000;
+const bootstrapRateLimitMax = Number.isFinite(bootstrapRateLimitMaxEnv) ? bootstrapRateLimitMaxEnv : 5;
+const requestResetRateLimitWindowMs = Number.isFinite(requestResetRateLimitWindowEnv)
+  ? requestResetRateLimitWindowEnv
+  : 15 * 60 * 1000;
+const requestResetRateLimitMax = Number.isFinite(requestResetRateLimitMaxEnv) ? requestResetRateLimitMaxEnv : 5;
+const resetRateLimitWindowMs = Number.isFinite(resetRateLimitWindowEnv) ? resetRateLimitWindowEnv : 15 * 60 * 1000;
+const resetRateLimitMax = Number.isFinite(resetRateLimitMaxEnv) ? resetRateLimitMaxEnv : 10;
 
 const isValidMonthKey = (value) => {
   if (!/^\d{4}-\d{2}$/.test(value)) {
@@ -47,6 +66,47 @@ const isValidMonthKey = (value) => {
 };
 
 const normalizeLogin = (value) => (value ?? '').trim().toLowerCase();
+const getClientIp = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+};
+const createRateLimiter = ({ windowMs, max, message, keyGenerator }) => {
+  const hits = new Map();
+  const cleanupInterval = Math.max(windowMs, 60 * 1000);
+  const timer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of hits.entries()) {
+      if (now > value.resetAt) {
+        hits.delete(key);
+      }
+    }
+  }, cleanupInterval);
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
+  return (req, res, next) => {
+    const key = keyGenerator(req);
+    const now = Date.now();
+    const current = hits.get(key);
+    if (!current || now > current.resetAt) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      next();
+      return;
+    }
+    if (current.count >= max) {
+      const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfter));
+      res.status(429).json({ error: message });
+      return;
+    }
+    current.count += 1;
+    hits.set(key, current);
+    next();
+  };
+};
 const capitalizeFirst = (value) => {
   if (!value) {
     return value;
@@ -558,6 +618,34 @@ const createUser = async ({ username, displayName, password, role }) => {
   return result.rows[0];
 };
 
+const loginRateLimiter = createRateLimiter({
+  windowMs: loginRateLimitWindowMs,
+  max: loginRateLimitMax,
+  message: 'Too many login attempts. Please try again later.',
+  keyGenerator: (req) => `${getClientIp(req)}:${normalizeLogin(req.body?.username)}`
+});
+
+const bootstrapRateLimiter = createRateLimiter({
+  windowMs: bootstrapRateLimitWindowMs,
+  max: bootstrapRateLimitMax,
+  message: 'Too many bootstrap attempts. Please try again later.',
+  keyGenerator: (req) => getClientIp(req)
+});
+
+const requestResetRateLimiter = createRateLimiter({
+  windowMs: requestResetRateLimitWindowMs,
+  max: requestResetRateLimitMax,
+  message: 'Too many password reset requests. Please try again later.',
+  keyGenerator: (req) => `${getClientIp(req)}:${normalizeLogin(req.body?.login)}`
+});
+
+const resetRateLimiter = createRateLimiter({
+  windowMs: resetRateLimitWindowMs,
+  max: resetRateLimitMax,
+  message: 'Too many reset attempts. Please try again later.',
+  keyGenerator: (req) => getClientIp(req)
+});
+
 const maybeBootstrapAdmin = async (username, password) => {
   if (!adminUsername || !adminPassword) {
     return null;
@@ -700,7 +788,7 @@ const loginHandler = async (req, res) => {
   }
 };
 
-app.post('/api/auth/bootstrap', async (req, res) => {
+app.post('/api/auth/bootstrap', bootstrapRateLimiter, async (req, res) => {
   const { username, password, displayName } = req.body || {};
   const bootstrapUsername = normalizeLogin(username || adminUsername);
   const bootstrapPassword = password || adminPassword;
@@ -743,8 +831,8 @@ app.get('/api/auth/bootstrap-status', async (_req, res) => {
   }
 });
 
-app.post('/api/login', loginHandler);
-app.post('/api/auth/login', loginHandler);
+app.post('/api/login', loginRateLimiter, loginHandler);
+app.post('/api/auth/login', loginRateLimiter, loginHandler);
 
 app.get('/api/auth/oidc/config', async (_req, res) => {
   try {
@@ -889,7 +977,8 @@ app.get('/api/auth/oidc/callback', async (req, res) => {
       res.status(500).json({ error: 'Server misconfigured' });
       return;
     }
-    res.redirect(`${getFrontendBase()}/?token=${encodeURIComponent(token)}`);
+    // Put auth token in URL fragment so it is not sent to servers via Referer/query logs.
+    res.redirect(`${getFrontendBase()}/#token=${encodeURIComponent(token)}`);
   } catch (error) {
     console.error('OIDC callback failed', error);
     res.redirect(`${getFrontendBase()}/?oidc=failed`);
@@ -1115,7 +1204,7 @@ app.get('/api/version/latest', async (_req, res) => {
   }
 });
 
-app.post('/api/auth/request-reset', async (req, res) => {
+app.post('/api/auth/request-reset', requestResetRateLimiter, async (req, res) => {
   const { login } = req.body || {};
   if (!login) {
     res.status(400).json({ error: 'Missing login' });
@@ -1129,14 +1218,18 @@ app.post('/api/auth/request-reset', async (req, res) => {
       return;
     }
     const { token, expiresAt } = await createPasswordResetToken(user.id);
-    res.json({ ok: true, resetToken: token, expiresAt });
+    if (exposeResetTokens) {
+      res.json({ ok: true, resetToken: token, expiresAt });
+      return;
+    }
+    res.json({ ok: true });
   } catch (error) {
     console.error('Password reset request failed', error);
     res.status(500).json({ error: 'Password reset request failed' });
   }
 });
 
-app.post('/api/auth/reset', async (req, res) => {
+app.post('/api/auth/reset', resetRateLimiter, async (req, res) => {
   const { token, newPassword } = req.body || {};
   if (!token || !newPassword) {
     res.status(400).json({ error: 'Missing token or password' });

@@ -2902,6 +2902,8 @@ const BudgetFixedSection = React.memo(({
   );
   const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
   const isCompactAccountLabel = useMediaQuery('(display-mode: standalone)');
+  const isNarrowRowLayout = useMediaQuery('(max-width: 430px)');
+  const useCompactCategoryLabel = isCompactAccountLabel || isNarrowRowLayout;
   const enableTapToEdit = isCompactAccountLabel && !readOnly;
   const resolveAccount = useCallback((accountId?: string) => {
     if (!accountId || accountsForPerson.length === 0) {
@@ -2950,7 +2952,7 @@ const BudgetFixedSection = React.memo(({
                     style={dragProvided.draggableProps.style}
                   >
                     <div
-                      className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                      className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 sm:gap-2 sm:px-2 transition ${
                         darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
                       } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
                       onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'fixed', expense) : undefined}
@@ -2982,7 +2984,7 @@ const BudgetFixedSection = React.memo(({
                       <span className={`flex-1 min-w-0 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                         {expense.name || t('newFixedExpenseLabel')}
                       </span>
-                      {expense.date && (
+                      {expense.date && !isNarrowRowLayout && (
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                             darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
@@ -2991,19 +2993,21 @@ const BudgetFixedSection = React.memo(({
                           {formatExpenseDate(expense.date, language)}
                         </span>
                       )}
-                      {bankAccountsEnabled && accountMeta && (
+                      {bankAccountsEnabled && accountMeta && !isNarrowRowLayout && (
                         <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                       )}
                       {resolvedCategory && badgeClass && (
                         <span
-                          className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                          className={`${badgeClass} ${useCompactCategoryLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
                           title={categoryLabel || undefined}
                         >
                           <span>{resolvedCategory.emoji}</span>
-                          <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                          {!isNarrowRowLayout && (
+                            <span className={useCompactCategoryLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                          )}
                         </span>
                       )}
-                      <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                      <span className={`ml-1 text-sm font-semibold tabular-nums shrink-0 sm:ml-1.5 ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                         {formatCurrency(amountValue, currencyPreference)}
                       </span>
                       {!isCompactAccountLabel && (
@@ -3082,7 +3086,7 @@ const BudgetFixedSection = React.memo(({
               return (
                 <div key={expense.id} className="px-2 py-2">
                   <div
-                    className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                    className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 sm:gap-2 sm:px-2 transition ${
                       darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
                     } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
                     onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'fixed', expense) : undefined}
@@ -3106,7 +3110,7 @@ const BudgetFixedSection = React.memo(({
                     <span className={`flex-1 min-w-0 text-sm truncate ${expense.isChecked ? 'line-through opacity-70' : ''}`}>
                       {expense.name || t('newFixedExpenseLabel')}
                     </span>
-                    {expense.date && (
+                    {expense.date && !isNarrowRowLayout && (
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                           darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
@@ -3115,19 +3119,21 @@ const BudgetFixedSection = React.memo(({
                         {formatExpenseDate(expense.date, language)}
                       </span>
                     )}
-                    {bankAccountsEnabled && accountMeta && (
+                    {bankAccountsEnabled && accountMeta && !isNarrowRowLayout && (
                       <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                     )}
                     {resolvedCategory && badgeClass && (
                       <span
-                        className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                        className={`${badgeClass} ${useCompactCategoryLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
                         title={categoryLabel || undefined}
                       >
                         <span>{resolvedCategory.emoji}</span>
-                        <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                        {!isNarrowRowLayout && (
+                          <span className={useCompactCategoryLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                        )}
                       </span>
                     )}
-                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                    <span className={`ml-1 text-sm font-semibold tabular-nums shrink-0 sm:ml-1.5 ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     {!isCompactAccountLabel && (
@@ -3241,6 +3247,8 @@ const BudgetFreeSection = React.memo(({
   );
   const accountsForPerson = useMemo(() => bankAccounts[personKey] ?? [], [bankAccounts, personKey]);
   const isCompactAccountLabel = useMediaQuery('(display-mode: standalone)');
+  const isNarrowRowLayout = useMediaQuery('(max-width: 430px)');
+  const useCompactCategoryLabel = isCompactAccountLabel || isNarrowRowLayout;
   const enableTapToEdit = isCompactAccountLabel && !readOnly;
   const resolveAccount = useCallback((accountId?: string) => {
     if (!accountId || accountsForPerson.length === 0) {
@@ -3291,7 +3299,7 @@ const BudgetFreeSection = React.memo(({
                     style={dragProvided.draggableProps.style}
                   >
                     <div
-                      className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                      className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 sm:gap-2 sm:px-2 transition ${
                         darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
                       } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
                       onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'free', category) : undefined}
@@ -3323,7 +3331,7 @@ const BudgetFreeSection = React.memo(({
                       <span className={`flex-1 min-w-0 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                         {category.name || t('newCategoryLabel')}
                       </span>
-                      {category.date && (
+                      {category.date && !isNarrowRowLayout && (
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                             darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
@@ -3332,24 +3340,26 @@ const BudgetFreeSection = React.memo(({
                           {formatExpenseDate(category.date, language)}
                         </span>
                       )}
-                      {bankAccountsEnabled && accountMeta && (
+                      {bankAccountsEnabled && accountMeta && !isNarrowRowLayout && (
                         <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                       )}
                       {resolvedCategory && badgeClass && (
                         <span
-                          className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                          className={`${badgeClass} ${useCompactCategoryLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
                           title={categoryLabel || undefined}
                         >
                           <span>{resolvedCategory.emoji}</span>
-                          <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                          {!isNarrowRowLayout && (
+                            <span className={useCompactCategoryLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                          )}
                         </span>
                       )}
-                      {recurringLabel && (
+                      {recurringLabel && !isNarrowRowLayout && (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
                           {recurringLabel}
                         </span>
                       )}
-                      <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                      <span className={`ml-1 text-sm font-semibold tabular-nums shrink-0 sm:ml-1.5 ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                         {formatCurrency(amountValue, currencyPreference)}
                       </span>
                       <button
@@ -3359,7 +3369,7 @@ const BudgetFreeSection = React.memo(({
                           updateCategory(personKey, category.id, 'propagate', !isLinked);
                         }}
                         disabled={readOnly || category.isRecurring}
-                        className={`p-1 rounded-full border ${
+                        className={`${isNarrowRowLayout ? 'p-0.5' : 'p-1'} rounded-full border shrink-0 ${
                           darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
                         } ${readOnly || category.isRecurring ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
                         aria-label={isLinked ? t('expenseSyncOnLabel') : t('expenseSyncOffLabel')}
@@ -3445,7 +3455,7 @@ const BudgetFreeSection = React.memo(({
               return (
                 <div key={category.id} className="px-2 py-2">
                   <div
-                    className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                    className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 sm:gap-2 sm:px-2 transition ${
                       darkMode ? 'hover:bg-slate-900/70' : 'hover:bg-slate-50'
                     } ${enableTapToEdit ? 'cursor-pointer' : ''}`}
                     onClick={enableTapToEdit ? () => openExpenseWizardForEdit(personKey, 'free', category) : undefined}
@@ -3469,7 +3479,7 @@ const BudgetFreeSection = React.memo(({
                     <span className={`flex-1 min-w-0 text-sm truncate ${category.isChecked ? 'line-through opacity-70' : ''}`}>
                       {category.name || t('newCategoryLabel')}
                     </span>
-                    {category.date && (
+                    {category.date && !isNarrowRowLayout && (
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                           darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
@@ -3478,24 +3488,26 @@ const BudgetFreeSection = React.memo(({
                         {formatExpenseDate(category.date, language)}
                       </span>
                     )}
-                    {bankAccountsEnabled && accountMeta && (
+                    {bankAccountsEnabled && accountMeta && !isNarrowRowLayout && (
                       <span className="inline-flex items-center">{renderAccountLogoOnly(accountMeta.account)}</span>
                     )}
                     {resolvedCategory && badgeClass && (
                       <span
-                        className={`${badgeClass} ${isCompactAccountLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
+                        className={`${badgeClass} ${useCompactCategoryLabel ? 'min-w-0 max-w-[6.5rem]' : ''}`}
                         title={categoryLabel || undefined}
                       >
                         <span>{resolvedCategory.emoji}</span>
-                        <span className={isCompactAccountLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                        {!isNarrowRowLayout && (
+                          <span className={useCompactCategoryLabel ? 'truncate' : undefined}>{categoryLabel}</span>
+                        )}
                       </span>
                     )}
-                    {recurringLabel && (
+                    {recurringLabel && !isNarrowRowLayout && (
                       <span className={`text-xs px-2 py-0.5 rounded-full ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
                         {recurringLabel}
                       </span>
                     )}
-                    <span className={`ml-1.5 text-sm font-semibold tabular-nums ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                    <span className={`ml-1 text-sm font-semibold tabular-nums shrink-0 sm:ml-1.5 ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                       {formatCurrency(amountValue, currencyPreference)}
                     </span>
                     <button
@@ -3505,7 +3517,7 @@ const BudgetFreeSection = React.memo(({
                         updateCategory(personKey, category.id, 'propagate', !isLinked);
                       }}
                       disabled={readOnly || category.isRecurring}
-                      className={`p-1 rounded-full border ${
+                      className={`${isNarrowRowLayout ? 'p-0.5' : 'p-1'} rounded-full border shrink-0 ${
                         darkMode ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-500'
                       } ${readOnly || category.isRecurring ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
                       aria-label={isLinked ? t('expenseSyncOnLabel') : t('expenseSyncOffLabel')}
@@ -6680,9 +6692,11 @@ const App: React.FC = () => {
     if (typeof window === 'undefined' || oidcHandledRef.current) {
       return;
     }
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const oidcStatus = params.get('oidc');
+    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+    const hashParams = new URLSearchParams(hash);
+    const token = hashParams.get('token') || searchParams.get('token');
+    const oidcStatus = searchParams.get('oidc');
     if (!token && !oidcStatus) {
       return;
     }
@@ -6707,10 +6721,12 @@ const App: React.FC = () => {
         }
       }
     }
-    params.delete('token');
-    params.delete('oidc');
-    const nextSearch = params.toString();
-    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash || ''}`;
+    searchParams.delete('token');
+    searchParams.delete('oidc');
+    hashParams.delete('token');
+    const nextSearch = searchParams.toString();
+    const nextHash = hashParams.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${nextHash ? `#${nextHash}` : ''}`;
     window.history.replaceState({}, '', nextUrl);
   }, [authToken, t]);
 
@@ -10342,7 +10358,7 @@ const App: React.FC = () => {
               >
                 {calendarWidgets}
                 <div className="flex-1 min-w-0">
-                  <div className="max-w-2xl mx-auto">
+                  <div className="w-full max-w-screen-xl mx-auto">
                   <PersonColumnHeader
                     person={data.person1}
                     personKey="person1"
@@ -10697,7 +10713,7 @@ const App: React.FC = () => {
               >
                 {calendarWidgets}
                 <div className="flex-1 min-w-0">
-                  <div className="grid grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
+                  <div className="grid grid-cols-2 gap-6 w-full max-w-screen-2xl mx-auto">
                     <PersonColumnHeader
                       person={data.person1}
                       personKey="person1"
@@ -10830,7 +10846,7 @@ const App: React.FC = () => {
           {jointAccountEnabled && (
             <div className="flex justify-center">
               <div
-                className={`w-full max-w-4xl p-5 rounded-2xl border border-l-4 ${
+                className={`w-full max-w-screen-xl p-5 rounded-2xl border border-l-4 ${
                   darkMode ? 'border-slate-800' : 'card-float'
                 }`}
                 style={{
