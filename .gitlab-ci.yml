@@ -1,0 +1,24 @@
+stages:
+  - docker
+
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_NAME: "$DOCKERHUB_USERNAME/homybudget"
+
+docker-build-and-push:
+  stage: docker
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
+      alias: docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+  before_script:
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - docker build -t "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA" -t "$IMAGE_NAME:latest" .
+    - docker push "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA"
+    - docker push "$IMAGE_NAME:latest"
+  after_script:
+    - docker logout
